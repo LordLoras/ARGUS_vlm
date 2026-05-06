@@ -4,6 +4,8 @@
 
 This repository implements a local-first, Windows-friendly multimodal ad-classification pipeline with structured marketing-entity extraction, embeddings + hybrid search, campaign tracking, and an interactive natural-language agent that answers questions about the database.
 
+**Categorization-only.** All ingested content is presumed valid TV / promo / ad content. The system **categorizes**; it does not gate, allow, flag, or escalate to human review. There is no `decision` field, no review queue, no thresholds. `risk_labels` are kept as **descriptive observation tags** (e.g., "deceptive_urgency", "before_after") because they're useful for data-mining queries and surface in the UI as informational badges — they never block or gate.
+
 The pipeline ingests:
 
 - raw video files (`.mp4`, `.mov`, `.webm`)
@@ -11,15 +13,15 @@ The pipeline ingests:
 
 The pipeline outputs:
 
-- ad category labels (from a configurable taxonomy)
-- policy/risk labels
-- confidence scores
+- primary category label (from a configurable taxonomy)
+- risk / observation tags (descriptive only)
+- confidence score
 - timestamped evidence
 - OCR verification notes
 - structured marketing entities (brand, products, prices, offers, CTAs, social proof, disclaimers, creative format)
 - text + visual embeddings persisted to a swappable vector store
 - campaign assignments (auto-clustered or user-curated)
-- review/escalation decision
+- similar / duplicate ad references
 
 Primary design principle:
 Do not rely on a single VLM for all extraction and reasoning. Use deterministic extraction and structured evidence first, then use the VLM for verification, semantic reasoning, marketing entity extraction, and final classification. Use embeddings + BM25 + RRF for retrieval. Use a tool-calling LLM agent — not raw text-to-SQL — for the question-answering interface.
@@ -42,7 +44,7 @@ Stages, top to bottom:
 7. **Rules engine** — deterministic regex/keyword rules over OCR + transcript produce category and risk evidence with timestamps. Configurable from YAML.
 8. **Evidence bundle** — chronological frame summaries + OCR + PaddleOCR-VL corrections + nearby transcript + full transcript + rule triggers + selected images, capped by `vlm.max_frames_in_bundle`.
 9. **VLM verification + classification + marketing entity extraction** — Gemma via LM Studio (OpenAI-compatible chat completion, default port 1234). One call returns: classification decision, risk labels, confidence, timestamped evidence, OCR-quality assessment, conflicts, summary, **and a structured `marketing_entities` block**.
-10. **Aggregation** — combine OCR / VL / rule / transcript / VLM evidence into a final decision with calibrated thresholds. Sensitive categories use a lower review threshold.
+10. **Category aggregation** — combine OCR / VL / rule / transcript / VLM evidence into the final classification record. Merges VLM `primary_category`, the union of VLM + rule-derived `risk_labels` (filtered to taxonomy), confidence, and all timestamped evidence into a single `FinalAdClassification`. No decisioning, no thresholds.
 11. **Embedding** — text embedding from concatenated transcript + OCR (`sentence-transformers/all-MiniLM-L6-v2`, 384 dim). Per-keyframe **SigLIP 2** visual embeddings (`google/siglip2-base-patch16-224`, 768 dim) plus a mean-pooled ad-level visual vector. Persisted to the configured `VectorStore`. SigLIP 2 chosen for stronger fine-grained discrimination, better text-in-image handling, and shared text/image embedding space (enables cross-modal queries).
 12. **Persistence** — write SQLite metadata (ads, frames, ocr_items, transcript_segments, rule_triggers, classifications, marketing_entities), the `ads_fts` FTS5 row, and the projection columns on `ads` (`brand_name`, `products_text`, `primary_category`, `decision`) in one transaction.
 13. **Optional: campaign discovery** — on user request, cluster ad-level CLIP vectors within each brand and propose campaigns (`Campaign`, `AdCampaign`).
@@ -122,7 +124,7 @@ Rules engine:
 - Every extracted claim must retain source: frame index, timestamp, OCR engine or transcript source, confidence if available, bounding box if available.
 - The final classifier must cite evidence by timestamp.
 - Marketing entities must be grounded in actual frames or transcript segments. Never fabricate brand, price, offer, or CTA values.
-- Sensitive categories have lower review thresholds.
+- The `sensitive` flag on categories is informational only. No threshold logic.
 - The code must be testable without external paid services, without GPU, and without a running LM Studio instance — use mocks.
 - Any VLM, OCR, embedding, and vector-store integration must be abstracted behind an interface with a mock implementation.
 - Use clear type hints. Use Pydantic models or dataclasses for structured pipeline objects.
@@ -135,20 +137,22 @@ Rules engine:
 
 ## Sensitive categories
 
-Treat these as high-risk and route to review on weaker evidence (per `decision.sensitive_review_threshold`):
+Categories flagged as `sensitive: true` in `taxonomy.yaml` (medical/health, financial services, gambling, crypto/investment, political, etc.) are **purely informational**. The frontend may surface a "regulated category" badge; the agent may filter ("show me ads in sensitive categories"); but the classification pipeline treats them identically to any other category. There is no review threshold, no escalation, no gating.
 
-- medical / health claims
-- financial services
-- loans / credit / debt
-- gambling
-- crypto / investment
-- political content
-- adult content
-- weapons
-- alcohol / tobacco / regulated substances
-- deceptive urgency or unrealistic claims
-- misleading before/after claims
-- impersonation or brand misuse
+Risk / observation tags worth surfacing in the UI:
+
+- deceptive urgency
+- unverified health claims
+- guaranteed returns
+- before/after claims
+- targeting minors
+- regulated substances
+- brand impersonation
+- hidden disclaimers
+- price manipulation
+- false scarcity
+
+These are *observations*, not policy violations. They populate `risk_labels` so analysts can query "show me ads using urgency tactics across all brands" — useful for the data-mining demo, never used to block content.
 
 The full canonical taxonomy (categories + risk labels, with sensitive flags) lives in `taxonomy.yaml` and is rendered into the Gemma verifier prompt at startup so the model only outputs allowed labels.
 
@@ -162,8 +166,7 @@ The final result must follow this shape:
   "primary_category": "string",
   "risk_labels": ["string"],
   "confidence": 0.0,
-  "decision": "allow|flag|review",
-  "needs_human_review": true,
+  "sensitive_category": false,
   "evidence": [
     {
       "time_ms": 0,
