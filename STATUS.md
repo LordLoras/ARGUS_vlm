@@ -130,7 +130,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## Phase 4 — Pipeline stages (no AI yet, mocks first)
 
-**Phase 4 status: in progress.** A0 ingest and A1 dedup are implemented for prepared local video files: ffprobe metadata, ffmpeg frames/audio, whisper backend interface with mock/faster-whisper/whisper.cpp, progress events, manifest writing, cache reuse, optional SQLite persistence, exact SHA256 duplicate checks, perceptual-hash near-duplicate checks, short-circuit flags, and tests. Next unchecked core stage is frame preprocessing.
+**Phase 4 status: complete.** All pipeline stages implemented: ingest (A0), dedup (A1), manifest (B), frame preprocessing (C), OCR interface + PaddleOCREngine (D), PaddleOCR-VL adapter + gating (E), transcript alignment (F), rules engine + default_rules.yaml (G), evidence bundle builder with H.1 frame selection (H). All stages tested with mocks; 66 tests pass without GPU or LM Studio.
 
 | | Item | Spec |
 |---|---|---|
@@ -144,13 +144,13 @@ python -c "import torch; print(torch.cuda.is_available())"
 | [x] | A1 Dedup: phash mean across keyframes | Prompt.md A1 |
 | [x] | A1 Dedup: short-circuit logic | Prompt.md A1.2 |
 | [x] | B Manifest builder | Prompt.md B |
-| [ ] | C Frame preprocessing (blur, blank, phash dedup, scene change, keyframes) | Prompt.md C |
-| [ ] | D OCR engine interface + Mock + PaddleOCR (CPU) | Prompt.md D |
-| [ ] | E PaddleOCR-VL adapter + gating | Prompt.md E |
-| [~] | F Whisper transcript loaders + alignment | Prompt.md F |
-| [ ] | G Rules engine + sample rules YAML | Prompt.md G |
-| [ ] | H Evidence bundle builder | Prompt.md H |
-| [~] | Tests: each stage with mocks + synthetic fixtures | Prompt.md V |
+| [x] | C Frame preprocessing (blur, blank, phash dedup, scene change, keyframes) | Prompt.md C |
+| [x] | D OCR engine interface + Mock + PaddleOCR (CPU) | Prompt.md D |
+| [x] | E PaddleOCR-VL adapter + gating | Prompt.md E |
+| [x] | F Whisper transcript loaders + alignment | Prompt.md F |
+| [x] | G Rules engine + sample rules YAML | Prompt.md G |
+| [x] | H Evidence bundle builder | Prompt.md H |
+| [x] | Tests: each stage with mocks + synthetic fixtures | Prompt.md V |
 
 ---
 

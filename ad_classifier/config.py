@@ -58,6 +58,49 @@ class DedupConfig(BaseModel):
     phash_distance_threshold: int = Field(default=4, ge=0)
 
 
+class OCRConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    device: str = "cpu"
+    lang: str = "en"
+
+
+class PaddleVLGatingConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    force_all: bool = False
+    mean_confidence_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
+    min_item_confidence_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
+    dense_text_char_threshold: int = Field(default=500, ge=0)
+    short_fragment_count_threshold: int = Field(default=20, ge=0)
+    short_fragment_max_len: int = Field(default=3, ge=0)
+
+
+class PaddleVLConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    command: str = (
+        "paddlex --pipeline PaddleOCR-VL-native.yaml"
+        " --input {image_path} --output {output_dir}"
+    )
+    timeout_s: float = Field(default=60.0, ge=0.0)
+    gating: PaddleVLGatingConfig = Field(default_factory=PaddleVLGatingConfig)
+
+
+class RulesConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    rules_path: Path | None = None  # None → built-in default_rules.yaml
+    alignment_window_ms: int = Field(default=1500, ge=0)
+
+
+class VLMConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    max_frames_in_bundle: int = Field(default=12, ge=1)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -65,6 +108,10 @@ class AppConfig(BaseModel):
     ingest: IngestConfig = Field(default_factory=IngestConfig)
     whisper: WhisperConfig = Field(default_factory=WhisperConfig)
     dedup: DedupConfig = Field(default_factory=DedupConfig)
+    ocr: OCRConfig = Field(default_factory=OCRConfig)
+    paddlevl: PaddleVLConfig = Field(default_factory=PaddleVLConfig)
+    rules: RulesConfig = Field(default_factory=RulesConfig)
+    vlm: VLMConfig = Field(default_factory=VLMConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

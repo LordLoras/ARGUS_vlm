@@ -1,0 +1,193 @@
+rules:
+  # --- Financial ---
+  - id: financial_no_credit_check
+    pattern: "no credit check"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: misleading_claim
+    severity: high
+
+  - id: financial_guaranteed_approval
+    pattern: "guaranteed approval"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: misleading_claim
+    severity: high
+
+  - id: financial_instant_approval
+    pattern: "instant approval"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: misleading_claim
+    severity: medium
+
+  - id: financial_bad_credit_ok
+    pattern: "bad credit ok"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: misleading_claim
+    severity: high
+
+  - id: financial_payday
+    pattern: "payday"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: predatory_lending
+    severity: medium
+
+  - id: financial_apr
+    pattern: "\\bAPR\\b"
+    match_type: regex
+    case_insensitive: false
+    sources: [ocr, transcript]
+    category: financial_services
+    risk_label: rate_disclosure
+    severity: low
+
+  # --- Health / Medical ---
+  - id: health_weight_loss
+    pattern: "lose \\d+ lbs?"
+    match_type: regex
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: health_claim
+    severity: high
+
+  - id: health_cure
+    pattern: "\\bcure\\b"
+    match_type: regex
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: health_claim
+    severity: high
+
+  - id: health_miracle
+    pattern: "miracle"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: misleading_claim
+    severity: medium
+
+  - id: health_clinically_proven
+    pattern: "clinically proven"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: unsubstantiated_claim
+    severity: medium
+
+  - id: health_no_prescription
+    pattern: "no prescription"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: health_claim
+    severity: high
+
+  - id: health_before_and_after
+    pattern: "before and after"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: health_wellness
+    risk_label: deceptive_imagery
+    severity: medium
+
+  # --- Investment / Crypto ---
+  - id: invest_guaranteed_returns
+    pattern: "guaranteed returns"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: investment
+    risk_label: misleading_claim
+    severity: high
+
+  - id: invest_risk_free
+    pattern: "risk.free investment"
+    match_type: regex
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: investment
+    risk_label: misleading_claim
+    severity: high
+
+  - id: invest_double_money
+    pattern: "double your money"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: investment
+    risk_label: misleading_claim
+    severity: high
+
+  - id: invest_crypto
+    pattern: "\\bcrypto\\b"
+    match_type: regex
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: investment
+    risk_label: speculative_asset
+    severity: low
+
+  - id: invest_forex
+    pattern: "\\bforex\\b"
+    match_type: regex
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: investment
+    risk_label: speculative_asset
+    severity: low
+
+  # --- Urgency / Deception ---
+  - id: urgency_limited_spots
+    pattern: "limited spots"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: general
+    risk_label: urgency_pressure
+    severity: medium
+
+  - id: urgency_act_now
+    pattern: "act now"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: general
+    risk_label: urgency_pressure
+    severity: medium
+
+  - id: urgency_only_today
+    pattern: "only today"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: general
+    risk_label: urgency_pressure
+    severity: medium
+
+  - id: deception_secret_method
+    pattern: "secret method"
+    match_type: keyword
+    case_insensitive: true
+    sources: [ocr, transcript]
+    category: general
+    risk_label: misleading_claim
+    severity: medium

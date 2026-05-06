@@ -98,6 +98,12 @@ Rules engine:
 - confidence adjustment
 - audit-friendly decisions
 
+## Git workflow
+
+- **Always commit and push directly to `main`.** No feature branches, no pull requests.
+- After completing any unit of work, stage the relevant files, commit, and `git push origin main`.
+- Never open a PR. Never create or switch to a non-`main` branch.
+
 ## Engineering constraints
 
 - **PyTorch is pre-installed and must not be reinstalled.** The project's `.venv` already contains a manually-installed GPU-accelerated PyTorch build (DirectML or ROCm-Windows wheels) tuned for the deployment hardware (AMD 7900 XT). Implementers must:
