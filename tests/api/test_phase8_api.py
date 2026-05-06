@@ -163,3 +163,10 @@ def test_cancel_job_endpoint(client: TestClient, config_path: Path):
     assert response.status_code == 200
     assert response.json()["cancelled"] is True
     assert response.json()["job"]["state"] == "cancelled"
+
+
+def test_vector_search_route_loads_sqlite_vec(client: TestClient):
+    response = client.get("/api/search", params={"mode": "visual", "ad_id": "missing"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "visual vector not found"

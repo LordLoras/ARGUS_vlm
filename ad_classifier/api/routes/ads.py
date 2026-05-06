@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ad_classifier.api.deps import get_config, get_config_file, get_upload_probe, open_request_db
 from ad_classifier.config import resolve_config_path
+from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdCampaignRepository, AdRepository, JobRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
@@ -202,6 +203,7 @@ def get_similar(
             text_dim=config.vector_store.text_dim,
             visual_dim=config.vector_store.visual_dim,
         )
+        load_sqlite_vec(conn)
         store.ensure_tables()
         related = enrich_related_ads(
             store,
@@ -263,6 +265,7 @@ def delete_ad(
         if ad is None:
             raise HTTPException(status_code=404, detail="ad not found")
         fts_delete(conn, ad_id)
+        load_sqlite_vec(conn)
         SqliteVecStore(
             conn,
             text_dim=config.vector_store.text_dim,

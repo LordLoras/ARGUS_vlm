@@ -5,6 +5,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ad_classifier.api.deps import get_config, open_request_db
+from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
 from ad_classifier.search.fts import fts_search
 from ad_classifier.search.hybrid import hybrid_search
@@ -29,6 +30,7 @@ def search_ads(
             text_dim=config.vector_store.text_dim,
             visual_dim=config.vector_store.visual_dim,
         )
+        load_sqlite_vec(conn)
         store.ensure_tables()
 
         if mode == "keyword":

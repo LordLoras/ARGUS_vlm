@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ad_classifier.config import AppConfig
+from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
@@ -62,6 +63,7 @@ def run_pipeline_for_job(
     components: PipelineComponents | None = None,
     progress: ProgressCallback | None = None,
 ) -> None:
+    load_sqlite_vec(conn)
     components = components or PipelineComponents()
     ad = AdRepository(conn).get(ad_id)
     if ad is None:
@@ -271,6 +273,7 @@ def _write_embeddings(
     text_embedder: TextEmbedder,
     image_embedder: ImageEmbedder,
 ) -> tuple[list[float], list[float] | None]:
+    load_sqlite_vec(conn)
     store = SqliteVecStore(
         conn,
         text_dim=config.vector_store.text_dim,
