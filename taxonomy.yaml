@@ -1,0 +1,43 @@
+categories:
+  - id: retail_ecommerce
+    sensitive: false
+  - id: food_beverage
+    sensitive: false
+  - id: health_wellness
+    sensitive: true
+  - id: beauty_personal_care
+    sensitive: false
+  - id: finance_banking
+    sensitive: true
+  - id: crypto_investment
+    sensitive: true
+  - id: gambling
+    sensitive: true
+  - id: mobile_apps_games
+    sensitive: false
+  - id: streaming_entertainment
+    sensitive: false
+  - id: automotive
+    sensitive: false
+  - id: travel_hospitality
+    sensitive: false
+  - id: education
+    sensitive: false
+  - id: real_estate
+    sensitive: false
+  - id: political
+    sensitive: true
+  - id: other
+    sensitive: false
+
+risk_labels:
+  - deceptive_urgency
+  - unverified_health_claim
+  - guaranteed_returns
+  - before_after
+  - targeting_minors
+  - regulated_substance
+  - brand_impersonation
+  - hidden_disclaimer
+  - price_manipulation
+  - false_scarcity

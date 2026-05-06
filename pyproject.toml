@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ad-classifier"
+version = "0.1.0"
+requires-python = ">=3.11"
+# torch / torchvision / torchaudio are intentionally OMITTED.
+# The .venv already contains a manually-installed GPU-accelerated PyTorch build
+# (ROCm 7.2.1 for AMD 7900 XT). Adding them here would silently replace the GPU
+# wheel with a CPU build on next `pip install -e .`.
+dependencies = [
+    # --- core ---
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy>=2.0",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "httpx>=0.27",
+    "structlog>=24.1",
+    # --- API ---
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+    "sse-starlette>=2.1",
+    # --- pipeline / image ---
+    "pillow>=10.3",
+    "imagehash>=4.3",
+    # Keep NumPy below 2 for PaddlePaddle/PaddleOCR compatibility on Windows.
+    # Newer OpenCV/tifffile wheels can force NumPy 2+, which breaks this stack.
+    "numpy>=1.26,<2",
+    "opencv-python-headless>=4.9,<4.12",
+    "tifffile<2025.5",
+    # --- ffmpeg wrapper ---
+    "ffmpeg-python>=0.2",
+    # --- vectors ---
+    "sqlite-vec>=0.1.6",
+    # --- NL agent (OpenAI-compat client for LM Studio) ---
+    "openai>=1.30",
+]
+
+[project.optional-dependencies]
+whisper = [
+    "faster-whisper>=1.0",
+]
+ocr = [
+    "paddlepaddle>=2.6",
+    "paddleocr>=2.7",
+]
+embeddings = [
+    # Install with --no-deps to preserve pre-installed torch GPU wheel.
+    # Run: pip install --no-deps sentence-transformers==3.0.1 transformers==4.40.2
+    # transformers>=4.41 imports torch distributed symbols missing from this ROCm wheel.
+    "sentence-transformers==3.0.1",
+    "transformers==4.40.2",
+]
+qdrant = [
+    "qdrant-client>=1.9",
+]
+clustering = [
+    "hdbscan>=0.8",
+    "scikit-learn>=1.5",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "black>=24.4",
+    "mypy>=1.10",
+    "datasette>=0.65",
+]
+
+[project.scripts]
+ad-classifier = "ad_classifier.__main__:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ad_classifier*"]
+
+[tool.setuptools.package-data]
+ad_classifier = ["db/migrations/*.sql"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "paddleocr_smoke: optional PaddleOCR CPU inference smoke test; set RUN_PADDLEOCR_SMOKE=1",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true

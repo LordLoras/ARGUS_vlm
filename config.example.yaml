@@ -1,0 +1,158 @@
+paths:
+  data_root: ./data
+  uploads: ./data/uploads
+  frames: ./data/frames
+  audio: ./data/audio
+  whisper: ./data/whisper
+  out: ./data/out
+  sqlite_path: ./ad_classifier.db
+  qdrant_path: ./qdrant_db
+
+ingest:
+  ffmpeg_path: ffmpeg
+  ffprobe_path: ffprobe
+  frame_interval_ms: 500
+  audio_sample_rate: 16000
+
+whisper:
+  backend: whisper_cpp          # whisper_cpp | faster-whisper | mock
+  model: tiny.en                # whisper.cpp: tiny.en/base.en/etc; faster-whisper: tiny/base/small/medium/large-v3
+  compute_type: int8            # faster-whisper only
+  language: null                # null = auto-detect
+  whisper_cpp:
+    # Windows AMD path: build whisper.cpp with GGML_VULKAN=ON and point command to whisper-cli.exe.
+    # Do not use a temporary scratch path here; install/copy the binary to a stable local tools directory.
+    command: ./tools/whisper.cpp/whisper-cli.exe
+    model_path: ./models/whisper/ggml-tiny.en.bin
+    use_gpu: true
+    device: 0                   # Vulkan0 = AMD Radeon RX 7900 XT on the tested machine
+    threads: 8
+    extra_args: []
+
+preprocess:
+  blur_threshold: 80
+  phash_distance_threshold: 6
+  image_diff_threshold: 0.08
+
+ocr:
+  engine: paddleocr             # paddleocr | mock
+  device: cpu
+  min_confidence: 0.70
+
+paddlevl:
+  enabled: false
+  run_on_all_frames: false
+  mean_confidence_threshold: 0.70
+  item_confidence_threshold: 0.50
+  dense_text_char_threshold: 300
+  command: "paddlex --pipeline PaddleOCR-VL-native.yaml --input {image_path} --output {output_dir}"
+
+transcript:
+  alignment_window_ms: 1500
+
+vlm:
+  provider: http
+  endpoint: "http://localhost:1234/v1/chat/completions"   # LM Studio default
+  model: "gemma-3-12b-it"
+  api_key_env: "VLM_API_KEY"
+  timeout_seconds: 120
+  max_frames_in_bundle: 12
+
+decision:
+  auto_allow_threshold: 0.30
+  auto_flag_threshold: 0.75
+  sensitive_review_threshold: 0.20
+
+embeddings:
+  text:
+    model: sentence-transformers/all-MiniLM-L6-v2
+    device: cpu
+  image:
+    model: google/siglip2-base-patch16-224
+    device: cpu
+
+vector_store:
+  backend: sqlite-vec           # sqlite-vec | qdrant
+  text_dim: 384                 # must match embeddings.text model
+  visual_dim: 768               # must match embeddings.image model
+  qdrant:
+    url: "http://localhost:6333"
+
+dedup:
+  skip_on_exact: true
+  skip_on_near_duplicate: false
+  phash_distance_threshold: 4
+
+similarity:
+  related_threshold: 0.85
+  near_duplicate_threshold: 0.95
+  same_campaign_threshold: 0.85
+  related_top_k: 5
+  modality_weights:
+    visual: 0.5
+    text: 0.5
+  verdicts:
+    near_duplicate:
+      min_overall: 0.95
+      requires_no_field_diff: true
+    same_campaign_different_sku:
+      min_overall: 0.85
+      brand_match: true
+      differs_in: ["products"]
+    same_campaign_different_offer:
+      min_overall: 0.85
+      brand_match: true
+      differs_in: ["offers"]
+    similar_messaging_different_brand:
+      min_overall: 0.85
+      modality: text
+      brand_match: false
+    related:
+      min_overall: 0.70
+    unrelated:
+      min_overall: 0.0
+
+taxonomy:
+  path: ./taxonomy.yaml
+
+api:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins:
+    - http://localhost:5173
+  upload:
+    max_bytes: 209715200        # 200 MB
+    allowed_mime:
+      - video/mp4
+      - video/quicktime
+      - video/webm
+
+worker:
+  poll_interval_ms: 1000
+  concurrency: 1
+
+campaigns:
+  discover:
+    lookback_days: 90
+    min_cluster_size: 3
+    min_mean_similarity: 0.75
+    clusterer: hdbscan          # hdbscan | agglomerative
+    name_template: "{brand} {month} {year}"
+
+hybrid_search:
+  oversample: 4
+  rrf_k: 60
+  weights:
+    bm25: 1.0
+    text_vec: 1.0
+    visual_vec: 0.5
+
+agent:
+  enabled: true
+  tool_call_format: openai_tools   # openai_tools | json_tagged | mock
+  max_session_turns: 20
+  tool_row_cap: 50
+  history_turns_in_prompt: 10
+  schema_summary_path: ./prompts/agent_schema_summary.txt
+  system_prompt_path: ./prompts/gemma_agent_system.txt
+  read_only_pragma: true

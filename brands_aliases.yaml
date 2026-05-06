@@ -1,0 +1,10 @@
+# Brand alias map for normalization.
+# Key = canonical normalized name (lowercase, no symbols).
+# Values = list of aliases that should resolve to the canonical name.
+aliases:
+  coca-cola: ["coke", "coca cola", "cocacola"]
+  pepsi: ["pepsi-cola", "pepsi cola"]
+  jeep: []
+  mcdonald's: ["mcdonalds", "mcd", "mickey d's"]
+  nike: []
+  apple: []

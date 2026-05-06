@@ -1,0 +1,64 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Data and database
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+/qdrant_db/
+
+# Model caches
+.cache/
+huggingface/
+~/.cache/huggingface/
+/models/
+
+# Local native tool binaries
+/tools/whisper.cpp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs and temporary local files
+logs/
+*.log
+*.tmp
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets (use config.example.yaml as template)
+config.yaml
+.env
+.env.*
+
+# Generated prompt summaries
+prompts/agent_schema_summary.txt
