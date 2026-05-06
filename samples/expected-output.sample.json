@@ -1,0 +1,154 @@
+{
+  "ad_id": "ad_4600130f",
+  "primary_category": "other",
+  "risk_labels": [],
+  "confidence": 0.78,
+  "sensitive_category": false,
+  "evidence": [
+    {
+      "time_ms": 5000,
+      "frame_index": 10,
+      "source": "ocr",
+      "text": "Special Financing Available subject to credit approval",
+      "bbox": null,
+      "confidence": 0.91,
+      "reason": "visible offer text"
+    },
+    {
+      "time_ms": 12000,
+      "frame_index": 24,
+      "source": "ocr",
+      "text": "Air Conditioning Check Just $95!",
+      "bbox": null,
+      "confidence": 0.9,
+      "reason": "visible price and service offer"
+    },
+    {
+      "time_ms": 23500,
+      "frame_index": 47,
+      "source": "transcript",
+      "text": "Move forward at Prilliman HVAC.com.",
+      "bbox": null,
+      "confidence": 0.88,
+      "reason": "spoken CTA"
+    }
+  ],
+  "ocr_quality": {
+    "overall": "mixed",
+    "possible_errors": [
+      "Brand text appears as PRILLAMAN in OCR while transcript says Prilliman.",
+      "TRANE is sometimes transcribed as train."
+    ],
+    "missed_text": []
+  },
+  "marketing_entities": {
+    "brand": {
+      "name": "Prillaman Mechanical, Heating & AC",
+      "logo_present": true,
+      "logo_evidence": [
+        {
+          "time_ms": 0,
+          "frame_index": 0,
+          "reason": "brand wordmark visible"
+        }
+      ],
+      "tagline": "Your comfort is our concern"
+    },
+    "products": [
+      "Trane heating and cooling systems",
+      "Air Conditioning Check"
+    ],
+    "prices": [
+      {
+        "amount": 95.0,
+        "currency": "USD",
+        "frame_index": 24,
+        "time_ms": 12000,
+        "discounted_from": null,
+        "discount_pct": null
+      }
+    ],
+    "offers": [
+      {
+        "type": "other",
+        "value": "Special financing available subject to credit approval",
+        "expiry_text": null,
+        "expiry_resolved": null,
+        "promo_code": null,
+        "scarcity_signals": [],
+        "urgency_signals": []
+      }
+    ],
+    "ctas": [
+      {
+        "text": "Call Prilliman heating and air today",
+        "destination_hint": "phone",
+        "time_ms": 4500,
+        "frame_index": 9
+      },
+      {
+        "text": "Move forward at PrillimanHVAC.com",
+        "destination_hint": "prillamanhvac.com",
+        "time_ms": 23500,
+        "frame_index": 47
+      }
+    ],
+    "social_proof": {
+      "rating": null,
+      "rating_count": null,
+      "testimonials": [],
+      "badges": [
+        "The most reliable heating and cooling brand"
+      ]
+    },
+    "disclaimers": [
+      {
+        "text": "Financing is neither sponsored nor endorsed by Trane; see dealer for details.",
+        "time_ms": 5000,
+        "frame_index": 10,
+        "is_small_print": true
+      }
+    ],
+    "creative_format": {
+      "aspect_ratio": "4:5",
+      "duration_ms": 29960,
+      "has_voiceover": true,
+      "has_on_screen_text": true
+    }
+  },
+  "campaigns": [],
+  "embeddings": {
+    "text_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "visual_model": "google/siglip2-base-patch16-224",
+    "indexed_in": "sqlite-vec"
+  },
+  "related_ads": {
+    "exact_duplicate_of": null,
+    "near_duplicate_of": null,
+    "semantically_similar": []
+  },
+  "model_outputs": {
+    "ocr": {},
+    "paddlevl": {},
+    "vlm": {}
+  },
+  "debug": {
+    "selected_frames": [
+      0,
+      9,
+      10,
+      22,
+      24,
+      26,
+      34,
+      46,
+      47,
+      49,
+      52,
+      59
+    ],
+    "dropped_frames": [],
+    "rules_triggered": [],
+    "dropped_labels": []
+  }
+}

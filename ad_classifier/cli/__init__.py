@@ -1,3 +1,5 @@
+from typing import Annotated
+
 import typer
 
 from ad_classifier.cli.bench_vectors import bench_vectors
@@ -22,6 +24,32 @@ def version() -> None:
 
     typer.echo(f"ad-classifier {__version__}")
     check_torch(require_gpu=False)
+
+
+@app.command("paddle-rocm-check")
+def paddle_rocm_check(
+    image: Annotated[
+        str | None,
+        typer.Option(
+            "--image",
+            "-i",
+            help="Optional image path for a PaddleOCR GPU inference smoke test.",
+        ),
+    ] = None,
+) -> None:
+    """Check best-effort PaddlePaddle ROCm/GPU support."""
+    from pathlib import Path
+
+    from ad_classifier.diagnostics.paddle_rocm import (
+        diagnostic_explanation,
+        format_diagnostic_table,
+        run_paddle_rocm_check,
+    )
+
+    rows = run_paddle_rocm_check(Path(image) if image else None)
+    typer.echo(format_diagnostic_table(rows))
+    typer.echo()
+    typer.echo(diagnostic_explanation(rows))
 
 
 app.command("init-db")(init_db)

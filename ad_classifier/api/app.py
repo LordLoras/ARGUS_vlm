@@ -34,6 +34,10 @@ def create_app(
     app.state.db_path = resolved_db
     app.state.upload_probe = upload_probe
 
+    @app.get("/", tags=["health"])
+    def health() -> dict[str, str]:
+        return {"status": "ok", "service": "ad-classifier"}
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.api.cors_origins,

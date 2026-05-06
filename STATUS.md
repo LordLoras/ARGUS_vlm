@@ -258,15 +258,19 @@ the existing local stages end to end and supports injected mocks for tests.
 
 ## Phase 10 — Polish + delivery
 
+**Phase 10 status: delivery polish is in place.** The VLM payload debug and the
+agent-backed end-to-end acceptance path remain deferred by request; the real MP4
+worker run reaches the VLM stage and currently receives HTTP 400 from LM Studio.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | S AMD/ROCm diagnostic helper | Prompt.md S |
-| [ ] | README full content (architecture, install, examples, agent, campaigns, Datasette) | Prompt.md U |
-| [ ] | Sample mp4 + expected-output JSON committed to `samples/` | Prompt.md U, W |
-| [ ] | End-to-end smoke test: ingest → classify → API → agent question | Prompt.md W |
-| [ ] | All Prompt.md W acceptance criteria pass | Prompt.md W |
+| [x] | S AMD/ROCm diagnostic helper | Prompt.md S; `ad-classifier paddle-rocm-check` |
+| [x] | README full content (architecture, install, examples, agent, campaigns, Datasette) | Prompt.md U |
+| [x] | Sample mp4 + expected-output JSON committed to `samples/` | Prompt.md U, W |
+| [~] | End-to-end smoke test: ingest → classify → API → agent question | Prompt.md W; real MP4 worker run completed through persistence, VLM returned HTTP 400, agent backend is Phase 9 |
+| [~] | All Prompt.md W acceptance criteria pass | Prompt.md W; backend tests/build pass, VLM real-call debug and agent backend pending |
 | [ ] | Run Follow-Up review prompt and patch findings | Prompt.md (Follow-Up) |
-| [ ] | `start.bat` launching API + worker (+ optional Qdrant) | Prompt.md U |
+| [x] | `start.bat` launching API + worker (+ frontend) | Prompt.md U |
 
 ---
 
@@ -274,17 +278,22 @@ the existing local stages end to end and supports injected mocks for tests.
 
 Separate Vite + React + TypeScript + Tailwind + shadcn/ui app. It must consume the FastAPI OpenAPI surface only; no backend imports and no direct SQLite access.
 
+**Phase 11 status: initial management UI complete.** The app lives in
+`frontend/`, builds with Vite, includes a generated OpenAPI client snapshot, and
+uses one API wrapper for JSON/SSE calls. The Agent page is ready for Phase 9
+endpoints and displays a graceful not-implemented state until those routes exist.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | Generate typed API client from `/openapi.json` | Prompt.md U |
-| [ ] | All Ads page with paginated table, search, filters, sort, and status/decision/category chips | Prompt.md N, frontend |
-| [ ] | Ad detail drawer/page with frames, evidence, transcript, OCR, classification, marketing entities, campaigns, and related ads | Prompt.md N |
-| [ ] | Edit curated fields from UI: brand, products, category, decision, risk labels, marketing entities | Prompt.md N |
-| [ ] | Delete ad record flow with confirmation, cascade preview, and optional local artifact cleanup | Prompt.md N, P |
-| [ ] | Upload page with job progress via SSE | Prompt.md N, O |
-| [ ] | Search page using keyword/vector/hybrid API modes | Prompt.md Y |
-| [ ] | Campaign management page for manual assignment/curation | Prompt.md X.4 |
-| [ ] | Tests: API client mocks, All Ads filtering/edit/delete flows, responsive table/detail states | frontend |
+| [x] | Generate typed API client from `/openapi.json` | Prompt.md U; generated into `frontend/src/lib/api/generated` |
+| [x] | All Ads page with paginated table, search, filters, sort, and status/category chips | Prompt.md N, frontend; decision UI intentionally omitted |
+| [x] | Ad detail drawer/page with frames, evidence, classification, marketing entities, campaigns, and related ads | Prompt.md N |
+| [x] | Edit curated fields from UI: brand, products, category | Prompt.md N; limited to current backend `PATCH /api/ads/{ad_id}` fields |
+| [x] | Delete ad record flow with confirmation and cascade warning | Prompt.md N, P |
+| [x] | Upload page with job progress via SSE | Prompt.md N, O |
+| [x] | Search page using keyword/vector/hybrid API modes | Prompt.md Y |
+| [x] | Campaign management page for discovery/listing | Prompt.md X.4 |
+| [~] | Tests: API client mocks, All Ads filtering/edit/delete flows, responsive table/detail states | frontend; `npm run build` passes, automated UI tests not added yet |
 
 ---
 

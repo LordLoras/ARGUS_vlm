@@ -1,59 +1,45 @@
 # AdScope Local
 
-Local-first multimodal ad classification, marketing-entity extraction, campaign tracking, and natural-language search over a local SQLite database.
+Local-first multimodal ad categorization, marketing-entity extraction, campaign tracking, hybrid search, and a management UI over one SQLite database.
 
-`AdScope Local` is the recommended project name. The Python package and CLI still use the practical internal name `ad-classifier` / `ad_classifier`.
+The Python package and CLI are named `ad-classifier` / `ad_classifier`. The product name used in docs and the frontend is `AdScope Local`.
 
-No cloud services are required by default. No Docker is required. The target deployment is Windows with local models, local files, and one SQLite database.
+## What Runs Locally
+
+- FastAPI backend on `http://localhost:8000`
+- SQLite metadata database with WAL, FTS5, and sqlite-vec
+- ffmpeg / ffprobe for video frames and audio
+- whisper.cpp or faster-whisper for transcripts
+- PaddleOCR CPU by default
+- LM Studio OpenAI-compatible Gemma endpoint for VLM verification
+- MiniLM text embeddings and SigLIP 2 visual embeddings
+- Vite React frontend on `http://localhost:5173`
+
+No cloud services and no Docker are required.
 
 ## Current Status
 
-This repository is in early implementation.
+Implemented:
 
-Implemented now:
+- Ingest, exact/near duplicate checks, manifest, preprocessing, OCR, PaddleOCR-VL gating, rules, evidence bundles
+- VLM verifier client with parse-failure fallback
+- Final aggregation, marketing-entity persistence, projection columns, FTS refresh
+- MiniLM and SigLIP 2 embedding interfaces and sqlite-vec storage
+- Hybrid search and similar-ad enrichment
+- Campaign discovery and campaign API routes
+- FastAPI upload, ad, job/SSE, search, and campaign endpoints
+- SQLite-backed worker state machine
+- React management UI in [frontend](./frontend)
+- AMD/Paddle ROCm diagnostic command
 
-- Python package scaffold
-- Dependency pins that preserve the pre-installed ROCm PyTorch wheel
-- Torch diagnostics
-- SQLite schema migration
-- WAL-enabled database initialization
-- sqlite-vec load check
-- Read-only SQLite connection helper for the future agent
-- Initial `AdRepository` and `JobRepository`
-- Working `init-db` CLI
-- Working `ingest` CLI for prepared ad videos
-- ffprobe metadata, ffmpeg frame/audio extraction, whisper.cpp transcription, manifest output
-- Exact duplicate detection by SHA256
-- Near-duplicate detection by mean perceptual hash
-- Working `dedup-check` CLI
-- PaddleOCR CPU smoke test
-- `whisper.cpp` Vulkan runtime copied locally and tested on RX 7900 XT
+Not yet implemented:
 
-Not implemented yet:
-
-- API server
-- Worker process
-- VLM classification
-- Embeddings/vector search
-- Natural-language agent
-- Frontend
-
-Use [STATUS.md](./STATUS.md) as the implementation agenda.
-
-## Hardware And Runtime Notes
-
-This repo is tuned for the current local Windows machine:
-
-- GPU: AMD Radeon RX 7900 XT
-- Torch: `2.9.1+rocm7.2.1`
-- Whisper: `whisper.cpp` with Vulkan, using `Vulkan0`
-- OCR: PaddleOCR on CPU by default
-- Database: SQLite with WAL, FTS5, and sqlite-vec
-- VLM: Gemma through LM Studio, planned for later phases
+- Phase 9 NL agent backend tool loop and `/api/agent/*` routes
+- The LM Studio vision request needs debugging; the last real run reached VLM and received HTTP 400 from LM Studio
 
 ## Do Not Reinstall Torch
 
-The `.venv` already contains a manually installed GPU PyTorch build.
+The `.venv` contains a manually installed GPU PyTorch build for this Windows AMD machine.
 
 Do not run:
 
@@ -63,9 +49,9 @@ pip install -U torch
 pip install torchvision torchaudio
 ```
 
-Torch, torchvision, and torchaudio are intentionally omitted from [pyproject.toml](./pyproject.toml). Reinstalling them can replace the ROCm wheel with a CPU wheel.
+Torch, torchvision, and torchaudio are intentionally omitted from [pyproject.toml](./pyproject.toml). Reinstalling them can replace the ROCm wheel with a CPU build.
 
-Verify torch with:
+Verify the environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m ad_classifier version
@@ -78,40 +64,16 @@ ad-classifier 0.1.0
 torch 2.9.1+rocm7.2.1  backend=CUDA/ROCm  gpu=True
 ```
 
-## Local Model And Tool Paths
-
-The example config defaults to `whisper_cpp`:
-
-```yaml
-whisper:
-  backend: whisper_cpp
-  model: tiny.en
-  whisper_cpp:
-    command: ./tools/whisper.cpp/whisper-cli.exe
-    model_path: ./models/whisper/ggml-tiny.en.bin
-    use_gpu: true
-    device: 0
-```
-
-The local runtime files are intentionally ignored by Git:
-
-```text
-tools/whisper.cpp/
-models/whisper/
-```
-
-`tiny.en` is installed for smoke tests. For better production transcription accuracy, use `small.en` or `medium.en` and update `config.example.yaml` / `config.yaml` accordingly.
-
 ## Setup
 
-From the repository root:
+Use the existing `.venv` when possible:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip check
 .\.venv\Scripts\python.exe -m ad_classifier version
 ```
 
-If you need to reinstall project dependencies, preserve torch:
+If project dependencies need reinstalling, preserve torch:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e .
@@ -119,190 +81,186 @@ If you need to reinstall project dependencies, preserve torch:
 .\.venv\Scripts\python.exe -m pip install -e ".[dev,clustering,ocr,whisper]"
 ```
 
-Then re-check:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m ad_classifier version
-```
-
-## Configuration
-
-The default config template is [config.example.yaml](./config.example.yaml).
-
-For local overrides:
+Create a local config:
 
 ```powershell
 Copy-Item .\config.example.yaml .\config.yaml
 ```
 
-`config.yaml` is ignored by Git.
+`config.yaml` is ignored by Git. The default local model is:
 
-Important fields:
-
-- `paths.sqlite_path`: SQLite database location
-- `ingest.frame_interval_ms`: frame sampling interval, default `500`
-- `dedup.skip_on_exact`: return an existing ad without re-ingesting exact uploads
-- `dedup.skip_on_near_duplicate`: optionally stop after near-duplicate phash match
-- `dedup.phash_distance_threshold`: Hamming distance cutoff for phash near-duplicates
-- `whisper.backend`: `whisper_cpp`, `faster-whisper`, or `mock`
-- `whisper.whisper_cpp.command`: local `whisper-cli.exe`
-- `whisper.whisper_cpp.model_path`: local GGML model
-- `ocr.device`: defaults to `cpu`
-- `vector_store.backend`: defaults to `sqlite-vec`
-- `api.cors_origins`: frontend allowlist, default `http://localhost:5173`
-
-## Commands Available Today
-
-Show version and torch status:
-
-```powershell
-.\.venv\Scripts\python.exe -m ad_classifier version
+```yaml
+vlm:
+  endpoint:
+    endpoint: "http://localhost:1234/v1/chat/completions"
+    model: "google/gemma-4-26b-a4b"
 ```
 
-Create or migrate the database:
+## Model And Tool Paths
+
+The default Whisper backend is whisper.cpp:
+
+```yaml
+whisper:
+  backend: whisper_cpp
+  whisper_cpp:
+    command: ./tools/whisper.cpp/whisper-cli.exe
+    model_path: ./models/whisper/ggml-tiny.en.bin
+```
+
+Ignored local runtime paths:
+
+```text
+tools/whisper.cpp/
+models/whisper/
+```
+
+Download the embedding models once from Python:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')"
+.\.venv\Scripts\python.exe -c "from transformers import AutoModel, AutoProcessor; AutoProcessor.from_pretrained('google/siglip2-base-patch16-224'); AutoModel.from_pretrained('google/siglip2-base-patch16-224')"
+```
+
+## Backend Commands
+
+Initialize the database:
 
 ```powershell
 .\.venv\Scripts\python.exe -m ad_classifier init-db
 ```
 
-Use a custom database path:
+Run the API:
 
 ```powershell
-.\.venv\Scripts\python.exe -m ad_classifier init-db --db-path .\data\dev\ad_classifier.db
+.\.venv\Scripts\python.exe -m ad_classifier api --host 127.0.0.1 --port 8000
 ```
 
-Ingest one prepared ad video:
+Run the worker:
 
 ```powershell
-.\.venv\Scripts\python.exe -m ad_classifier ingest --video C:\path\to\ad.mp4
-```
-
-Use a stable ad id and rebuild cached outputs:
-
-```powershell
-.\.venv\Scripts\python.exe -m ad_classifier ingest `
-  --video C:\path\to\ad.mp4 `
-  --ad-id ad_abcd1234 `
-  --force
-```
-
-The command writes:
-
-```text
-data/frames/{ad_id}/frame_000000_t000000ms.png
-data/audio/{ad_id}/audio.wav
-data/whisper/{ad_id}/whisper.json
-data/out/{ad_id}/manifest.json
-```
-
-Check duplicates for a video or existing ad:
-
-```powershell
-.\.venv\Scripts\python.exe -m ad_classifier dedup-check --video C:\path\to\ad.mp4
-.\.venv\Scripts\python.exe -m ad_classifier dedup-check --ad-id ad_abcd1234
-```
-
-Show CLI help:
-
-```powershell
-.\.venv\Scripts\python.exe -m ad_classifier --help
-```
-
-Planned commands, not implemented yet:
-
-```powershell
-.\.venv\Scripts\python.exe -m ad_classifier api
 .\.venv\Scripts\python.exe -m ad_classifier worker
 ```
 
-## Whisper.cpp Smoke Test
-
-The copied Vulkan build has been tested with the RX 7900 XT. Use any local WAV, MP3, OGG, or FLAC file for a quick check.
+Run both plus the frontend:
 
 ```powershell
-$audio = "C:\path\to\sample.wav"
-.\tools\whisper.cpp\whisper-cli.exe `
-  -m .\models\whisper\ggml-tiny.en.bin `
-  -f $audio `
-  -l en `
-  -t 8 `
-  -dev 0
+.\start.bat
 ```
 
-The log should include:
+## API Examples
 
-```text
-Vulkan0 = AMD Radeon RX 7900 XT
-use gpu    = 1
-whisper_backend_init_gpu: using Vulkan0 backend
-```
-
-The ingest CLI has also been smoke-tested end to end with a generated local MP4, ffmpeg, and the default whisper.cpp backend.
-
-## PaddleOCR Smoke Test
-
-The normal test suite skips heavy OCR inference. To run the optional CPU smoke test:
+Upload and enqueue:
 
 ```powershell
-$env:RUN_PADDLEOCR_SMOKE = "1"
-.\.venv\Scripts\python.exe -m pytest tests\pipeline\test_paddleocr_cpu_smoke.py -q
+curl.exe -X POST http://localhost:8000/api/ads/upload -F "file=@samples/020475556.mp4"
 ```
 
-PaddleOCR is CPU-first on this Windows AMD setup.
-
-## Tests And Quality Checks
-
-Run the default suite:
+List ads:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+curl.exe "http://localhost:8000/api/ads?limit=20"
 ```
 
-Run formatting and lint checks:
+Read one ad:
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m black --check .
+curl.exe http://localhost:8000/api/ads/ad_4600130f
 ```
 
-Current expected result:
+Watch a job over SSE:
 
-```text
-24 passed, 1 skipped
+```powershell
+curl.exe -N http://localhost:8000/api/jobs/job_fcc7ff8ee7e4/events
 ```
 
-## Database
+Hybrid search:
 
-`init-db` creates:
+```powershell
+curl.exe "http://localhost:8000/api/search?q=financing&mode=hybrid&k=10"
+```
 
-- `ads`
-- `frames`
-- `ocr_items`
-- `transcript_segments`
-- `rule_triggers`
-- `classifications`
-- `marketing_entities`
-- `jobs`
-- `campaigns`
-- `ad_campaigns`
-- `ads_fts`
-- `agent_sessions`
-- `agent_messages`
+Campaign discovery:
 
-The connection helper enables:
+```powershell
+curl.exe -X POST http://localhost:8000/api/campaigns/discover
+```
 
-- `PRAGMA foreign_keys = ON`
-- `PRAGMA journal_mode = WAL`
-- `PRAGMA query_only = ON` for read-only agent connections
+## Frontend
 
-Inspect a database with Datasette:
+The UI is in [frontend](./frontend). It talks to FastAPI only and has no backend imports or SQLite access.
+
+```powershell
+cd .\frontend
+npm install
+npm run codegen
+npm run dev
+```
+
+`npm run codegen` reads `http://localhost:8000/openapi.json`, so start the backend first. The app defaults to `VITE_API_BASE_URL=http://localhost:8000`.
+
+Main pages:
+
+- `/library`: table, filters, detail drawer, edit/delete, related ads
+- `/upload`: upload, worker progress over SSE, result panel
+- `/search`: keyword/text/hybrid search
+- `/campaigns`: campaign cards and discovery action
+- `/agent`: ready UI for Phase 9 agent endpoints
+
+## Datasette
+
+Inspect the database directly during development:
 
 ```powershell
 .\.venv\Scripts\python.exe -m datasette serve .\ad_classifier.db -o
 ```
 
-## Planned Architecture
+## Diagnostics
+
+Torch:
+
+```powershell
+.\.venv\Scripts\python.exe -m ad_classifier version
+```
+
+Paddle ROCm best-effort check:
+
+```powershell
+.\.venv\Scripts\python.exe -m ad_classifier paddle-rocm-check
+.\.venv\Scripts\python.exe -m ad_classifier paddle-rocm-check --image .\data\frames\ad_xxxxxxxx\frame_000000_t000000ms.png
+```
+
+CPU PaddleOCR is the supported default. AMD GPU PaddleOCR support is diagnostic only.
+
+## Testing
+
+Backend:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+For linting the current polish changes:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check ad_classifier\api\app.py ad_classifier\cli\__init__.py ad_classifier\diagnostics\paddle_rocm.py tests\diagnostics\test_paddle_rocm.py
+.\.venv\Scripts\python.exe -m black --check ad_classifier\api\app.py ad_classifier\cli\__init__.py ad_classifier\diagnostics\paddle_rocm.py tests\diagnostics\test_paddle_rocm.py
+```
+
+`ruff check .` currently reports legacy findings outside this phase's changes; treat that as a cleanup task before enforcing repo-wide lint in CI.
+
+Frontend:
+
+```powershell
+cd .\frontend
+npm run build
+```
+
+## Sample Output
+
+[samples/expected-output.sample.json](./samples/expected-output.sample.json) shows the intended output shape for the included sample clip. The real VLM call still needs LM Studio payload debugging; until then, real runs may persist the parse-failure fallback classification.
+
+## Architecture
 
 ```text
 video upload
@@ -316,117 +274,10 @@ video upload
   -> deterministic rules
   -> evidence bundle
   -> Gemma VLM verification
-  -> aggregation and review decision
-  -> embeddings and hybrid search
-  -> SQLite persistence
-  -> API, worker, frontend, and NL agent
+  -> aggregation
+  -> text and visual embeddings
+  -> SQLite persistence, FTS5, sqlite-vec
+  -> FastAPI, worker, frontend
 ```
 
-The backend and frontend stay decoupled. The frontend will consume JSON/SSE from FastAPI and should not import backend code or touch SQLite directly.
-
-## API Plan
-
-The planned FastAPI surface includes:
-
-- `POST /api/ads/upload`
-- `GET /api/ads`
-- `GET /api/ads/{ad_id}`
-- `PATCH /api/ads/{ad_id}`
-- `DELETE /api/ads/{ad_id}`
-- `GET /api/ads/{ad_id}/frames`
-- `GET /api/ads/{ad_id}/evidence`
-- `GET /api/ads/{ad_id}/similar`
-- `GET /api/search`
-- `GET /api/jobs/{job_id}`
-- `GET /api/jobs/{job_id}/events`
-- campaign endpoints
-- agent endpoints
-
-`PATCH` is for curated corrections. It must update JSON source-of-truth fields, projection columns, and FTS rows in one transaction.
-
-`DELETE` removes the database record and cascaded child rows. Local media artifact deletion should be explicit, not automatic.
-
-## Frontend Plan
-
-The planned frontend stack:
-
-- Vite
-- React
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- TanStack Query
-- SSE client for job and agent streams
-
-Primary pages:
-
-- All Ads management page with search, filters, sorting, pagination, edit, and delete
-- Upload and job progress page
-- Ad detail page or drawer
-- Hybrid search page
-- Campaign management page
-- Agent chat page
-
-## Project Name
-
-Recommended name: `AdScope Local`.
-
-Why:
-
-- It describes the product without sounding like a generic script.
-- `Scope` fits classification, evidence review, campaign discovery, and search.
-- `Local` communicates the main architectural promise.
-- The internal Python name can remain `ad-classifier`, which is clear for packaging and commands.
-
-Other reasonable options:
-
-- `AdLens Local`
-- `CreativeScope`
-- `AdSift`
-- `AdVault`
-
-I would use `AdScope Local` for the README/product and keep `ad-classifier` for the package until there is a reason to rename the Python distribution.
-
-## Repository Map
-
-```text
-ad_classifier/
-  cli/                 Typer CLI
-  db/                  SQLite connection, migrations, repositories
-  dedup/               SHA256 and perceptual-hash duplicate detection
-  diagnostics/         Torch and environment checks
-  models/              Pydantic models
-  pipeline/            Manifest and planned downstream pipeline stages
-  ingest/              ffmpeg and Whisper ingest backends
-  vectors/             Planned vector-store implementations
-  vlm/                 Planned Gemma verifier clients
-  api/                 Planned FastAPI app
-  worker/              Planned job worker
-
-tests/
-  cli/
-  db/
-  dedup/
-  diagnostics/
-  ingest/
-  models/
-  pipeline/
-
-config.example.yaml
-taxonomy.yaml
-STATUS.md
-Prompt.md
-AGENTS.md
-```
-
-## Development Rules
-
-- Keep code local-first.
-- Do not add cloud dependencies by default.
-- Do not add Docker as a requirement.
-- Do not list torch, torchvision, or torchaudio in `pyproject.toml`.
-- Lazy-import heavy dependencies such as PaddleOCR, torch, transformers, and sentence-transformers.
-- Preserve raw OCR exactly; store corrections separately.
-- Keep evidence timestamped and source-tagged.
-- Enforce read-only SQLite access for the natural-language agent.
-- Keep projection columns in sync with JSON source-of-truth in the same transaction.
+The system categorizes ads. Risk labels are descriptive observation tags for querying and analysis, not gating signals.

@@ -39,6 +39,11 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Frontend local outputs
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # Logs and temporary local files
 logs/
 *.log
@@ -59,6 +64,7 @@ Thumbs.db
 config.yaml
 .env
 .env.*
+!frontend/.env.example
 
 # Generated prompt summaries
 prompts/agent_schema_summary.txt
