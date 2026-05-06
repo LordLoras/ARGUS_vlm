@@ -87,7 +87,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 
     prices = [
         PriceEntity(
-            text=f"{p.currency}{p.amount}" if p.amount else "",
+            text=f"{p.currency or ''}{p.amount}" if p.amount else "",
             amount=p.amount if p.amount else None,
             currency=p.currency or None,
             evidence=[

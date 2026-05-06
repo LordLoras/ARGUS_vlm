@@ -28,7 +28,7 @@ class VLMBrand(_VLMBase):
 
 class VLMPrice(_VLMBase):
     amount: float = 0.0
-    currency: str = ""
+    currency: str | None = None
     frame_index: int = 0
     time_ms: int = 0
     discounted_from: float | None = None
