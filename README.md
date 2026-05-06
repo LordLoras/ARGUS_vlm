@@ -115,7 +115,7 @@ If you need to reinstall project dependencies, preserve torch:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m pip install --no-deps "transformers==4.40.2" "sentence-transformers==3.0.1"
+.\.venv\Scripts\python.exe -m pip install --no-deps "transformers==4.57.6" "tokenizers==0.22.1" "sentence-transformers==3.0.1"
 .\.venv\Scripts\python.exe -m pip install -e ".[dev,clustering,ocr,whisper]"
 ```
 

@@ -50,10 +50,11 @@ ocr = [
 ]
 embeddings = [
     # Install with --no-deps to preserve pre-installed torch GPU wheel.
-    # Run: pip install --no-deps sentence-transformers==3.0.1 transformers==4.40.2
-    # transformers>=4.41 imports torch distributed symbols missing from this ROCm wheel.
+    # Run: pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+    # This stack was smoke-tested with torch 2.9.1+rocm7.2.1 and SigLIP 2 imports.
     "sentence-transformers==3.0.1",
-    "transformers==4.40.2",
+    "transformers==4.57.6",
+    "tokenizers==0.22.1",
 ]
 qdrant = [
     "qdrant-client>=1.9",

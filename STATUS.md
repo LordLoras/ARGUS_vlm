@@ -46,7 +46,7 @@ This document is the handoff. New sessions / models can pick up at the next unch
 |---|---|---|
 | [x] | **Verify pre-installed GPU torch BEFORE any pip install** | torch 2.9.1+rocm7.2.1, GPU=True confirmed |
 | [x] | Create Python 3.11+ package structure | full tree created per Prompt.md Code Organization |
-| [x] | `pyproject.toml` with dependencies | torch NOT listed; transformers pinned to 4.40.2 (ROCm wheel compat) |
+| [x] | `pyproject.toml` with dependencies | torch NOT listed; transformers pinned to 4.57.6 + tokenizers 0.22.1 (ROCm wheel smoke-tested) |
 | [x] | `ad_classifier/diagnostics/env.py` startup check | prints version + backend, fails loudly if CPU-only |
 | [x] | Re-verify torch is GPU-capable after `pip install -e .` | confirmed GPU=True after install |
 | [x] | `ruff` + `black` config | configured in `pyproject.toml` |
@@ -92,9 +92,8 @@ python -c "import torch; print(torch.__version__); print(torch.cuda.is_available
 pip install -e .
 
 # 3. Install sentence-transformers + transformers without touching torch
-#    NOTE: this ROCm wheel lacks torch._C._distributed_c10d — transformers >=4.41 imports it
-#    at module load time and crashes. Pin to 4.40.2 + sentence-transformers 3.0.1.
-pip install --no-deps "transformers==4.40.2" "sentence-transformers==3.0.1"
+#    This SigLIP 2-capable stack was smoke-tested against torch 2.9.1+rocm7.2.1.
+pip install --no-deps "transformers==4.57.6" "tokenizers==0.22.1" "sentence-transformers==3.0.1"
 
 # 4. Install whisper + dev extras
 pip install faster-whisper
