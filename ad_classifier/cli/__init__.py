@@ -1,6 +1,7 @@
 import typer
 
 from ad_classifier.cli.bench_vectors import bench_vectors
+from ad_classifier.cli.campaigns import campaigns_app
 from ad_classifier.cli.dedup import dedup_check
 from ad_classifier.cli.ingest import ingest
 from ad_classifier.cli.ocr import ocr_cmd
@@ -28,3 +29,4 @@ app.command("ingest")(ingest)
 app.command("dedup-check")(dedup_check)
 app.command("ocr")(ocr_cmd)
 app.command("bench-vectors")(bench_vectors)
+app.add_typer(campaigns_app, name="campaigns")

@@ -200,14 +200,18 @@ Model: `google/gemma-4-26b-a4b` (configured in `VLMEndpointConfig`).
 
 ## Phase 7 — Campaigns
 
+**Phase 7 status: core discovery complete.** Auto-discovery, fallback clustering,
+campaign/ad-assignment repositories, CLI, and tests are implemented. HTTP campaign
+endpoints remain deferred to Phase 8 where the FastAPI app skeleton is introduced.
+
 | | Item | Spec |
 |---|---|---|
 | [x] | Brand normalization helper (`"JEEP"` / `"Jeep"` → `"jeep"`) | Prompt.md (implemented in Phase 5, `ad_classifier/marketing/brand.py`) |
-| [ ] | X.2 Auto-discovery: HDBSCAN over `ads_visual` per brand | Prompt.md X.2 |
-| [ ] | X.2 Fallback agglomerative clusterer | Prompt.md X.2 |
-| [ ] | X.3 Manual CRUD + assignment endpoints | Prompt.md X.3, X.4 |
-| [ ] | `campaigns discover` and `campaigns list` CLI | Prompt.md R |
-| [ ] | Tests: synthetic clusters, user vs auto precedence, cascade on ad delete | Prompt.md V |
+| [x] | X.2 Auto-discovery: HDBSCAN over `ads_visual` per brand | Prompt.md X.2 |
+| [x] | X.2 Fallback agglomerative clusterer | Prompt.md X.2 |
+| [~] | X.3 Manual CRUD + assignment endpoints | Prompt.md X.3, X.4; repository CRUD + assignments done, HTTP endpoints deferred to Phase 8 |
+| [x] | `campaigns discover` and `campaigns list` CLI | Prompt.md R |
+| [x] | Tests: synthetic clusters, user vs auto precedence, cascade on ad delete | Prompt.md V |
 
 ---
 

@@ -12,6 +12,7 @@ def test_help_lists_init_db():
 
     assert result.exit_code == 0
     assert "dedup-check" in result.output
+    assert "campaigns" in result.output
     assert "init-db" in result.output
     assert "ingest" in result.output
     assert "version" in result.output

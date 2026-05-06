@@ -81,8 +81,7 @@ class PaddleVLConfig(BaseModel):
 
     enabled: bool = True
     command: str = (
-        "paddlex --pipeline PaddleOCR-VL-native.yaml"
-        " --input {image_path} --output {output_dir}"
+        "paddlex --pipeline PaddleOCR-VL-native.yaml" " --input {image_path} --output {output_dir}"
     )
     timeout_s: float = Field(default=60.0, ge=0.0)
     gating: PaddleVLGatingConfig = Field(default_factory=PaddleVLGatingConfig)
@@ -121,6 +120,22 @@ class VectorStoreConfig(BaseModel):
     visual_dim: int = Field(default=768, ge=1)
 
 
+class CampaignDiscoveryConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    lookback_days: int = Field(default=90, ge=1)
+    min_cluster_size: int = Field(default=3, ge=2)
+    min_mean_similarity: float = Field(default=0.75, ge=0.0, le=1.0)
+    clusterer: Literal["hdbscan", "agglomerative"] = "hdbscan"
+    name_template: str = "{brand} {month} {year}"
+
+
+class CampaignsConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    discover: CampaignDiscoveryConfig = Field(default_factory=CampaignDiscoveryConfig)
+
+
 class VLMEndpointConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -153,6 +168,7 @@ class AppConfig(BaseModel):
     text_embedder: TextEmbedderConfig = Field(default_factory=TextEmbedderConfig)
     image_embedder: ImageEmbedderConfig = Field(default_factory=ImageEmbedderConfig)
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
+    campaigns: CampaignsConfig = Field(default_factory=CampaignsConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:
