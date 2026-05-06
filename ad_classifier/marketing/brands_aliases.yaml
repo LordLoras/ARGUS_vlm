@@ -1,0 +1,22 @@
+# Brand alias map: alias → canonical name
+# Keys are lowercase, stripped of ®™© and extra whitespace.
+aliases:
+  mcdonald's: McDonald's
+  mcdonalds: McDonald's
+  mickey d's: McDonald's
+  coca-cola: Coca-Cola
+  coke: Coca-Cola
+  pepsi-cola: Pepsi
+  nike inc: Nike
+  amazon.com: Amazon
+  apple inc: Apple
+  meta platforms: Meta
+  facebook: Meta
+  instagram: Meta
+  alphabet inc: Google
+  google llc: Google
+  youtube: Google
+  microsoft corporation: Microsoft
+  xbox: Microsoft
+  samsung electronics: Samsung
+  lg electronics: LG

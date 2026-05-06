@@ -95,10 +95,22 @@ class RulesConfig(BaseModel):
     alignment_window_ms: int = Field(default=1500, ge=0)
 
 
+class VLMEndpointConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    endpoint: str = "http://localhost:1234/v1/chat/completions"
+    model: str = "google/gemma-4-26b-a4b"
+    api_key_env: str | None = None
+    timeout_s: float = Field(default=120.0, ge=0.0)
+    max_retries: int = Field(default=2, ge=0)
+    retry_delay_s: float = Field(default=2.0, ge=0.0)
+
+
 class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     max_frames_in_bundle: int = Field(default=12, ge=1)
+    endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
 
 class AppConfig(BaseModel):

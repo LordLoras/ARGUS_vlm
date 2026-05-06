@@ -109,7 +109,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## Phase 3 — Core data + persistence
 
-**Phase 3 status: in progress.** Core models, initial SQLite schema, WAL setup, sqlite-vec load check, `init-db`, read-only DB enforcement, and focused tests are implemented. Repository coverage is still partial: `AdRepository` and `JobRepository` exist; the remaining aggregate repositories are next.
+**Phase 3 status: complete.** Core models, initial SQLite schema, WAL setup, sqlite-vec load check, `init-db`, read-only DB enforcement, and all aggregate repositories implemented.
 
 | | Item | Spec |
 |---|---|---|
@@ -121,10 +121,10 @@ python -c "import torch; print(torch.cuda.is_available())"
 | [x] | WAL pragma on connection open | Prompt.md M |
 | [x] | sqlite-vec extension load + self-test | Prompt.md L.6 |
 | [x] | FTS5 virtual table init + maintenance | Prompt.md M, Y |
-| [~] | Repository classes (one per aggregate) | Prompt.md M |
+| [x] | Repository classes — AdRepository, JobRepository, ClassificationRepository, MarketingEntityRepository | Prompt.md M |
 | [x] | `init-db` CLI command | Prompt.md M, R |
 | [x] | Path helpers in `paths.py` | Prompt.md P |
-| [~] | Tests: schema migrations, projection write-back | Prompt.md V |
+| [x] | Tests: schema migrations, classification + marketing entity round-trip | Prompt.md V |
 
 ---
 
@@ -156,17 +156,25 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## Phase 5 — VLM + classification
 
+**Phase 5 status: complete.** VLM interface + HTTP verifier, aggregation policy, brand normalization, ClassificationRepository, MarketingEntityRepository, and projection write-back are all implemented. 40 new tests pass (130 total). LM Studio smoke test pending — user will signal when ready.
+
+Model: `google/gemma-4-26b-a4b` (configured in `VLMEndpointConfig`).
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | `VLMVerifier` interface + `MockVLMVerifier` | Prompt.md I |
-| [ ] | `HTTPVLMVerifier` (OpenAI-compatible, image_url base64) | Prompt.md I |
-| [ ] | Configurable retry + timeout | Prompt.md I |
-| [ ] | Render Gemma verifier prompt with taxonomy at startup | Prompt.md I, Q |
-| [ ] | VLM JSON validation + fallback to `review` on parse failure | Prompt.md I |
-| [ ] | J Aggregation + decision policy + sensitive thresholds | Prompt.md J |
-| [ ] | K Marketing entity persistence (with projection write-back) | Prompt.md K, M |
-| [ ] | LM Studio smoke test (Gemma 3 12B vision) | Prompt.md U |
-| [ ] | Tests: valid + malformed VLM JSON, decision matrix, marketing entity round-trip | Prompt.md V |
+| [x] | `VLMVerifier` interface + `MockVLMVerifier` | Prompt.md I |
+| [x] | `HTTPVLMVerifier` (OpenAI-compatible, image_url base64) | Prompt.md I |
+| [x] | Configurable retry + timeout | Prompt.md I |
+| [x] | Render Gemma verifier prompt with taxonomy at startup | Prompt.md I, Q |
+| [x] | VLM JSON validation + fallback to `review` on parse failure | Prompt.md I |
+| [x] | `VLMEndpointConfig` in `AppConfig.vlm.endpoint` | Prompt.md I |
+| [x] | J Aggregation + decision policy + sensitive thresholds | Prompt.md J |
+| [x] | K Marketing entity persistence — `MarketingEntityRepository` | Prompt.md K, M |
+| [x] | `ClassificationRepository` (upsert/get/delete) | Prompt.md M |
+| [x] | Brand normalization (`brand_normalize`, alias YAML) | Prompt.md K |
+| [x] | `FinalAdClassification` + `RelatedAds` + `SimilarAd` models | Prompt.md J |
+| [x] | Tests: VLM prompt rendering, mock/HTTP verifier, parse_failure, aggregation decision matrix, brand normalization, classification + marketing repo round-trip | Prompt.md V |
+| [ ] | LM Studio smoke test (google/gemma-4-26b-a4b) | Prompt.md U |
 
 ---
 
@@ -191,7 +199,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 | | Item | Spec |
 |---|---|---|
-| [ ] | Brand normalization helper (`"JEEP"` / `"Jeep"` → `"jeep"`) | Prompt.md (gap from earlier) |
+| [x] | Brand normalization helper (`"JEEP"` / `"Jeep"` → `"jeep"`) | Prompt.md (implemented in Phase 5, `ad_classifier/marketing/brand.py`) |
 | [ ] | X.2 Auto-discovery: HDBSCAN over `ads_visual` per brand | Prompt.md X.2 |
 | [ ] | X.2 Fallback agglomerative clusterer | Prompt.md X.2 |
 | [ ] | X.3 Manual CRUD + assignment endpoints | Prompt.md X.3, X.4 |
