@@ -50,12 +50,21 @@ class WhisperConfig(BaseModel):
     whisper_cpp: WhisperCppConfig = Field(default_factory=WhisperCppConfig)
 
 
+class DedupConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    skip_on_exact: bool = True
+    skip_on_near_duplicate: bool = False
+    phash_distance_threshold: int = Field(default=4, ge=0)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     paths: PathsConfig = Field(default_factory=PathsConfig)
     ingest: IngestConfig = Field(default_factory=IngestConfig)
     whisper: WhisperConfig = Field(default_factory=WhisperConfig)
+    dedup: DedupConfig = Field(default_factory=DedupConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

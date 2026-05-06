@@ -5,9 +5,10 @@ from typing import Literal
 
 from pydantic import Field
 
+from ad_classifier.dedup.models import DedupResult
 from ad_classifier.models.common import StrictModel
 
-IngestStage = Literal["probe", "frames", "audio", "whisper", "manifest", "persist"]
+IngestStage = Literal["dedup", "probe", "frames", "audio", "whisper", "manifest", "persist"]
 
 
 class VideoMetadata(StrictModel):
@@ -67,11 +68,12 @@ class IngestEvent(StrictModel):
 class IngestArtifacts(StrictModel):
     ad_id: str
     source_path: Path
-    metadata: VideoMetadata
+    metadata: VideoMetadata | None = None
     frames_dir: Path
     frames: list[IngestFrame]
     audio_path: Path | None
     whisper_path: Path
     manifest_path: Path
-    transcript: WhisperTranscript
+    transcript: WhisperTranscript = Field(default_factory=WhisperTranscript)
+    dedup: DedupResult = Field(default_factory=DedupResult)
     events: list[IngestEvent] = Field(default_factory=list)

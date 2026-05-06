@@ -1,37 +1,30 @@
 from __future__ import annotations
 
-import hashlib
-import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
 from ad_classifier.config import AppConfig, resolve_config_path
 from ad_classifier.db.connection import initialize_database, open_database
 from ad_classifier.db.repositories import AdRepository
+from ad_classifier.dedup.file_hash import source_sha256
+from ad_classifier.dedup.models import DedupResult
+from ad_classifier.dedup.service import DedupService, check_frame_phashes
 from ad_classifier.ingest.ffmpeg import FFmpegMediaExtractor, MediaExtractor, existing_frames
 from ad_classifier.ingest.models import (
     IngestArtifacts,
     IngestEvent,
     IngestFrame,
-    TranscriptSegment,
+    IngestStage,
     VideoMetadata,
     WhisperTranscript,
 )
+from ad_classifier.ingest.persistence import persist_ingest
 from ad_classifier.ingest.transcript import load_transcript_json, write_transcript_json
 from ad_classifier.ingest.whisper import WhisperTranscriber, build_transcriber
-from ad_classifier.models.ads import AdRecord
 from ad_classifier.paths import validate_ad_id
 from ad_classifier.pipeline.manifest import build_manifest, write_manifest
 
 ProgressCallback = Callable[[IngestEvent], None]
-
-
-def source_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def ad_id_from_source_hash(source_hash: str) -> str:
@@ -66,6 +59,7 @@ class IngestService:
         force: bool = False,
         persist: bool = True,
     ) -> IngestArtifacts:
+        self.events = []
         source_path = video_path.expanduser().resolve()
         if not source_path.exists():
             raise FileNotFoundError(f"Video file not found: {source_path}")
@@ -73,9 +67,68 @@ class IngestService:
         file_hash = source_sha256(source_path)
         resolved_ad_id = validate_ad_id(ad_id) if ad_id else ad_id_from_source_hash(file_hash)
         paths = self._paths_for_ad(resolved_ad_id)
+        dedup = DedupResult(source_hash=file_hash)
+
+        exact_artifacts = self._exact_duplicate_artifacts(
+            source_path=source_path,
+            source_hash=file_hash,
+            requested_ad_id=resolved_ad_id,
+            explicit_ad_id=ad_id is not None,
+            force=force,
+            persist=persist,
+        )
+        if exact_artifacts is not None:
+            return exact_artifacts
 
         metadata = self._probe(source_path)
         frames = self._frames(source_path, paths["frames_dir"], force=force)
+        dedup = self._near_duplicate_result(
+            frames=frames,
+            source_hash=file_hash,
+            ad_id=resolved_ad_id,
+            persist=persist,
+        )
+        if dedup.skipped:
+            transcript = WhisperTranscript(
+                segments=[],
+                language=self.config.whisper.language,
+                duration_ms=metadata.duration_ms,
+                text="",
+            )
+            manifest_path = self._manifest(
+                paths["frames_dir"],
+                paths["manifest_path"],
+                resolved_ad_id,
+                transcript,
+            )
+            if persist:
+                persist_ingest(
+                    config=self.config,
+                    config_file=self.config_file,
+                    ad_id=resolved_ad_id,
+                    source_path=source_path,
+                    source_hash=file_hash,
+                    metadata=metadata,
+                    frames=frames,
+                    transcript=transcript,
+                    dedup=dedup,
+                    status="duplicate",
+                )
+                self._event("persist", "ingest metadata persisted", done=1, total=1)
+            return IngestArtifacts(
+                ad_id=resolved_ad_id,
+                source_path=source_path,
+                metadata=metadata,
+                frames_dir=paths["frames_dir"],
+                frames=frames,
+                audio_path=None,
+                whisper_path=paths["whisper_path"],
+                manifest_path=manifest_path,
+                transcript=transcript,
+                dedup=dedup,
+                events=self.events,
+            )
+
         audio_path = self._audio(source_path, paths["audio_path"], metadata, force=force)
         transcript = self._transcript(audio_path, paths["whisper_path"], metadata, force=force)
         manifest_path = self._manifest(
@@ -85,14 +138,19 @@ class IngestService:
             transcript,
         )
         if persist:
-            self._persist(
+            persist_ingest(
+                config=self.config,
+                config_file=self.config_file,
                 ad_id=resolved_ad_id,
                 source_path=source_path,
                 source_hash=file_hash,
                 metadata=metadata,
                 frames=frames,
                 transcript=transcript,
+                dedup=dedup,
+                status="new",
             )
+            self._event("persist", "ingest metadata persisted", done=1, total=1)
 
         return IngestArtifacts(
             ad_id=resolved_ad_id,
@@ -104,8 +162,113 @@ class IngestService:
             whisper_path=paths["whisper_path"],
             manifest_path=manifest_path,
             transcript=transcript,
+            dedup=dedup,
             events=self.events,
         )
+
+    def _exact_duplicate_artifacts(
+        self,
+        *,
+        source_path: Path,
+        source_hash: str,
+        requested_ad_id: str,
+        explicit_ad_id: bool,
+        force: bool,
+        persist: bool,
+    ) -> IngestArtifacts | None:
+        if force or not persist or not self.config.dedup.skip_on_exact:
+            return None
+
+        db_path = resolve_config_path(self.config.paths.sqlite_path, self.config_file)
+        initialize_database(db_path)
+        conn = open_database(db_path)
+        try:
+            match = DedupService(conn=conn, config=self.config.dedup).check_exact(
+                source_hash=source_hash,
+                exclude_ad_id=requested_ad_id if explicit_ad_id else None,
+            )
+            if match is None:
+                return None
+            existing_ad = AdRepository(conn).get(match.ad_id)
+        finally:
+            conn.close()
+
+        existing_paths = self._paths_for_ad(match.ad_id)
+        frames = existing_frames(existing_paths["frames_dir"], self.config.ingest.frame_interval_ms)
+        metadata = (
+            VideoMetadata(
+                duration_ms=existing_ad.duration_ms,
+                width=existing_ad.width,
+                height=existing_ad.height,
+                fps=existing_ad.fps,
+            )
+            if existing_ad is not None
+            else None
+        )
+        dedup = DedupResult(
+            source_hash=source_hash,
+            exact_duplicate_of=match.ad_id,
+            skipped=True,
+            skip_reason="exact_duplicate",
+        )
+        transcript = (
+            load_transcript_json(existing_paths["whisper_path"])
+            if existing_paths["whisper_path"].exists()
+            else WhisperTranscript()
+        )
+        self._event("dedup", f"exact duplicate of {match.ad_id}", done=1, total=1, reused=True)
+        return IngestArtifacts(
+            ad_id=match.ad_id,
+            source_path=source_path,
+            metadata=metadata,
+            frames_dir=existing_paths["frames_dir"],
+            frames=frames,
+            audio_path=(
+                existing_paths["audio_path"] if existing_paths["audio_path"].exists() else None
+            ),
+            whisper_path=existing_paths["whisper_path"],
+            manifest_path=existing_paths["manifest_path"],
+            transcript=transcript,
+            dedup=dedup,
+            events=self.events,
+        )
+
+    def _near_duplicate_result(
+        self,
+        *,
+        frames: list[IngestFrame],
+        source_hash: str,
+        ad_id: str,
+        persist: bool,
+    ) -> DedupResult:
+        if not persist:
+            return DedupResult(source_hash=source_hash)
+
+        db_path = resolve_config_path(self.config.paths.sqlite_path, self.config_file)
+        initialize_database(db_path)
+        conn = open_database(db_path)
+        try:
+            result = check_frame_phashes(
+                conn=conn,
+                config=self.config.dedup,
+                frame_paths=[frame.path for frame in frames],
+                exclude_ad_id=ad_id,
+                source_hash=source_hash,
+            )
+        finally:
+            conn.close()
+
+        if result.near_duplicate_of is not None:
+            self._event(
+                "dedup",
+                f"near duplicate of {result.near_duplicate_of}",
+                done=1,
+                total=1,
+                reused=result.skipped,
+            )
+        elif result.phash_mean is not None:
+            self._event("dedup", "perceptual hash computed", done=1, total=1)
+        return result
 
     def _paths_for_ad(self, ad_id: str) -> dict[str, Path]:
         return {
@@ -213,42 +376,9 @@ class IngestService:
         )
         return manifest_path
 
-    def _persist(
-        self,
-        *,
-        ad_id: str,
-        source_path: Path,
-        source_hash: str,
-        metadata: VideoMetadata,
-        frames: list[IngestFrame],
-        transcript: WhisperTranscript,
-    ) -> None:
-        db_path = resolve_config_path(self.config.paths.sqlite_path, self.config_file)
-        initialize_database(db_path)
-        conn = open_database(db_path)
-        try:
-            AdRepository(conn).upsert_ingest(
-                AdRecord(
-                    id=ad_id,
-                    source_path=str(source_path),
-                    duration_ms=metadata.duration_ms,
-                    width=metadata.width,
-                    height=metadata.height,
-                    fps=metadata.fps,
-                    status="new",
-                    source_hash=source_hash,
-                )
-            )
-            _replace_frame_rows(conn, ad_id, frames)
-            _replace_transcript_rows(conn, ad_id, transcript.segments)
-            conn.commit()
-        finally:
-            conn.close()
-        self._event("persist", "ingest metadata persisted", done=1, total=1)
-
     def _event(
         self,
-        stage: str,
+        stage: IngestStage,
         message: str,
         *,
         done: int | None = None,
@@ -256,7 +386,7 @@ class IngestService:
         reused: bool = False,
     ) -> None:
         event = IngestEvent(
-            stage=stage,  # type: ignore[arg-type]
+            stage=stage,
             message=message,
             done=done,
             total=total,
@@ -265,32 +395,3 @@ class IngestService:
         self.events.append(event)
         if self.progress is not None:
             self.progress(event)
-
-
-def _replace_frame_rows(conn: sqlite3.Connection, ad_id: str, frames: list[IngestFrame]) -> None:
-    conn.execute("DELETE FROM frames WHERE ad_id = ?", (ad_id,))
-    conn.executemany(
-        """
-        INSERT INTO frames (ad_id, frame_index, time_ms, path, kept)
-        VALUES (?, ?, ?, ?, 1)
-        """,
-        [(ad_id, frame.frame_index, frame.time_ms, str(frame.path)) for frame in frames],
-    )
-
-
-def _replace_transcript_rows(
-    conn: sqlite3.Connection,
-    ad_id: str,
-    segments: list[TranscriptSegment],
-) -> None:
-    conn.execute("DELETE FROM transcript_segments WHERE ad_id = ?", (ad_id,))
-    conn.executemany(
-        """
-        INSERT INTO transcript_segments (ad_id, start_ms, end_ms, text, confidence)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        [
-            (ad_id, segment.start_ms, segment.end_ms, segment.text, segment.confidence)
-            for segment in segments
-        ],
-    )

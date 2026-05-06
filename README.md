@@ -23,6 +23,9 @@ Implemented now:
 - Working `init-db` CLI
 - Working `ingest` CLI for prepared ad videos
 - ffprobe metadata, ffmpeg frame/audio extraction, whisper.cpp transcription, manifest output
+- Exact duplicate detection by SHA256
+- Near-duplicate detection by mean perceptual hash
+- Working `dedup-check` CLI
 - PaddleOCR CPU smoke test
 - `whisper.cpp` Vulkan runtime copied locally and tested on RX 7900 XT
 
@@ -139,6 +142,9 @@ Important fields:
 
 - `paths.sqlite_path`: SQLite database location
 - `ingest.frame_interval_ms`: frame sampling interval, default `500`
+- `dedup.skip_on_exact`: return an existing ad without re-ingesting exact uploads
+- `dedup.skip_on_near_duplicate`: optionally stop after near-duplicate phash match
+- `dedup.phash_distance_threshold`: Hamming distance cutoff for phash near-duplicates
 - `whisper.backend`: `whisper_cpp`, `faster-whisper`, or `mock`
 - `whisper.whisper_cpp.command`: local `whisper-cli.exe`
 - `whisper.whisper_cpp.model_path`: local GGML model
@@ -188,6 +194,13 @@ data/frames/{ad_id}/frame_000000_t000000ms.png
 data/audio/{ad_id}/audio.wav
 data/whisper/{ad_id}/whisper.json
 data/out/{ad_id}/manifest.json
+```
+
+Check duplicates for a video or existing ad:
+
+```powershell
+.\.venv\Scripts\python.exe -m ad_classifier dedup-check --video C:\path\to\ad.mp4
+.\.venv\Scripts\python.exe -m ad_classifier dedup-check --ad-id ad_abcd1234
 ```
 
 Show CLI help:
@@ -256,7 +269,7 @@ Run formatting and lint checks:
 Current expected result:
 
 ```text
-18 passed, 1 skipped
+24 passed, 1 skipped
 ```
 
 ## Database
@@ -380,6 +393,7 @@ I would use `AdScope Local` for the README/product and keep `ad-classifier` for 
 ad_classifier/
   cli/                 Typer CLI
   db/                  SQLite connection, migrations, repositories
+  dedup/               SHA256 and perceptual-hash duplicate detection
   diagnostics/         Torch and environment checks
   models/              Pydantic models
   pipeline/            Manifest and planned downstream pipeline stages
@@ -392,6 +406,7 @@ ad_classifier/
 tests/
   cli/
   db/
+  dedup/
   diagnostics/
   ingest/
   models/

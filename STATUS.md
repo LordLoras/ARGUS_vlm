@@ -130,7 +130,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## Phase 4 — Pipeline stages (no AI yet, mocks first)
 
-**Phase 4 status: in progress.** A0 ingest is implemented for prepared local video files: ffprobe metadata, ffmpeg frames/audio, whisper backend interface with mock/faster-whisper/whisper.cpp, progress events, manifest writing, cache reuse, optional SQLite persistence, and tests. Next unchecked core stage is dedup / similar-ad detection.
+**Phase 4 status: in progress.** A0 ingest and A1 dedup are implemented for prepared local video files: ffprobe metadata, ffmpeg frames/audio, whisper backend interface with mock/faster-whisper/whisper.cpp, progress events, manifest writing, cache reuse, optional SQLite persistence, exact SHA256 duplicate checks, perceptual-hash near-duplicate checks, short-circuit flags, and tests. Next unchecked core stage is frame preprocessing.
 
 | | Item | Spec |
 |---|---|---|
@@ -140,9 +140,9 @@ python -c "import torch; print(torch.cuda.is_available())"
 | [x] | A0 Ingest: faster-whisper implementation | Prompt.md A0 |
 | [x] | A0 Ingest: whisper.cpp CLI implementation (`GGML_VULKAN` on Windows AMD) | Prompt.md A0 |
 | [x] | A0 Ingest: progress events for SSE | Prompt.md A0, O |
-| [ ] | A1 Dedup: SHA256 of source file | Prompt.md A1 |
-| [ ] | A1 Dedup: phash mean across keyframes | Prompt.md A1 |
-| [ ] | A1 Dedup: short-circuit logic | Prompt.md A1.2 |
+| [x] | A1 Dedup: SHA256 of source file | Prompt.md A1 |
+| [x] | A1 Dedup: phash mean across keyframes | Prompt.md A1 |
+| [x] | A1 Dedup: short-circuit logic | Prompt.md A1.2 |
 | [x] | B Manifest builder | Prompt.md B |
 | [ ] | C Frame preprocessing (blur, blank, phash dedup, scene change, keyframes) | Prompt.md C |
 | [ ] | D OCR engine interface + Mock + PaddleOCR (CPU) | Prompt.md D |

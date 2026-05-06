@@ -3,7 +3,9 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from ad_classifier.config import AppConfig, IngestConfig, PathsConfig, WhisperConfig
+from PIL import Image
+
+from ad_classifier.config import AppConfig, DedupConfig, IngestConfig, PathsConfig, WhisperConfig
 from ad_classifier.ingest.ffmpeg import existing_frames
 from ad_classifier.ingest.models import TranscriptSegment, VideoMetadata, WhisperTranscript
 from ad_classifier.ingest.service import IngestService
@@ -36,8 +38,8 @@ class FakeMediaExtractor:
     ):
         self.frame_calls += 1
         frames_dir.mkdir(parents=True, exist_ok=True)
-        (frames_dir / "frame_001_t0500ms.png").write_bytes(b"fake")
-        (frames_dir / "frame_000_t0000ms.png").write_bytes(b"fake")
+        Image.new("RGB", (32, 32), color=(0, 0, 0)).save(frames_dir / "frame_001_t0500ms.png")
+        Image.new("RGB", (32, 32), color=(255, 255, 255)).save(frames_dir / "frame_000_t0000ms.png")
         return existing_frames(frames_dir, frame_interval_ms)
 
     def extract_audio(
@@ -76,7 +78,7 @@ class FakeTranscriber:
         return self.transcript
 
 
-def make_config(tmp_path: Path) -> tuple[AppConfig, Path]:
+def make_config(tmp_path: Path, *, skip_on_near_duplicate: bool = False) -> tuple[AppConfig, Path]:
     config_file = tmp_path / "config.yaml"
     config_file.write_text("{}", encoding="utf-8")
     return (
@@ -90,6 +92,11 @@ def make_config(tmp_path: Path) -> tuple[AppConfig, Path]:
             ),
             ingest=IngestConfig(frame_interval_ms=500, audio_sample_rate=16000),
             whisper=WhisperConfig(backend="mock"),
+            dedup=DedupConfig(
+                skip_on_exact=True,
+                skip_on_near_duplicate=skip_on_near_duplicate,
+                phash_distance_threshold=0,
+            ),
         ),
         config_file,
     )
@@ -139,7 +146,7 @@ def test_ingest_service_persists_ad_frames_and_transcript(tmp_path):
     conn = sqlite3.connect(tmp_path / "ad_classifier.db")
     try:
         ad_row = conn.execute(
-            "SELECT id, status, duration_ms, width, height FROM ads WHERE id = ?",
+            "SELECT id, status, duration_ms, width, height, phash_mean FROM ads WHERE id = ?",
             (result.ad_id,),
         ).fetchone()
         frame_count = conn.execute(
@@ -153,6 +160,56 @@ def test_ingest_service_persists_ad_frames_and_transcript(tmp_path):
     finally:
         conn.close()
 
-    assert ad_row == ("ad_abcd1234", "new", 1000, 320, 180)
+    assert ad_row[:5] == ("ad_abcd1234", "new", 1000, 320, 180)
+    assert ad_row[5] is not None
     assert frame_count == 2
     assert transcript_count == 1
+
+
+def test_ingest_service_short_circuits_exact_duplicate(tmp_path):
+    config, config_file = make_config(tmp_path)
+    video = tmp_path / "prepared-ad.mp4"
+    video.write_bytes(b"same bytes")
+    media = FakeMediaExtractor()
+    transcriber = FakeTranscriber()
+    service = IngestService(
+        config=config,
+        config_file=config_file,
+        media_extractor=media,
+        transcriber=transcriber,
+    )
+
+    first = service.run(video_path=video, persist=True)
+    second = service.run(video_path=video, persist=True)
+
+    assert second.ad_id == first.ad_id
+    assert second.dedup.exact_duplicate_of == first.ad_id
+    assert second.dedup.skipped is True
+    assert media.frame_calls == 1
+    assert transcriber.calls == 1
+
+
+def test_ingest_service_short_circuits_near_duplicate_when_enabled(tmp_path):
+    config, config_file = make_config(tmp_path, skip_on_near_duplicate=True)
+    first_video = tmp_path / "first.mp4"
+    second_video = tmp_path / "second.mp4"
+    first_video.write_bytes(b"first bytes")
+    second_video.write_bytes(b"second bytes")
+    media = FakeMediaExtractor()
+    transcriber = FakeTranscriber()
+    service = IngestService(
+        config=config,
+        config_file=config_file,
+        media_extractor=media,
+        transcriber=transcriber,
+    )
+
+    first = service.run(video_path=first_video, ad_id="ad_abcd1234", persist=True)
+    second = service.run(video_path=second_video, ad_id="ad_dcba4321", persist=True)
+
+    assert first.dedup.phash_mean is not None
+    assert second.dedup.near_duplicate_of == "ad_abcd1234"
+    assert second.dedup.skipped is True
+    assert second.audio_path is None
+    assert media.audio_calls == 1
+    assert transcriber.calls == 1
