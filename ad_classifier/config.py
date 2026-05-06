@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,10 +20,42 @@ class PathsConfig(BaseModel):
     qdrant_path: Path = Path("./qdrant_db")
 
 
+class IngestConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    ffmpeg_path: str = "ffmpeg"
+    ffprobe_path: str = "ffprobe"
+    frame_interval_ms: int = Field(default=500, ge=1)
+    audio_sample_rate: int = Field(default=16000, ge=8000)
+
+
+class WhisperCppConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    command: Path = Path("./tools/whisper.cpp/whisper-cli.exe")
+    model_path: Path = Path("./models/whisper/ggml-tiny.en.bin")
+    use_gpu: bool = True
+    device: int = Field(default=0, ge=0)
+    threads: int = Field(default=8, ge=1)
+    extra_args: list[str] = Field(default_factory=list)
+
+
+class WhisperConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    backend: Literal["whisper_cpp", "faster-whisper", "mock"] = "whisper_cpp"
+    model: str = "tiny.en"
+    compute_type: str = "int8"
+    language: str | None = None
+    whisper_cpp: WhisperCppConfig = Field(default_factory=WhisperCppConfig)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     paths: PathsConfig = Field(default_factory=PathsConfig)
+    ingest: IngestConfig = Field(default_factory=IngestConfig)
+    whisper: WhisperConfig = Field(default_factory=WhisperConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

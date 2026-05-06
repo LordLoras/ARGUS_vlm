@@ -21,12 +21,13 @@ Implemented now:
 - Read-only SQLite connection helper for the future agent
 - Initial `AdRepository` and `JobRepository`
 - Working `init-db` CLI
+- Working `ingest` CLI for prepared ad videos
+- ffprobe metadata, ffmpeg frame/audio extraction, whisper.cpp transcription, manifest output
 - PaddleOCR CPU smoke test
 - `whisper.cpp` Vulkan runtime copied locally and tested on RX 7900 XT
 
 Not implemented yet:
 
-- Video ingest pipeline
 - API server
 - Worker process
 - VLM classification
@@ -137,6 +138,7 @@ Copy-Item .\config.example.yaml .\config.yaml
 Important fields:
 
 - `paths.sqlite_path`: SQLite database location
+- `ingest.frame_interval_ms`: frame sampling interval, default `500`
 - `whisper.backend`: `whisper_cpp`, `faster-whisper`, or `mock`
 - `whisper.whisper_cpp.command`: local `whisper-cli.exe`
 - `whisper.whisper_cpp.model_path`: local GGML model
@@ -162,6 +164,30 @@ Use a custom database path:
 
 ```powershell
 .\.venv\Scripts\python.exe -m ad_classifier init-db --db-path .\data\dev\ad_classifier.db
+```
+
+Ingest one prepared ad video:
+
+```powershell
+.\.venv\Scripts\python.exe -m ad_classifier ingest --video C:\path\to\ad.mp4
+```
+
+Use a stable ad id and rebuild cached outputs:
+
+```powershell
+.\.venv\Scripts\python.exe -m ad_classifier ingest `
+  --video C:\path\to\ad.mp4 `
+  --ad-id ad_abcd1234 `
+  --force
+```
+
+The command writes:
+
+```text
+data/frames/{ad_id}/frame_000000_t000000ms.png
+data/audio/{ad_id}/audio.wav
+data/whisper/{ad_id}/whisper.json
+data/out/{ad_id}/manifest.json
 ```
 
 Show CLI help:
@@ -199,7 +225,7 @@ use gpu    = 1
 whisper_backend_init_gpu: using Vulkan0 backend
 ```
 
-Once Phase 4 adds real ingest tests, a small tracked sample audio fixture should live under `samples/`.
+The ingest CLI has also been smoke-tested end to end with a generated local MP4, ffmpeg, and the default whisper.cpp backend.
 
 ## PaddleOCR Smoke Test
 
@@ -230,7 +256,7 @@ Run formatting and lint checks:
 Current expected result:
 
 ```text
-9 passed, 1 skipped
+18 passed, 1 skipped
 ```
 
 ## Database
@@ -356,8 +382,8 @@ ad_classifier/
   db/                  SQLite connection, migrations, repositories
   diagnostics/         Torch and environment checks
   models/              Pydantic models
-  pipeline/            Planned pipeline stages
-  ingest/              Planned ffmpeg and Whisper backends
+  pipeline/            Manifest and planned downstream pipeline stages
+  ingest/              ffmpeg and Whisper ingest backends
   vectors/             Planned vector-store implementations
   vlm/                 Planned Gemma verifier clients
   api/                 Planned FastAPI app
@@ -367,6 +393,7 @@ tests/
   cli/
   db/
   diagnostics/
+  ingest/
   models/
   pipeline/
 

@@ -130,25 +130,27 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ## Phase 4 — Pipeline stages (no AI yet, mocks first)
 
+**Phase 4 status: in progress.** A0 ingest is implemented for prepared local video files: ffprobe metadata, ffmpeg frames/audio, whisper backend interface with mock/faster-whisper/whisper.cpp, progress events, manifest writing, cache reuse, optional SQLite persistence, and tests. Next unchecked core stage is dedup / similar-ad detection.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | A0 Ingest: ffmpeg frame extraction | Prompt.md A0 |
-| [ ] | A0 Ingest: ffmpeg audio extraction | Prompt.md A0 |
-| [ ] | A0 Ingest: Whisper backend interface + mock | Prompt.md A0, F |
-| [ ] | A0 Ingest: faster-whisper implementation | Prompt.md A0 |
-| [ ] | A0 Ingest: whisper.cpp CLI implementation (`GGML_VULKAN` on Windows AMD) | Prompt.md A0 |
-| [ ] | A0 Ingest: progress events for SSE | Prompt.md A0, O |
+| [x] | A0 Ingest: ffmpeg frame extraction | Prompt.md A0 |
+| [x] | A0 Ingest: ffmpeg audio extraction | Prompt.md A0 |
+| [x] | A0 Ingest: Whisper backend interface + mock | Prompt.md A0, F |
+| [x] | A0 Ingest: faster-whisper implementation | Prompt.md A0 |
+| [x] | A0 Ingest: whisper.cpp CLI implementation (`GGML_VULKAN` on Windows AMD) | Prompt.md A0 |
+| [x] | A0 Ingest: progress events for SSE | Prompt.md A0, O |
 | [ ] | A1 Dedup: SHA256 of source file | Prompt.md A1 |
 | [ ] | A1 Dedup: phash mean across keyframes | Prompt.md A1 |
 | [ ] | A1 Dedup: short-circuit logic | Prompt.md A1.2 |
-| [ ] | B Manifest builder | Prompt.md B |
+| [x] | B Manifest builder | Prompt.md B |
 | [ ] | C Frame preprocessing (blur, blank, phash dedup, scene change, keyframes) | Prompt.md C |
 | [ ] | D OCR engine interface + Mock + PaddleOCR (CPU) | Prompt.md D |
 | [ ] | E PaddleOCR-VL adapter + gating | Prompt.md E |
-| [ ] | F Whisper transcript loaders + alignment | Prompt.md F |
+| [~] | F Whisper transcript loaders + alignment | Prompt.md F |
 | [ ] | G Rules engine + sample rules YAML | Prompt.md G |
 | [ ] | H Evidence bundle builder | Prompt.md H |
-| [ ] | Tests: each stage with mocks + synthetic fixtures | Prompt.md V |
+| [~] | Tests: each stage with mocks + synthetic fixtures | Prompt.md V |
 
 ---
 

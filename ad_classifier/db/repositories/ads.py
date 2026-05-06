@@ -20,6 +20,29 @@ class AdRepository:
             values,
         )
 
+    def upsert_ingest(self, ad: AdRecord) -> None:
+        data = ad.model_dump()
+        columns = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        update_columns = [
+            "source_path",
+            "duration_ms",
+            "width",
+            "height",
+            "fps",
+            "status",
+            "source_hash",
+        ]
+        assignments = ", ".join(f"{column} = excluded.{column}" for column in update_columns)
+        values = [db_value(value) for value in data.values()]
+        self.conn.execute(
+            f"""
+            INSERT INTO ads ({columns}) VALUES ({placeholders})
+            ON CONFLICT(id) DO UPDATE SET {assignments}
+            """,
+            values,
+        )
+
     def get(self, ad_id: str) -> AdRecord | None:
         row = self.conn.execute("SELECT * FROM ads WHERE id = ?", (ad_id,)).fetchone()
         data = row_to_dict(row)
