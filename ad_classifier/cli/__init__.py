@@ -5,7 +5,7 @@ from ad_classifier.cli.campaigns import campaigns_app
 from ad_classifier.cli.dedup import dedup_check
 from ad_classifier.cli.ingest import ingest
 from ad_classifier.cli.ocr import ocr_cmd
-from ad_classifier.cli.operational import init_db
+from ad_classifier.cli.operational import api, init_db, worker
 
 app = typer.Typer(
     name="ad-classifier",
@@ -25,6 +25,8 @@ def version() -> None:
 
 
 app.command("init-db")(init_db)
+app.command("api")(api)
+app.command("worker")(worker)
 app.command("ingest")(ingest)
 app.command("dedup-check")(dedup_check)
 app.command("ocr")(ocr_cmd)

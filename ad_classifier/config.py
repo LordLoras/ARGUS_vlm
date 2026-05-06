@@ -136,6 +136,31 @@ class CampaignsConfig(BaseModel):
     discover: CampaignDiscoveryConfig = Field(default_factory=CampaignDiscoveryConfig)
 
 
+class UploadConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    max_bytes: int = Field(default=209_715_200, ge=1)
+    allowed_mime: list[str] = Field(
+        default_factory=lambda: ["video/mp4", "video/quicktime", "video/webm"]
+    )
+
+
+class APIConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    host: str = "127.0.0.1"
+    port: int = Field(default=8000, ge=1, le=65535)
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    upload: UploadConfig = Field(default_factory=UploadConfig)
+
+
+class WorkerConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    poll_interval_ms: int = Field(default=1000, ge=50)
+    concurrency: int = Field(default=1, ge=1)
+
+
 class VLMEndpointConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -169,6 +194,8 @@ class AppConfig(BaseModel):
     image_embedder: ImageEmbedderConfig = Field(default_factory=ImageEmbedderConfig)
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     campaigns: CampaignsConfig = Field(default_factory=CampaignsConfig)
+    api: APIConfig = Field(default_factory=APIConfig)
+    worker: WorkerConfig = Field(default_factory=WorkerConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

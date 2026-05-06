@@ -217,20 +217,25 @@ endpoints remain deferred to Phase 8 where the FastAPI app skeleton is introduce
 
 ## Phase 8 — HTTP API + worker
 
+**Phase 8 status: complete for backend orchestration.** FastAPI app factory,
+upload/job/ad/search/campaign routes, SSE job events, static `data/` serving,
+and the SQLite-backed single-worker poll loop are implemented. The worker wires
+the existing local stages end to end and supports injected mocks for tests.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | FastAPI app skeleton + CORS + OpenAPI at `/docs` | Prompt.md N |
-| [ ] | Upload endpoint (streaming, MIME whitelist, ffprobe sanity) | Prompt.md N |
-| [ ] | Ad list/detail/frames/evidence/similar endpoints | Prompt.md N |
-| [ ] | Ad update endpoint for curated field corrections (`PATCH /api/ads/{ad_id}`) | Prompt.md N |
-| [ ] | Ad delete endpoint with cascade + optional local artifact cleanup (`DELETE /api/ads/{ad_id}`) | Prompt.md N, P |
-| [ ] | Search endpoint (text/visual/hybrid) | Prompt.md N, Y |
-| [ ] | Job status + SSE events + cancel | Prompt.md N, O |
-| [ ] | Static file mount for `data/` | Prompt.md N, P |
-| [ ] | Worker process: poll loop + state machine + cancellation | Prompt.md O |
-| [ ] | Single-worker concurrency to protect VRAM | Prompt.md O |
-| [ ] | Campaign endpoints | Prompt.md X.4 |
-| [ ] | Tests: TestClient flows, SSE ordering, worker state transitions | Prompt.md V |
+| [x] | FastAPI app skeleton + CORS + OpenAPI at `/docs` | Prompt.md N |
+| [x] | Upload endpoint (streaming, MIME whitelist, ffprobe sanity) | Prompt.md N |
+| [x] | Ad list/detail/frames/evidence/similar endpoints | Prompt.md N |
+| [x] | Ad update endpoint for curated field corrections (`PATCH /api/ads/{ad_id}`) | Prompt.md N |
+| [x] | Ad delete endpoint with cascade + optional local artifact cleanup (`DELETE /api/ads/{ad_id}`) | Prompt.md N, P |
+| [x] | Search endpoint (text/visual/hybrid) | Prompt.md N, Y |
+| [x] | Job status + SSE events + cancel | Prompt.md N, O |
+| [x] | Static file mount for `data/` | Prompt.md N, P |
+| [x] | Worker process: poll loop + state machine + cancellation | Prompt.md O |
+| [x] | Single-worker concurrency to protect VRAM | Prompt.md O |
+| [x] | Campaign endpoints | Prompt.md X.4 |
+| [x] | Tests: TestClient flows, SSE ordering, worker state transitions | Prompt.md V |
 
 ---
 

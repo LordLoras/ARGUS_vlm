@@ -26,6 +26,17 @@ class JobRepository:
         data = row_to_dict(row)
         return JobRecord.model_validate(data) if data is not None else None
 
+    def next_queued(self) -> JobRecord | None:
+        row = self.conn.execute("""
+            SELECT *
+            FROM jobs
+            WHERE state = 'queued'
+            ORDER BY rowid
+            LIMIT 1
+            """).fetchone()
+        data = row_to_dict(row)
+        return JobRecord.model_validate(data) if data is not None else None
+
     def update_state(
         self,
         job_id: str,
@@ -58,3 +69,17 @@ class JobRepository:
                 job_id,
             ),
         )
+
+    def cancel(self, job_id: str, *, message: str = "cancelled") -> bool:
+        cur = self.conn.execute(
+            """
+            UPDATE jobs
+            SET state = 'cancelled',
+                message = ?,
+                finished_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND state IN ('queued', 'running')
+            """,
+            (message, job_id),
+        )
+        return cur.rowcount > 0

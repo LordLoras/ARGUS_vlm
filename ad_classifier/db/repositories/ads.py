@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from ad_classifier.db.repositories.base import db_value, row_to_dict
 from ad_classifier.dedup.phash import hamming_distance
@@ -49,6 +50,54 @@ class AdRepository:
         row = self.conn.execute("SELECT * FROM ads WHERE id = ?", (ad_id,)).fetchone()
         data = row_to_dict(row)
         return AdRecord.model_validate(data) if data is not None else None
+
+    def list(
+        self,
+        *,
+        brand: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[AdRecord]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if brand:
+            clauses.append("brand_name = ?")
+            params.append(brand)
+        if category:
+            clauses.append("primary_category = ?")
+            params.append(category)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if q:
+            clauses.append("(id LIKE ? OR brand_name LIKE ? OR products_text LIKE ?)")
+            pattern = f"%{q}%"
+            params.extend([pattern, pattern, pattern])
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.conn.execute(
+            f"""
+            SELECT *
+            FROM ads
+            {where}
+            ORDER BY ingested_at DESC, id
+            LIMIT ? OFFSET ?
+            """,
+            (*params, limit, offset),
+        ).fetchall()
+        return [AdRecord.model_validate(row_to_dict(row)) for row in rows]
+
+    def update_status(self, ad_id: str, status: str) -> None:
+        self.conn.execute("UPDATE ads SET status = ? WHERE id = ?", (status, ad_id))
+
+    def update_source_path(self, ad_id: str, source_path: Path | str) -> None:
+        self.conn.execute(
+            "UPDATE ads SET source_path = ? WHERE id = ?",
+            (str(source_path), ad_id),
+        )
 
     def find_by_source_hash(
         self,
@@ -134,3 +183,6 @@ class AdRepository:
                 ad_id,
             ),
         )
+
+    def delete(self, ad_id: str) -> None:
+        self.conn.execute("DELETE FROM ads WHERE id = ?", (ad_id,))

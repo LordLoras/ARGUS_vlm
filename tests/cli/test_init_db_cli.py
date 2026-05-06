@@ -11,11 +11,13 @@ def test_help_lists_init_db():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "api" in result.output
     assert "dedup-check" in result.output
     assert "campaigns" in result.output
     assert "init-db" in result.output
     assert "ingest" in result.output
     assert "version" in result.output
+    assert "worker" in result.output
 
 
 def test_init_db_cli_creates_database(tmp_path):

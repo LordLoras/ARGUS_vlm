@@ -45,3 +45,52 @@ def init_db(
         typer.echo(f"migrations_applied={','.join(result.migrations_applied)}")
     else:
         typer.echo("migrations_applied=none")
+
+
+def api(
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config.yaml. Defaults to ./config.yaml or ./config.example.yaml.",
+        ),
+    ] = None,
+    host: Annotated[str | None, typer.Option("--host", help="Override API host.")] = None,
+    port: Annotated[int | None, typer.Option("--port", help="Override API port.")] = None,
+) -> None:
+    """Run the FastAPI server."""
+    import uvicorn
+
+    from ad_classifier.api.app import create_app
+    from ad_classifier.config import load_config
+
+    app_config, _ = load_config(config)
+    app = create_app(config_path=config)
+    uvicorn.run(
+        app,
+        host=host or app_config.api.host,
+        port=port or app_config.api.port,
+    )
+
+
+def worker(
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config.yaml. Defaults to ./config.yaml or ./config.example.yaml.",
+        ),
+    ] = None,
+    once: Annotated[bool, typer.Option("--once", help="Process at most one queued job.")] = False,
+) -> None:
+    """Run the SQLite-backed worker."""
+    from ad_classifier.worker.runner import build_worker
+
+    runner = build_worker(config)
+    if once:
+        did_work = runner.run_once()
+        typer.echo(f"did_work={str(did_work).lower()}")
+        return
+    runner.run_forever()
