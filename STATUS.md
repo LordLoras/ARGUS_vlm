@@ -180,18 +180,21 @@ Model: `google/gemma-4-26b-a4b` (configured in `VLMEndpointConfig`).
 
 ## Phase 6 — Embeddings + search
 
+**Phase 6 status: complete.** Text + image embedder interfaces with mocks, `SentenceTransformerEmbedder`, `SigLIP2ImageEmbedder`, `SqliteVecStore` (sqlite-vec, delete-then-insert upsert), FTS5 helpers, RRF fusion, hybrid search, A1.3 similar-ad enrichment, and `bench-vectors` CLI implemented. 40 new tests pass (170 total). Qdrant skipped per user request.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | `TextEmbedder` interface + `MockTextEmbedder` | Prompt.md L |
-| [ ] | `SentenceTransformerEmbedder` (lazy import) | Prompt.md L |
-| [ ] | `ImageEmbedder` interface + `MockImageEmbedder` | Prompt.md L |
-| [ ] | `SigLIP2ImageEmbedder` (HuggingFace transformers, lazy import) | Prompt.md L |
-| [ ] | `VectorStore` protocol + `SqliteVecStore` | Prompt.md L |
-| [ ] | Optional: `QdrantStore` (no Docker; native Windows binary) | Prompt.md L |
-| [ ] | Y Hybrid search: FTS5 + vec + RRF fusion | Prompt.md Y |
-| [ ] | A1.3 post-embedding similar-ad enrichment | Prompt.md A1 |
-| [ ] | `bench-vectors` CLI (parametrized backends) | Prompt.md L.4 |
-| [ ] | Tests: parametrized over backends, RRF correctness, dim alignment, mock embedders | Prompt.md V |
+| [x] | `TextEmbedder` interface + `MockTextEmbedder` | Prompt.md L |
+| [x] | `SentenceTransformerEmbedder` (lazy import) | Prompt.md L |
+| [x] | `ImageEmbedder` interface + `MockImageEmbedder` | Prompt.md L |
+| [x] | `SigLIP2ImageEmbedder` (HuggingFace transformers, lazy import) | Prompt.md L |
+| [x] | `VectorStore` protocol + `SqliteVecStore` (sqlite-vec) | Prompt.md L |
+| [~] | Optional: `QdrantStore` — skipped per user request | Prompt.md L |
+| [x] | Y Hybrid search: FTS5 + vec + RRF fusion (`search/` package) | Prompt.md Y |
+| [x] | A1.3 post-embedding similar-ad enrichment (`dedup/similarity.py`) | Prompt.md A1 |
+| [x] | `bench-vectors` CLI command | Prompt.md L.4 |
+| [x] | `TextEmbedderConfig`, `ImageEmbedderConfig`, `VectorStoreConfig` in `AppConfig` | Prompt.md L |
+| [x] | Tests: mock embedders, SqliteVecStore CRUD + KNN, RRF correctness, hybrid search, similarity enrichment | Prompt.md V |
 
 ---
 

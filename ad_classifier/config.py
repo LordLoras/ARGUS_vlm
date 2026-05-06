@@ -95,6 +95,32 @@ class RulesConfig(BaseModel):
     alignment_window_ms: int = Field(default=1500, ge=0)
 
 
+class TextEmbedderConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    device: str = "cpu"
+    batch_size: int = Field(default=32, ge=1)
+    dim: int = Field(default=384, ge=1)
+
+
+class ImageEmbedderConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    model: str = "google/siglip2-base-patch16-224"
+    device: str = "cpu"
+    batch_size: int = Field(default=8, ge=1)
+    dim: int = Field(default=768, ge=1)
+
+
+class VectorStoreConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    backend: Literal["sqlite-vec"] = "sqlite-vec"
+    text_dim: int = Field(default=384, ge=1)
+    visual_dim: int = Field(default=768, ge=1)
+
+
 class VLMEndpointConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -124,6 +150,9 @@ class AppConfig(BaseModel):
     paddlevl: PaddleVLConfig = Field(default_factory=PaddleVLConfig)
     rules: RulesConfig = Field(default_factory=RulesConfig)
     vlm: VLMConfig = Field(default_factory=VLMConfig)
+    text_embedder: TextEmbedderConfig = Field(default_factory=TextEmbedderConfig)
+    image_embedder: ImageEmbedderConfig = Field(default_factory=ImageEmbedderConfig)
+    vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:
