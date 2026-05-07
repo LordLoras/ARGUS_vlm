@@ -11,9 +11,10 @@ class ListAdsTool(AgentTool):
     name = "list_ads"
     description = (
         "List ads filtered by brand, primary_category, status, or a free-text "
-        "substring (matches id, brand, advertiser, products, website, phone, "
-        "landing page domain). Returns products_text so product/model questions "
-        "can usually be answered without get_ad. For counts, prefer count_ads."
+        "substring (matches id, brand, advertiser, products, category, website, "
+        "phone, landing page domain; expands common shorthand such as HVAC or "
+        "services). Returns products_text so product/model questions can usually "
+        "be answered without get_ad. For counts, prefer count_ads."
     )
 
     def parameters(self) -> dict[str, Any]:
@@ -21,10 +22,7 @@ class ListAdsTool(AgentTool):
             "type": "object",
             "properties": {
                 "brand": {"type": "string", "description": "Exact brand_name match."},
-                "category": {
-                    "type": "string",
-                    "description": "Exact primary_category match.",
-                },
+                "category": {"type": "string", "description": "Primary category/topic."},
                 "status": {
                     "type": "string",
                     "enum": [
@@ -36,7 +34,7 @@ class ListAdsTool(AgentTool):
                         "review",
                     ],
                 },
-                "q": {"type": "string", "description": "Free-text substring filter."},
+                "q": {"type": "string", "description": "Free-text topic filter."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25},
                 "offset": {"type": "integer", "minimum": 0, "default": 0},
             },

@@ -4,15 +4,21 @@ from typing import Any
 
 from ad_classifier.agent.models import ToolResult
 from ad_classifier.agent.tools.base import AgentTool, ToolContext
+from ad_classifier.search.query_expansion import (
+    build_loose_like_clause,
+    expand_query_terms,
+    has_alias_expansion,
+)
 
 
 class CountAdsTool(AgentTool):
     name = "count_ads"
     description = (
         "Count ads matching brand / primary_category / status filters or a loose "
-        "free-text q substring over id, brand, advertiser, products, website, "
-        "phone, and landing page domain. Use q for topic words that are not exact "
-        "taxonomy categories. Use this for 'how many' questions instead of list_ads."
+        "free-text q substring over id, brand, advertiser, products, category, "
+        "website, phone, and landing page domain. Use q for topic words and "
+        "business shorthand such as HVAC or services. Use this for 'how many' "
+        "questions instead of list_ads."
     )
 
     def parameters(self) -> dict[str, Any]:
@@ -33,28 +39,40 @@ class CountAdsTool(AgentTool):
             clauses.append("brand_name = ?")
             params.append(args["brand"])
         if args.get("category"):
-            clauses.append("primary_category = ?")
-            params.append(args["category"])
+            if has_alias_expansion(args["category"]):
+                loose_clause, loose_params = build_loose_like_clause(args["category"])
+                clauses.append(f"(primary_category = ? OR {loose_clause})")
+                params.append(args["category"])
+                params.extend(loose_params)
+            else:
+                clauses.append("primary_category = ?")
+                params.append(args["category"])
         if args.get("status"):
             clauses.append("status = ?")
             params.append(args["status"])
         if args.get("q"):
-            clauses.append(
-                "("
-                "id LIKE ? OR brand_name LIKE ? OR advertiser_name LIKE ? OR "
-                "products_text LIKE ? OR website_domain LIKE ? OR phone_number LIKE ? OR "
-                "landing_page_domain LIKE ?"
-                ")"
-            )
-            pattern = f"%{args['q']}%"
-            params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+            loose_clause, loose_params = build_loose_like_clause(args["q"])
+            if loose_clause:
+                clauses.append(loose_clause)
+                params.extend(loose_params)
 
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         row = ctx.conn.execute(f"SELECT COUNT(*) FROM ads {where}", params).fetchone()
         count = int(row[0]) if row else 0
+        expanded_terms = {
+            key: expand_query_terms(value)
+            for key in ("category", "q")
+            if (value := args.get(key)) and has_alias_expansion(value)
+        }
+        data: dict[str, Any] = {
+            "count": count,
+            "filters": {k: v for k, v in args.items() if v},
+        }
+        if expanded_terms:
+            data["expanded_terms"] = expanded_terms
         return ToolResult(
             name=self.name,
             ok=True,
-            data={"count": count, "filters": {k: v for k, v in args.items() if v}},
+            data=data,
             row_count=1,
         )

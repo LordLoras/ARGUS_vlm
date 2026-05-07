@@ -18,6 +18,23 @@ def _ctx(conn, agent_config) -> ToolContext:
     return ToolContext(conn=conn, config=agent_config)
 
 
+def _insert_hvac_ad(conn) -> None:
+    conn.execute(
+        """
+        INSERT INTO ads (
+            id, source_path, ingested_at, status, brand_name, advertiser_name,
+            products_text, primary_category, decision, source_hash
+        )
+        VALUES (
+            'ad_hvac_a', '/tmp/hvac.mp4', datetime('now'), 'completed',
+            'Prillaman Mechanical, Heating & AC', 'Prillaman',
+            'Heating systems, Cooling systems, Air Conditioning Check',
+            'other', 'allow', 'hash_hvac'
+        )
+        """
+    )
+
+
 def test_list_ads_returns_seeded_ads(readonly_conn, agent_config):
     result = ListAdsTool().call({"limit": 25}, _ctx(readonly_conn, agent_config))
     assert result.ok
@@ -48,6 +65,34 @@ def test_count_ads_q_filter(readonly_conn, agent_config):
     assert result.ok
     assert result.data["count"] == 1
     assert result.data["filters"] == {"q": "Wrangler"}
+
+
+def test_count_ads_expands_hvac_topic(writable_conn, agent_config):
+    _insert_hvac_ad(writable_conn)
+
+    result = CountAdsTool().call({"q": "HVAC"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert result.data["count"] == 1
+    assert "air conditioning" in result.data["expanded_terms"]["q"]
+
+
+def test_count_ads_expands_hvac_category_mistake(writable_conn, agent_config):
+    _insert_hvac_ad(writable_conn)
+
+    result = CountAdsTool().call({"category": "HVAC"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert result.data["count"] == 1
+
+
+def test_list_ads_expands_services_topic(writable_conn, agent_config):
+    _insert_hvac_ad(writable_conn)
+
+    result = ListAdsTool().call({"q": "services"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert [item["ad_id"] for item in result.data] == ["ad_hvac_a"]
 
 
 def test_get_ad_returns_classification_and_marketing(readonly_conn, agent_config):

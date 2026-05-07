@@ -6,6 +6,10 @@ from pathlib import Path
 from ad_classifier.db.repositories.base import db_value, row_to_dict
 from ad_classifier.dedup.phash import hamming_distance
 from ad_classifier.models.ads import AdRecord
+from ad_classifier.search.query_expansion import (
+    build_loose_like_clause,
+    has_alias_expansion,
+)
 
 
 class AdRepository:
@@ -67,21 +71,22 @@ class AdRepository:
             clauses.append("brand_name = ?")
             params.append(brand)
         if category:
-            clauses.append("primary_category = ?")
-            params.append(category)
+            if has_alias_expansion(category):
+                loose_clause, loose_params = build_loose_like_clause(category)
+                clauses.append(f"(primary_category = ? OR {loose_clause})")
+                params.append(category)
+                params.extend(loose_params)
+            else:
+                clauses.append("primary_category = ?")
+                params.append(category)
         if status:
             clauses.append("status = ?")
             params.append(status)
         if q:
-            clauses.append(
-                "("
-                "id LIKE ? OR brand_name LIKE ? OR advertiser_name LIKE ? OR "
-                "products_text LIKE ? OR website_domain LIKE ? OR phone_number LIKE ? OR "
-                "landing_page_domain LIKE ?"
-                ")"
-            )
-            pattern = f"%{q}%"
-            params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+            loose_clause, loose_params = build_loose_like_clause(q)
+            if loose_clause:
+                clauses.append(loose_clause)
+                params.extend(loose_params)
 
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = self.conn.execute(
