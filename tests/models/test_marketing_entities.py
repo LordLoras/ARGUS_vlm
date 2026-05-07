@@ -37,6 +37,14 @@ def test_marketing_entities_tracking_projections():
     assert entities.primary_phone_number == "+15551234567"
 
 
+def test_marketing_entities_accepts_tv_aspect_ratio():
+    entities = MarketingEntities()
+    entities.creative_format.aspect_ratio = "4:3"
+    entities.creative_attributes.aspect_ratio = "4:3"
+
+    assert entities.creative_format.aspect_ratio == "4:3"
+
+
 def test_evidence_rejects_invalid_confidence():
     with pytest.raises(ValidationError):
         EvidenceItem(

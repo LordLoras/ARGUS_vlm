@@ -59,7 +59,7 @@ vlm:
     endpoint: "http://127.0.0.1:1234/v1"
     model: "google/gemma-4-26b-a4b"
     api_key_env: null           # LM Studio typically does not require an API key
-    timeout_s: 120
+    timeout_s: 240
     max_retries: 2
     retry_delay_s: 2
 

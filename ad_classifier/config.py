@@ -167,7 +167,7 @@ class VLMEndpointConfig(BaseModel):
     endpoint: str = "http://127.0.0.1:1234/v1"
     model: str = "google/gemma-4-26b-a4b"
     api_key_env: str | None = None
-    timeout_s: float = Field(default=120.0, ge=0.0)
+    timeout_s: float = Field(default=240.0, ge=0.0)
     max_retries: int = Field(default=2, ge=0)
     retry_delay_s: float = Field(default=2.0, ge=0.0)
 

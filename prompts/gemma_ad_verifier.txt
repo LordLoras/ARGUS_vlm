@@ -142,7 +142,7 @@ Return exactly this JSON shape:
       }
     ],
     "creative_format": {
-      "aspect_ratio": "1:1|9:16|16:9|4:5",
+      "aspect_ratio": "1:1|9:16|16:9|4:5|4:3",
       "duration_ms": 0,
       "has_voiceover": true,
       "has_on_screen_text": true
@@ -233,7 +233,7 @@ Return exactly this JSON shape:
     },
     "creative_attributes": {
       "format": "product_demo|testimonial|service_explainer|offer_end_card|ugc_style|app_walkthrough|before_after|brand_spot|other|null",
-      "aspect_ratio": "1:1|9:16|16:9|4:5|null",
+      "aspect_ratio": "1:1|9:16|16:9|4:5|4:3|null",
       "duration_ms": 0,
       "voiceover": true,
       "music": false,

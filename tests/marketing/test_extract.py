@@ -54,3 +54,48 @@ def test_merge_tracking_entities_adds_missing_values_without_duplicates():
 
     assert len(merged.contact_points.websites) == 1
     assert merged.landing_page.domain == "example.com"
+
+
+def test_extract_tracking_entities_ignores_low_confidence_ocr_domains():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=0,
+                time_ms=0,
+                text="garbled.example",
+                confidence=0.4,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.contact_points.websites == []
+
+
+def test_merge_tracking_entities_skips_weaker_suffix_domain():
+    base = MarketingEntities()
+    base.contact_points.websites.append(
+        extract_tracking_entities(
+            ocr_items=[],
+            transcript=WhisperTranscript(
+                segments=[
+                    TranscriptSegment(
+                        start_ms=0,
+                        end_ms=100,
+                        text="Visit prillamanhvac.com.",
+                    )
+                ]
+            ),
+        ).contact_points.websites[0]
+    )
+    extracted = extract_tracking_entities(
+        ocr_items=[],
+        transcript=WhisperTranscript(
+            segments=[TranscriptSegment(start_ms=100, end_ms=200, text="Prillaman HVAC.com")]
+        ),
+    )
+
+    merged = merge_tracking_entities(base, extracted)
+
+    assert [item.domain for item in merged.contact_points.websites] == ["prillamanhvac.com"]

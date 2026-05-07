@@ -49,6 +49,7 @@ _SOCIAL_DOMAINS = {
 }
 _SCARCITY_TERMS = ("while supplies last", "limited quantities", "limited supply", "only left")
 _URGENCY_TERMS = ("limited time", "today only", "ends soon", "call today", "now", "hurry")
+_MIN_TRACKING_CONFIDENCE = 0.75
 
 
 def extract_tracking_entities(
@@ -67,6 +68,9 @@ def extract_tracking_entities(
 
     for evidence in evidence_items:
         text = evidence.text
+        if not _is_reliable_tracking_evidence(evidence):
+            continue
+
         for raw_url in _URL_PATTERN.findall(text):
             website = _website_from_match(raw_url, evidence)
             if website is None or website.url in seen_urls:
@@ -143,7 +147,14 @@ def merge_tracking_entities(
     base: MarketingEntities, extracted: MarketingEntities
 ) -> MarketingEntities:
     for website in extracted.contact_points.websites:
-        if website.url not in {item.url for item in base.contact_points.websites}:
+        existing_urls = {item.url for item in base.contact_points.websites}
+        existing_domains = {
+            item.domain for item in base.contact_points.websites if item.domain is not None
+        }
+        if website.url not in existing_urls and not _is_weaker_suffix_domain(
+            website.domain,
+            existing_domains,
+        ):
             base.contact_points.websites.append(website)
 
     for phone in extracted.contact_points.phone_numbers:
@@ -277,3 +288,13 @@ def _merge_strings(left: list[str], right: list[str]) -> list[str]:
         if item not in merged:
             merged.append(item)
     return merged
+
+
+def _is_reliable_tracking_evidence(evidence: EvidenceItem) -> bool:
+    return evidence.confidence is None or evidence.confidence >= _MIN_TRACKING_CONFIDENCE
+
+
+def _is_weaker_suffix_domain(domain: str | None, existing_domains: set[str]) -> bool:
+    if not domain:
+        return False
+    return any(existing != domain and existing.endswith(domain) for existing in existing_domains)

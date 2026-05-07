@@ -271,7 +271,7 @@ Important nested fields:
 - `advertiser`: `advertiser_name`, `brand_name`, `parent_company`, `service_area`, `locations`, `evidence`
 - `landing_page`: `url`, `domain`, `path`, `utm_params`, `final_url`, `evidence`
 - `offer_terms`: `promo_codes`, `expiry`, `financing`, `trial_terms`, `guarantees`, `scarcity_signals`, `urgency_signals`
-- `creative_attributes`: `format`, `aspect_ratio`, `duration_ms`, `voiceover`, `music`, `testimonial`, `before_after`, `demo`, `ugc_style`, `end_card`, `disclaimer_density`
+- `creative_attributes`: `format`, `aspect_ratio` (`1:1|9:16|16:9|4:5|4:3`), `duration_ms`, `voiceover`, `music`, `testimonial`, `before_after`, `demo`, `ugc_style`, `end_card`, `disclaimer_density`
 - `campaign_signals`: `slogan`, `recurring_offer`, `product_model`, `sku`, `creative_variant`, `campaign_theme`, `evidence`
 
 Display all evidence-backed fields with timestamp/frame jump affordances when frame data is available.

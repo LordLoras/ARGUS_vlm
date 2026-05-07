@@ -6,7 +6,7 @@ from pydantic import Field
 
 from ad_classifier.models.common import EvidenceItem, StrictModel
 
-AspectRatio = Literal["1:1", "9:16", "16:9", "4:5"]
+AspectRatio = Literal["1:1", "9:16", "16:9", "4:5", "4:3"]
 PhoneNumberType = Literal["phone", "sms", "vanity", "fax", "other"]
 SocialPlatform = Literal[
     "facebook",
