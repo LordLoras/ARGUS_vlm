@@ -67,6 +67,22 @@ def test_count_ads_q_filter(readonly_conn, agent_config):
     assert result.data["filters"] == {"q": "Wrangler"}
 
 
+def test_count_ads_expands_automotive_topic(readonly_conn, agent_config):
+    result = CountAdsTool().call({"q": "cars"}, _ctx(readonly_conn, agent_config))
+
+    assert result.ok
+    assert result.data["count"] == 2
+    assert "automotive" in result.data["expanded_terms"]["q"]
+
+
+def test_count_ads_expands_restaurant_topic(readonly_conn, agent_config):
+    result = CountAdsTool().call({"q": "restaurants"}, _ctx(readonly_conn, agent_config))
+
+    assert result.ok
+    assert result.data["count"] == 1
+    assert "food_beverage" in result.data["expanded_terms"]["q"]
+
+
 def test_count_ads_expands_hvac_topic(writable_conn, agent_config):
     _insert_hvac_ad(writable_conn)
 
@@ -93,6 +109,26 @@ def test_list_ads_expands_services_topic(writable_conn, agent_config):
 
     assert result.ok
     assert [item["ad_id"] for item in result.data] == ["ad_hvac_a"]
+
+
+def test_list_ads_expands_repair_topic(writable_conn, agent_config):
+    _insert_hvac_ad(writable_conn)
+
+    result = ListAdsTool().call({"q": "repairs"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert [item["ad_id"] for item in result.data] == ["ad_hvac_a"]
+
+
+def test_count_ads_expands_installation_category_mistake(writable_conn, agent_config):
+    _insert_hvac_ad(writable_conn)
+
+    result = CountAdsTool().call(
+        {"category": "installation"}, _ctx(writable_conn, agent_config)
+    )
+
+    assert result.ok
+    assert result.data["count"] == 1
 
 
 def test_get_ad_returns_classification_and_marketing(readonly_conn, agent_config):
