@@ -11,6 +11,7 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
   const sensitive = sensitiveCategories.has(category);
   const confidence = cls?.confidence ?? null;
   const risks = cls?.risk_labels ?? [];
+  const prices = ent?.prices ?? [];
   const offers = ent?.offers ?? [];
   const ctas = ent?.ctas ?? [];
   const products = detail.ad.products_text
@@ -62,9 +63,27 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
         )}
       </Card>
 
-      <Card title="Offers & CTAs" count={offers.length + ctas.length}>
-        {offers.length === 0 && ctas.length === 0 ? (
-          <div className="obs-empty">No offers or CTAs extracted.</div>
+      <Card title="Prices, offers & CTAs" count={prices.length + offers.length + ctas.length}>
+        {prices.length === 0 && offers.length === 0 && ctas.length === 0 ? (
+          <div className="obs-empty">No prices, offers, or CTAs extracted.</div>
+        ) : null}
+        {prices.length > 0 ? (
+          <div style={{ marginBottom: 10 }}>
+            <div className="section-title">Prices</div>
+            {prices.map((price, idx) => {
+              const evidence = price.evidence?.[0];
+              return (
+                <div key={`price-${idx}`} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                  {evidence?.time_ms != null ? (
+                    <span className="ts-link">{formatTimestamp(evidence.time_ms)}</span>
+                  ) : null}
+                  <span className="badge badge-violet">price</span>
+                  <span style={{ flex: 1 }}>{formatPrice(price)}</span>
+                  {evidence?.text ? <span className="mono" style={{ color: "var(--fg-mute)" }}>{evidence.text}</span> : null}
+                </div>
+              );
+            })}
+          </div>
         ) : null}
         {offers.length > 0 ? (
           <div style={{ marginBottom: 10 }}>
@@ -113,6 +132,20 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
       </Card>
     </>
   );
+}
+
+function formatPrice(price: {
+  text?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+}) {
+  if (price.amount != null) {
+    const amount = Number.isInteger(price.amount)
+      ? price.amount.toFixed(0)
+      : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    return `${price.currency ?? "$"}${amount}`;
+  }
+  return price.text || "—";
 }
 
 function Card({

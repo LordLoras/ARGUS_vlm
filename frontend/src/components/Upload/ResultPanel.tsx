@@ -31,6 +31,9 @@ export function ResultPanel({
     ? detail.ad.products_text.split(/,\s*/).filter(Boolean)
     : ent?.products ?? [];
   const disclaimers = ent?.disclaimers ?? [];
+  const prices = ent?.prices ?? [];
+  const offers = ent?.offers ?? [];
+  const ctas = ent?.ctas ?? [];
 
   return (
     <div className="upload-card" style={{ background: "transparent", border: 0, padding: 0 }}>
@@ -76,14 +79,26 @@ export function ResultPanel({
         </dl>
       </Block>
 
-      <Block title="Offers & CTAs" count={(ent?.offers?.length ?? 0) + (ent?.ctas?.length ?? 0)}>
-        {(ent?.offers ?? []).map((offer, idx) => (
+      <Block title="Prices, offers & CTAs" count={prices.length + offers.length + ctas.length}>
+        {prices.map((price, idx) => {
+          const evidence = price.evidence?.[0];
+          return (
+            <div key={`price-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+              {evidence?.time_ms != null ? (
+                <span className="ts-link">{formatTimestamp(evidence.time_ms)}</span>
+              ) : null}
+              <span className="badge badge-violet">price</span>
+              <span style={{ flex: 1 }}>{formatPrice(price)}</span>
+            </div>
+          );
+        })}
+        {offers.map((offer, idx) => (
           <div key={`offer-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
             <span className="badge badge-violet">{offer.type ?? "offer"}</span>
             <span style={{ flex: 1 }}>{offer.text || offer.value || "—"}</span>
           </div>
         ))}
-        {(ent?.ctas ?? []).map((cta, idx) => (
+        {ctas.map((cta, idx) => (
           <div key={`cta-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
             {cta.time_ms != null || cta.evidence?.[0]?.time_ms != null ? (
               <span className="ts-link">{formatTimestamp(cta.time_ms ?? cta.evidence?.[0]?.time_ms)}</span>
@@ -91,8 +106,8 @@ export function ResultPanel({
             <span style={{ flex: 1 }}>{cta.text || "—"}</span>
           </div>
         ))}
-        {(ent?.offers ?? []).length === 0 && (ent?.ctas ?? []).length === 0 ? (
-          <div className="obs-empty">No offers or CTAs detected.</div>
+        {prices.length === 0 && offers.length === 0 && ctas.length === 0 ? (
+          <div className="obs-empty">No prices, offers, or CTAs detected.</div>
         ) : null}
       </Block>
 
@@ -192,6 +207,20 @@ export function ResultPanel({
       </div>
     </div>
   );
+}
+
+function formatPrice(price: {
+  text?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+}) {
+  if (price.amount != null) {
+    const amount = Number.isInteger(price.amount)
+      ? price.amount.toFixed(0)
+      : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    return `${price.currency ?? "$"}${amount}`;
+  }
+  return price.text || "—";
 }
 
 function Block({
