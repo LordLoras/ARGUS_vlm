@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { filePathToDataUrl, formatTimestamp } from "../../lib/format";
+import { formatPrice, priceContext } from "../../lib/marketing-display";
 import { sensitiveCategories } from "../../lib/taxonomy";
 import type { AdDetail, FrameRecord, RelatedAds } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
@@ -25,7 +26,8 @@ export function ResultPanel({
   const confidence = cls?.confidence ?? null;
   const risks = cls?.risk_labels ?? [];
   const ent = detail.marketing_entities;
-  const evidence = (cls?.evidence ?? []).slice(0, 3);
+  const allEvidence = cls?.evidence ?? [];
+  const evidence = allEvidence.slice(0, 3);
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
   const products = detail.ad.products_text
     ? detail.ad.products_text.split(/,\s*/).filter(Boolean)
@@ -82,13 +84,17 @@ export function ResultPanel({
       <Block title="Prices, offers & CTAs" count={prices.length + offers.length + ctas.length}>
         {prices.map((price, idx) => {
           const evidence = price.evidence?.[0];
+          const context = priceContext(price, allEvidence);
           return (
             <div key={`price-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
               {evidence?.time_ms != null ? (
                 <span className="ts-link">{formatTimestamp(evidence.time_ms)}</span>
               ) : null}
               <span className="badge badge-violet">price</span>
-              <span style={{ flex: 1 }}>{formatPrice(price)}</span>
+              <span style={{ flex: 1 }}>
+                <span>{formatPrice(price)}</span>
+                {context ? <span className="price-context">{context}</span> : null}
+              </span>
             </div>
           );
         })}
@@ -207,20 +213,6 @@ export function ResultPanel({
       </div>
     </div>
   );
-}
-
-function formatPrice(price: {
-  text?: string | null;
-  amount?: number | null;
-  currency?: string | null;
-}) {
-  if (price.amount != null) {
-    const amount = Number.isInteger(price.amount)
-      ? price.amount.toFixed(0)
-      : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    return `${price.currency ?? "$"}${amount}`;
-  }
-  return price.text || "—";
 }
 
 function Block({

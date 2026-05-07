@@ -1,12 +1,15 @@
-import { filePathToDataUrl, formatTimestamp } from "../../lib/format";
+import { filePathToDataUrl } from "../../lib/format";
 import type { ClassificationRecord, FrameRecord } from "../../lib/types";
+import { TimestampChip } from "../shared/TimestampChip";
 
 export function EvidenceTab({
   classification,
-  frames
+  frames,
+  onSeek
 }: {
   classification?: ClassificationRecord | null;
   frames: FrameRecord[];
+  onSeek?: (timeMs: number) => void;
 }) {
   const items = classification?.evidence ?? [];
   if (items.length === 0) {
@@ -27,7 +30,7 @@ export function EvidenceTab({
               <div className="evidence-thumb">
                 {src ? <img className="thumb-img" src={src} alt="" loading="lazy" /> : null}
               </div>
-              <span className="ts-link">{formatTimestamp(item.time_ms)}</span>
+              <TimestampChip timeMs={item.time_ms} onSeek={onSeek} />
               <span className="badge badge-mono">{item.source ?? "—"}</span>
               <div className="evidence-text">
                 <span>{item.text || "—"}</span>

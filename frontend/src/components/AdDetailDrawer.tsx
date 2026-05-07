@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CloseIcon, CopyIcon, EditIcon, PlayIcon, PlusIcon, TrashIcon } from "../lib/icons";
 import { filePathToDataUrl } from "../lib/format";
@@ -29,6 +29,7 @@ export function AdDetailDrawer({
   saving?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Overview");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
@@ -42,6 +43,17 @@ export function AdDetailDrawer({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  const seekVideo = (timeMs: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const seekSeconds = Math.max(0, timeMs / 1000);
+    video.currentTime = seekSeconds;
+    video.dataset.seekMs = String(timeMs);
+    void video.play().catch(() => {
+      // Browser autoplay rules can still block playback; the seek itself is the important action.
+    });
+  };
 
   return (
     <>
@@ -88,6 +100,7 @@ export function AdDetailDrawer({
           <div className="video-stage" style={{ aspectRatio: videoAspect }}>
             {videoSrc ? (
               <video
+                ref={videoRef}
                 src={videoSrc}
                 controls
                 playsInline
@@ -130,9 +143,9 @@ export function AdDetailDrawer({
           </div>
 
           <div className="tab-pane">
-            {tab === "Overview" ? <OverviewTab detail={detail} /> : null}
+            {tab === "Overview" ? <OverviewTab detail={detail} onSeek={seekVideo} /> : null}
             {tab === "Evidence" ? (
-              <EvidenceTab classification={detail.classification} frames={frames} />
+              <EvidenceTab classification={detail.classification} frames={frames} onSeek={seekVideo} />
             ) : null}
             {tab === "Related" ? <RelatedTab related={related} /> : null}
             {tab === "Edit" ? <EditTab detail={detail} onSave={onSave} saving={saving} /> : null}

@@ -1,10 +1,17 @@
-import { formatTimestamp } from "../../lib/format";
+import { formatPrice, priceContext } from "../../lib/marketing-display";
 import { sensitiveCategories } from "../../lib/taxonomy";
 import type { AdDetail } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
 import { SensitivePill } from "../shared/SensitivePill";
+import { TimestampChip } from "../shared/TimestampChip";
 
-export function OverviewTab({ detail }: { detail: AdDetail }) {
+export function OverviewTab({
+  detail,
+  onSeek
+}: {
+  detail: AdDetail;
+  onSeek?: (timeMs: number) => void;
+}) {
   const cls = detail.classification;
   const ent = detail.marketing_entities;
   const category = detail.ad.primary_category ?? cls?.primary_category ?? "uncategorized";
@@ -72,14 +79,15 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
             <div className="section-title">Prices</div>
             {prices.map((price, idx) => {
               const evidence = price.evidence?.[0];
+              const context = priceContext(price, cls?.evidence ?? []);
               return (
                 <div key={`price-${idx}`} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                  {evidence?.time_ms != null ? (
-                    <span className="ts-link">{formatTimestamp(evidence.time_ms)}</span>
-                  ) : null}
+                  <TimestampChip timeMs={evidence?.time_ms} onSeek={onSeek} />
                   <span className="badge badge-violet">price</span>
-                  <span style={{ flex: 1 }}>{formatPrice(price)}</span>
-                  {evidence?.text ? <span className="mono" style={{ color: "var(--fg-mute)" }}>{evidence.text}</span> : null}
+                  <span style={{ flex: 1 }}>
+                    <span>{formatPrice(price)}</span>
+                    {context ? <span className="price-context">{context}</span> : null}
+                  </span>
                 </div>
               );
             })}
@@ -102,9 +110,7 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
             <div className="section-title">CTAs</div>
             {ctas.map((cta, idx) => (
               <div key={`cta-${idx}`} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                {cta.time_ms != null || cta.evidence?.[0]?.time_ms != null ? (
-                  <span className="ts-link">{formatTimestamp(cta.time_ms ?? cta.evidence?.[0]?.time_ms)}</span>
-                ) : null}
+                <TimestampChip timeMs={cta.time_ms ?? cta.evidence?.[0]?.time_ms} onSeek={onSeek} />
                 <span style={{ flex: 1 }}>{cta.text || "—"}</span>
                 {cta.destination_hint ? <span className="mono" style={{ color: "var(--fg-mute)" }}>{cta.destination_hint}</span> : null}
               </div>
@@ -122,7 +128,7 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
             const timeMs = disclaimer.time_ms ?? evidence?.time_ms;
             return (
               <div key={`disclaimer-${idx}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                {timeMs != null ? <span className="ts-link">{formatTimestamp(timeMs)}</span> : null}
+                <TimestampChip timeMs={timeMs} onSeek={onSeek} />
                 <span style={{ flex: 1 }}>{disclaimer.text || "—"}</span>
                 {disclaimer.is_small_print ? <span className="badge badge-mono">small print</span> : null}
               </div>
@@ -132,20 +138,6 @@ export function OverviewTab({ detail }: { detail: AdDetail }) {
       </Card>
     </>
   );
-}
-
-function formatPrice(price: {
-  text?: string | null;
-  amount?: number | null;
-  currency?: string | null;
-}) {
-  if (price.amount != null) {
-    const amount = Number.isInteger(price.amount)
-      ? price.amount.toFixed(0)
-      : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    return `${price.currency ?? "$"}${amount}`;
-  }
-  return price.text || "—";
 }
 
 function Card({

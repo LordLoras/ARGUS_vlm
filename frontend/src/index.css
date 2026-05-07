@@ -849,6 +849,22 @@ input, textarea, select { font: inherit; color: inherit; }
   border-radius: 3px;
   border: 1px solid var(--accent-border);
 }
+button.ts-link {
+  appearance: none;
+  cursor: pointer;
+  line-height: 1.35;
+}
+button.ts-link:hover {
+  color: var(--fg);
+  border-color: var(--accent-2);
+}
+.price-context {
+  display: block;
+  color: var(--fg-quiet);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-top: 2px;
+}
 
 .evidence-row {
   display: grid;
