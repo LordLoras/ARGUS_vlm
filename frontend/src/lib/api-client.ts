@@ -121,7 +121,7 @@ export const api = {
     }),
 
   listAgentSessions: () =>
-    apiFetch<{ items: AgentSession[] }>("/api/agent/sessions"),
+    apiFetch<{ items: AgentSession[]; limit: number; offset: number }>("/api/agent/sessions"),
 
   createAgentSession: () =>
     apiFetch<{ session_id: string }>("/api/agent/sessions", { method: "POST" }),
@@ -132,8 +132,10 @@ export const api = {
   deleteAgentSession: (sessionId: string) =>
     apiFetch<{ deleted: string }>(`/api/agent/sessions/${sessionId}`, { method: "DELETE" }),
 
-  getAgentUsage: () =>
-    apiFetch<{ session_tokens?: number; today_tokens?: number }>("/api/agent/usage")
+  listAgentTools: () =>
+    apiFetch<{ tools: Array<{ name: string; description: string; parameters: unknown }> }>(
+      "/api/agent/tools"
+    )
 };
 
 export function streamJobEvents(jobId: string, onEvent: (event: JobStreamEvent) => void) {
@@ -158,17 +160,35 @@ export function streamAgentQuery(
   onEvent: (event: AgentStreamEvent) => void
 ) {
   const controller = new AbortController();
-  void fetchEventSource(`${API_BASE_URL}/api/agent/sessions/${sessionId}/query`, {
-    method: "POST",
+  const url = `${API_BASE_URL}/api/agent/sessions/${sessionId}/events?q=${encodeURIComponent(message)}`;
+  void fetchEventSource(url, {
+    method: "GET",
     signal: controller.signal,
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ message }),
+    headers: { Accept: "text/event-stream" },
+    openWhenHidden: true,
     onmessage(event) {
-      if (!event.data) return;
-      onEvent(JSON.parse(event.data) as AgentStreamEvent);
+      if (!event.event || !event.data) return;
+      try {
+        const payload = JSON.parse(event.data) as Record<string, unknown>;
+        onEvent({ type: event.event as AgentStreamEvent["type"], payload } as AgentStreamEvent);
+      } catch (err) {
+        onEvent({
+          type: "error",
+          payload: {
+            session_id: sessionId,
+            message: err instanceof Error ? err.message : String(err)
+          }
+        });
+      }
     },
     onerror(error) {
-      onEvent({ type: "error", message: error instanceof Error ? error.message : String(error) });
+      onEvent({
+        type: "error",
+        payload: {
+          session_id: sessionId,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
       throw error;
     }
   });

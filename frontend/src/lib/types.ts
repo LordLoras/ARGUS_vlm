@@ -176,24 +176,57 @@ export type SearchHit = {
 
 export type AgentSession = {
   id: string;
-  title?: string | null;
-  token_count?: number | null;
+  user_label?: string | null;
+  context_json?: string | null;
   created_at?: string | null;
-  updated_at?: string | null;
 };
 
 export type AgentMessage = {
-  id?: string;
+  id?: number | null;
+  session_id?: string;
   role: "user" | "assistant" | "tool";
   content?: string | null;
   tool_name?: string | null;
-  payload?: unknown;
+  tool_args_json?: string | null;
+  tool_result_json?: string | null;
+  tokens_in?: number | null;
+  tokens_out?: number | null;
   created_at?: string | null;
 };
 
 export type AgentStreamEvent =
-  | { type: "tool_call"; name: string; args: unknown }
-  | { type: "tool_result"; name: string; rows?: number; truncated?: boolean; summary?: string; result?: unknown }
-  | { type: "token"; text: string }
-  | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "session"; payload: { session_id: string } }
+  | { type: "message"; payload: { role: "user" | "assistant"; content: string; session_id: string } }
+  | {
+      type: "tool_call";
+      payload: {
+        session_id: string;
+        id: string;
+        name: string;
+        arguments: Record<string, unknown>;
+      };
+    }
+  | {
+      type: "tool_result";
+      payload: {
+        session_id: string;
+        id: string;
+        name: string;
+        ok: boolean;
+        truncated: boolean;
+        row_count: number | null;
+        error: string | null;
+        data: unknown;
+      };
+    }
+  | {
+      type: "final";
+      payload: {
+        session_id: string;
+        text: string;
+        iterations: number;
+        error: string | null;
+      };
+    }
+  | { type: "error"; payload: { session_id: string; message: string } }
+  | { type: "done"; payload: { session_id: string } };

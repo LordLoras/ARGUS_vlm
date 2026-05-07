@@ -12,37 +12,33 @@ export function ContextRail({
   const known = [
     "list_ads",
     "count_ads",
+    "get_ad",
+    "list_campaigns",
     "get_campaign",
+    "aggregate",
     "hybrid_search",
     "vector_similarity",
     "compare_ads",
-    "aggregate",
     "sql_readonly"
   ];
   return (
     <aside className="chat-context">
       <section className="context-section">
-        <h4>Session usage</h4>
+        <h4>Session</h4>
         <div className="usage-grid">
-          <div className="usage-cell">
-            <div className="label">Input tokens</div>
-            <div className="val">{session?.token_count ?? 0}</div>
-            <div className="sub">since start</div>
-          </div>
-          <div className="usage-cell">
-            <div className="label">Output tokens</div>
-            <div className="val">—</div>
-            <div className="sub">phase 9</div>
-          </div>
           <div className="usage-cell">
             <div className="label">Tool calls</div>
             <div className="val">{toolsCalled ?? 0}</div>
-            <div className="sub">this session</div>
+            <div className="sub">this turn</div>
           </div>
           <div className="usage-cell">
-            <div className="label">Latency avg</div>
-            <div className="val">—</div>
-            <div className="sub">phase 9</div>
+            <div className="label">Started</div>
+            <div className="val" style={{ fontSize: 11 }}>
+              {session?.created_at
+                ? new Date(session.created_at).toLocaleTimeString()
+                : "—"}
+            </div>
+            <div className="sub">{session?.id ?? "no session"}</div>
           </div>
         </div>
       </section>
@@ -60,38 +56,11 @@ export function ContextRail({
       </section>
 
       <section className="context-section">
-        <h4>Active filters in scope</h4>
-        <div className="pill-row" style={{ gap: 6 }}>
-          <span className="obs-tag">all ads</span>
-          <span className="obs-tag">last 30d</span>
-        </div>
-      </section>
-
-      <section className="context-section">
-        <h4>Daily usage</h4>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-end",
-            gap: 1,
-            height: 36
-          }}
-        >
-          {Array.from({ length: 24 }).map((_, idx) => {
-            const v = (Math.sin(idx * 0.6) + 1.4) / 2.6;
-            return (
-              <div
-                key={idx}
-                style={{
-                  flex: 1,
-                  height: `${Math.max(2, v * 36)}px`,
-                  background:
-                    "linear-gradient(180deg, var(--accent-2), var(--accent-bg))",
-                  borderRadius: 1
-                }}
-              />
-            );
-          })}
+        <h4>Notes</h4>
+        <div style={{ color: "var(--fg-mute)", fontSize: 11.5, lineHeight: 1.55 }}>
+          The agent only reads the local SQLite database. It cannot mutate ads,
+          campaigns, or classifications. Every tool call and result is appended
+          to the session for audit.
         </div>
       </section>
     </aside>

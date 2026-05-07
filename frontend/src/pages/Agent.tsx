@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatInput } from "../components/Chat/ChatInput";
 import { ContextRail } from "../components/Chat/ContextRail";
@@ -13,12 +13,25 @@ import { api, streamAgentQuery } from "../lib/api-client";
 import { CopyIcon } from "../lib/icons";
 import type { AgentMessage, AgentSession, AgentStreamEvent } from "../lib/types";
 
+type RenderedMessage = { role: "user" | "assistant"; content: string };
+
+function sessionLabel(session: AgentSession | undefined | null): string {
+  if (!session) return "New conversation";
+  return session.user_label || `Chat ${session.id.replace(/^agent_/, "").slice(0, 6)}`;
+}
+
+function projectMessages(messages: AgentMessage[] | undefined): RenderedMessage[] {
+  if (!messages) return [];
+  return messages
+    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content ?? "" }));
+}
+
 export function Agent() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [localMessages, setLocalMessages] = useState<AgentMessage[]>([]);
+  const [localMessages, setLocalMessages] = useState<RenderedMessage[]>([]);
   const [tools, setTools] = useState<ToolCard[]>([]);
-  const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
   const health = useApiHealth();
@@ -34,11 +47,6 @@ export function Agent() {
     enabled: Boolean(activeId),
     retry: false
   });
-  const usage = useQuery({
-    queryKey: ["agent-usage"],
-    queryFn: api.getAgentUsage,
-    retry: false
-  });
 
   const newSession = useMutation({
     mutationFn: api.createAgentSession,
@@ -46,14 +54,30 @@ export function Agent() {
       setActiveId(result.session_id);
       setLocalMessages([]);
       setTools([]);
-      setDraft("");
       await queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
     }
   });
 
-  const messages: AgentMessage[] = activeId
-    ? session.data?.messages ?? localMessages
-    : localMessages;
+  // When the user switches sessions, drop optimistic state — server data wins.
+  useEffect(() => {
+    setLocalMessages([]);
+    setTools([]);
+  }, [activeId]);
+
+  // Cancel an in-flight stream on unmount.
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
+
+  const serverMessages = useMemo(
+    () => projectMessages(session.data?.messages),
+    [session.data?.messages]
+  );
+  const messages: RenderedMessage[] = streaming || localMessages.length
+    ? [...serverMessages, ...localMessages]
+    : serverMessages;
 
   const toolCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -63,65 +87,97 @@ export function Agent() {
     return counts;
   }, [tools]);
 
-  const submit = (message: string) => {
-    setLocalMessages((current) => [...current, { role: "user", content: message }]);
-    if (!activeId) {
-      setLocalMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content:
-            "Phase 9 (`/api/agent/*`) is not implemented yet. This UI is wired and ready: it will stream tool calls, render their JSON, and roll up usage as soon as the backend lands."
+  const handleStreamEvent = (event: AgentStreamEvent) => {
+    switch (event.type) {
+      case "session":
+        // session id already known to us
+        break;
+      case "message":
+        // The loop echoes user + assistant messages; we add user optimistically
+        // on submit and append assistant text on `final`. Skip both here.
+        break;
+      case "tool_call":
+        setTools((current) => [
+          ...current,
+          {
+            id: event.payload.id,
+            name: event.payload.name,
+            args: event.payload.arguments,
+            status: "running"
+          }
+        ]);
+        break;
+      case "tool_result":
+        setTools((current) =>
+          current.map((tool) =>
+            tool.id === event.payload.id
+              ? {
+                  ...tool,
+                  result: event.payload.data ?? null,
+                  summary:
+                    event.payload.error ??
+                    `${event.payload.row_count ?? 0} rows${
+                      event.payload.truncated ? " (truncated)" : ""
+                    }`,
+                  truncated: event.payload.truncated,
+                  status: event.payload.ok ? "done" : "failed"
+                }
+              : tool
+          )
+        );
+        break;
+      case "final":
+        if (event.payload.text) {
+          setLocalMessages((current) => [
+            ...current,
+            { role: "assistant", content: event.payload.text }
+          ]);
         }
-      ]);
-      return;
+        break;
+      case "error":
+        // `final` will follow with the same text, so the bubble is added there.
+        // Keep this branch for logging/future inline error styling.
+        break;
+      case "done":
+        setStreaming(false);
+        cleanupRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ["agent-session", activeId] });
+        void queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
+        // Server now has both user + assistant rows; drop optimistic copies so
+        // we don't double-render once the refetch completes.
+        setLocalMessages([]);
+        break;
     }
-    setStreaming(true);
-    setDraft("");
-    cleanupRef.current = streamAgentQuery(activeId, message, handleStreamEvent);
   };
 
-  function handleStreamEvent(event: AgentStreamEvent) {
-    if (event.type === "token") setDraft((current) => current + event.text);
-    if (event.type === "tool_call") {
-      setTools((current) => [
-        ...current,
-        {
-          id: `${event.name}-${current.length}`,
-          name: event.name,
-          args: event.args,
-          status: "running"
-        }
-      ]);
+  const submit = async (message: string) => {
+    if (!message.trim() || streaming) return;
+    setLocalMessages((current) => [...current, { role: "user", content: message }]);
+
+    let sid = activeId;
+    if (!sid) {
+      try {
+        const created = await api.createAgentSession();
+        sid = created.session_id;
+        setActiveId(sid);
+        await queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
+      } catch (err) {
+        const text = err instanceof Error ? err.message : String(err);
+        setLocalMessages((current) => [
+          ...current,
+          { role: "assistant", content: `Failed to start session: ${text}` }
+        ]);
+        return;
+      }
     }
-    if (event.type === "tool_result") {
-      setTools((current) =>
-        current.map((tool) =>
-          tool.name === event.name && tool.status === "running"
-            ? {
-                ...tool,
-                result: event.result ?? null,
-                summary: event.summary ?? `${event.rows ?? 0} rows`,
-                truncated: event.truncated,
-                status: "done"
-              }
-            : tool
-        )
-      );
-    }
-    if (event.type === "done") {
-      setStreaming(false);
-      setLocalMessages((current) => [...current, { role: "assistant", content: draft }]);
-      setDraft("");
-    }
-    if (event.type === "error") {
-      setStreaming(false);
-      setLocalMessages((current) => [...current, { role: "assistant", content: event.message }]);
-    }
-  }
+
+    setStreaming(true);
+    cleanupRef.current = streamAgentQuery(sid, message, handleStreamEvent);
+  };
 
   const stop = () => {
     cleanupRef.current?.();
+    cleanupRef.current = null;
     setStreaming(false);
   };
 
@@ -129,12 +185,12 @@ export function Agent() {
     ? session.data?.session
     : undefined;
 
-  const phase9Down = sessions.isError;
+  const apiOffline = sessions.isError;
 
   return (
     <>
       <Topbar
-        crumbs={["Intelligence", "Agent", activeSession?.title ?? "New chat"]}
+        crumbs={["Intelligence", "Agent", sessionLabel(activeSession) ?? "New chat"]}
         actions={
           <button className="btn btn-ghost btn-sm" disabled>
             <CopyIcon size={11} />
@@ -142,43 +198,25 @@ export function Agent() {
           </button>
         }
       />
-      <ApiOfflineBanner offline={health.isError} />
-      {phase9Down ? (
-        <div
-          className="row"
-          style={{
-            background: "var(--amber-bg)",
-            color: "var(--amber)",
-            borderBottom: "1px solid var(--border)",
-            padding: "8px 16px",
-            fontSize: 12
-          }}
-        >
-          Phase 9 agent endpoints not implemented yet — this UI is ready and will activate when `/api/agent/*` lands.
-        </div>
-      ) : null}
+      <ApiOfflineBanner offline={health.isError || apiOffline} />
 
       <div className="chat-layout">
         <SessionList
           sessions={sessions.data?.items ?? []}
           activeId={activeId}
-          totalToday={usage.data?.today_tokens ?? null}
           onNew={() => newSession.mutate()}
           onSelect={(sessionId) => {
             setActiveId(sessionId);
             setLocalMessages([]);
             setTools([]);
-            setDraft("");
           }}
         />
 
         <section className="chat-main">
           <div className="chat-header">
-            <span className="session-title">
-              {activeSession?.title ?? "New conversation"}
-            </span>
+            <span className="session-title">{sessionLabel(activeSession)}</span>
             <span className="session-id">
-              {activeSession?.id ?? "no session"} · gemma-3-12b · {tools.length} tool calls
+              {activeSession?.id ?? "no session"} · gemma · {tools.length} tool calls
             </span>
             {streaming ? (
               <span className="stream-state">
@@ -190,7 +228,6 @@ export function Agent() {
           <MessageList
             messages={messages}
             tools={tools}
-            draft={draft}
             streaming={streaming}
             onPrompt={submit}
           />
