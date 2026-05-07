@@ -12,6 +12,7 @@ from ad_classifier.api.app import create_app
 from ad_classifier.db.connection import open_database
 from ad_classifier.db.repositories import JobRepository
 from ad_classifier.models.jobs import JobRecord
+from ad_classifier.search.fts import fts_update
 
 
 @pytest.fixture()
@@ -170,3 +171,243 @@ def test_vector_search_route_loads_sqlite_vec(client: TestClient):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "visual vector not found"
+
+
+def test_search_keyword_returns_preview(client: TestClient, config_path: Path):
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_search_jeep",
+                "/tmp/jeep.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Grand Cherokee",
+                "automotive",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO frames (ad_id, frame_index, time_ms, path, kept)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("ad_search_jeep", 0, 0, "/tmp/frame.jpg", True),
+        )
+        fts_update(
+            conn,
+            "ad_search_jeep",
+            brand="Jeep",
+            products="Grand Cherokee",
+            primary_category="automotive",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/api/search", params={"mode": "keyword", "q": "Jeep"})
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["ad_id"] == "ad_search_jeep"
+    assert item["ad"]["brand_name"] == "Jeep"
+    assert item["ad"]["products_text"] == "Grand Cherokee"
+    assert item["thumbnail_path"] == "/tmp/frame.jpg"
+    assert item["source"] == "keyword"
+
+
+def test_hybrid_keyword_query_excludes_vector_only_noise(
+    client: TestClient, config_path: Path
+):
+    conn = _db(config_path)
+    try:
+        rows = [
+            ("ad_search_jeep", "Jeep", "Grand Cherokee", "automotive"),
+            ("ad_search_hvac", "Prillaman", "Heating systems", "other"),
+        ]
+        for ad_id, brand, products, category in rows:
+            conn.execute(
+                """
+                INSERT INTO ads (
+                    id, source_path, ingested_at, status, brand_name, products_text,
+                    primary_category
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ad_id,
+                    f"/tmp/{ad_id}.mp4",
+                    datetime.now(UTC).isoformat(),
+                    "completed",
+                    brand,
+                    products,
+                    category,
+                ),
+            )
+            fts_update(
+                conn,
+                ad_id,
+                brand=brand,
+                products=products,
+                primary_category=category,
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/api/search", params={"mode": "hybrid", "q": "Jeep", "k": 20})
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["strategy"] == "keyword_first"
+    assert [item["ad_id"] for item in payload["items"]] == ["ad_search_jeep"]
+
+
+def test_hybrid_keyword_query_expands_business_aliases(
+    client: TestClient, config_path: Path
+):
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_search_hvac",
+                "/tmp/hvac.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Prillaman Mechanical, Heating & AC",
+                "Heating systems, Cooling systems, Air Conditioning Check",
+                "other",
+            ),
+        )
+        fts_update(
+            conn,
+            "ad_search_hvac",
+            brand="Prillaman Mechanical, Heating & AC",
+            products="Heating systems, Cooling systems, Air Conditioning Check",
+            primary_category="other",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/api/search", params={"mode": "hybrid", "q": "HVAC", "k": 20})
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["strategy"] == "keyword_first"
+    assert [item["ad_id"] for item in payload["items"]] == ["ad_search_hvac"]
+
+
+def test_hybrid_restaurant_query_does_not_match_retail_delivery(
+    client: TestClient, config_path: Path
+):
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_search_jeep",
+                "/tmp/jeep.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Grand Cherokee",
+                "automotive",
+            ),
+        )
+        fts_update(
+            conn,
+            "ad_search_jeep",
+            brand="Jeep",
+            products="Grand Cherokee",
+            primary_category="automotive",
+            marketing_entities_text="subject to taking retail delivery by April 30",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get(
+        "/api/search", params={"mode": "hybrid", "q": "restaurants", "k": 20}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == []
+
+
+def test_hybrid_service_alias_ignores_financial_services_disclaimer(
+    client: TestClient, config_path: Path
+):
+    conn = _db(config_path)
+    try:
+        rows = [
+            (
+                "ad_search_jeep",
+                "Jeep",
+                "Grand Cherokee",
+                "automotive",
+                "Stellantis Financial Services retail delivery disclosure",
+            ),
+            (
+                "ad_search_hvac",
+                "Prillaman Mechanical, Heating & AC",
+                "Heating systems, Cooling systems, Air Conditioning Check",
+                "other",
+                "",
+            ),
+        ]
+        for ad_id, brand, products, category, marketing_text in rows:
+            conn.execute(
+                """
+                INSERT INTO ads (
+                    id, source_path, ingested_at, status, brand_name, products_text,
+                    primary_category
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ad_id,
+                    f"/tmp/{ad_id}.mp4",
+                    datetime.now(UTC).isoformat(),
+                    "completed",
+                    brand,
+                    products,
+                    category,
+                ),
+            )
+            fts_update(
+                conn,
+                ad_id,
+                brand=brand,
+                products=products,
+                primary_category=category,
+                marketing_entities_text=marketing_text,
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/api/search", params={"mode": "hybrid", "q": "repairs"})
+
+    assert response.status_code == 200, response.text
+    assert [item["ad_id"] for item in response.json()["items"]] == ["ad_search_hvac"]

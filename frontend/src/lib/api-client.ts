@@ -108,7 +108,9 @@ export const api = {
     }),
 
   search: (query: { q?: string; mode?: string; ad_id?: string; k?: number }) =>
-    apiFetch<{ mode: string; items: SearchHit[] }>(`/api/search${params(query)}`),
+    apiFetch<{ mode: string; strategy?: string; items: SearchHit[] }>(
+      `/api/search${params(query)}`
+    ),
 
   listCampaigns: () => apiFetch<{ items: Campaign[]; limit: number; offset: number }>("/api/campaigns"),
 

@@ -71,7 +71,6 @@ _FOOD_TERMS = (
     "restaurant",
     "restaurants",
     "pizza",
-    "delivery",
     "coffee",
     "drink",
     "drinks",

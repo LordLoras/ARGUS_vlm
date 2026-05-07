@@ -171,7 +171,14 @@ export type SearchHit = {
   ad_id: string;
   score?: number | null;
   distance?: number | null;
+  rrf_score?: number | null;
+  fts_rank?: number | null;
+  vec_rank?: number | null;
+  vec_distance?: number | null;
   source?: string | null;
+  ad?: AdRecord | null;
+  thumbnail_path?: string | null;
+  thumbnail_time_ms?: number | null;
 };
 
 export type AgentSession = {

@@ -32,6 +32,7 @@ export function Library() {
   const queryClient = useQueryClient();
   const health = useApiHealth();
   const queryAdId = searchParams.get("ad");
+  const initialDrawerTab = searchParams.get("tab") === "edit" ? "Edit" : "Overview";
 
   useEffect(() => {
     if (queryAdId && queryAdId !== selectedAdId) setSelectedAdIdState(queryAdId);
@@ -41,7 +42,8 @@ export function Library() {
     setSelectedAdIdState(adId);
     const next = new URLSearchParams(searchParams);
     if (adId) next.set("ad", adId);
-    else next.delete("ad");
+    next.delete("tab");
+    if (!adId) next.delete("ad");
     setSearchParams(next, { replace: true });
   };
 
@@ -272,6 +274,7 @@ export function Library() {
               deleteMutation.mutate(selectedDetail.ad.id);
             }
           }}
+          initialTab={initialDrawerTab}
         />
       ) : null}
     </>

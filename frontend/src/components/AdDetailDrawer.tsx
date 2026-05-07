@@ -18,7 +18,8 @@ export function AdDetailDrawer({
   onClose,
   onSave,
   onDelete,
-  saving
+  saving,
+  initialTab = "Overview"
 }: {
   detail: AdDetail;
   frames: FrameRecord[];
@@ -27,8 +28,9 @@ export function AdDetailDrawer({
   onSave: (patch: EditPatch) => void;
   onDelete: () => void;
   saving?: boolean;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("Overview");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
@@ -43,6 +45,10 @@ export function AdDetailDrawer({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [detail.ad.id, initialTab]);
 
   const seekVideo = (timeMs: number) => {
     const video = videoRef.current;

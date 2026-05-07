@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import sqlite3
 
+from ad_classifier.search.query_expansion import (
+    build_loose_like_clause,
+    expand_query_terms,
+    has_alias_expansion,
+)
+
 
 def fts_search(
     conn: sqlite3.Connection,
@@ -26,6 +32,57 @@ def fts_search(
     ).fetchall()
     # FTS5 rank is negative — negate so higher value means better match
     return [(row[0], abs(float(row[1]))) for row in rows]
+
+
+def fts_search_expanded(
+    conn: sqlite3.Connection,
+    query: str,
+    *,
+    limit: int = 20,
+) -> list[tuple[str, float]]:
+    """Search FTS with business-topic aliases while preserving first-hit order."""
+    if not query.strip():
+        return []
+
+    if has_alias_expansion(query):
+        clause, params = build_loose_like_clause(query)
+        if not clause:
+            return []
+        rows = conn.execute(
+            f"""
+            SELECT id
+            FROM ads
+            WHERE {clause}
+            ORDER BY ingested_at DESC, id
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+        return [(row[0], 1.0) for row in rows]
+
+    terms = expand_query_terms(query)
+    seen: dict[str, tuple[float, int]] = {}
+    order = 0
+    for term in terms:
+        try:
+            rows = fts_search(conn, _quote_fts5(term), limit=limit)
+        except Exception:
+            continue
+        for ad_id, score in rows:
+            if ad_id not in seen:
+                seen[ad_id] = (score, order)
+                order += 1
+            else:
+                best_score, first_order = seen[ad_id]
+                seen[ad_id] = (max(best_score, score), first_order)
+
+    ranked = sorted(seen.items(), key=lambda item: item[1][1])
+    return [(ad_id, score) for ad_id, (score, _order) in ranked[:limit]]
+
+
+def _quote_fts5(term: str) -> str:
+    escaped = term.replace('"', '""')
+    return f'"{escaped}"'
 
 
 def fts_update(

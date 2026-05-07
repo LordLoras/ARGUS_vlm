@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import Field
 
 from ad_classifier.models.common import StrictModel
-from ad_classifier.search.fts import fts_search
+from ad_classifier.search.fts import fts_search_expanded
 from ad_classifier.search.rrf import rrf_fuse
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
@@ -44,7 +44,7 @@ def hybrid_search(
 
     if query_text:
         try:
-            fts_results = fts_search(conn, query_text, limit=k_fts)
+            fts_results = fts_search_expanded(conn, query_text, limit=k_fts)
         except Exception:
             fts_results = []
 
