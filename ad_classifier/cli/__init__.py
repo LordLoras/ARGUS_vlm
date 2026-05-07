@@ -2,6 +2,7 @@ from typing import Annotated
 
 import typer
 
+from ad_classifier.cli.agent import agent_app
 from ad_classifier.cli.bench_vectors import bench_vectors
 from ad_classifier.cli.campaigns import campaigns_app
 from ad_classifier.cli.dedup import dedup_check
@@ -60,3 +61,4 @@ app.command("dedup-check")(dedup_check)
 app.command("ocr")(ocr_cmd)
 app.command("bench-vectors")(bench_vectors)
 app.add_typer(campaigns_app, name="campaigns")
+app.add_typer(agent_app, name="agent")

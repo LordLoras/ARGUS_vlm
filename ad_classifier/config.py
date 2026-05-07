@@ -179,6 +179,29 @@ class VLMConfig(BaseModel):
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
 
+class AgentEndpointConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    endpoint: str = "http://127.0.0.1:1234/v1"
+    model: str = "google/gemma-4-26b-a4b"
+    api_key_env: str | None = None
+    timeout_s: float = Field(default=120.0, ge=0.0)
+    max_retries: int = Field(default=2, ge=0)
+    retry_delay_s: float = Field(default=2.0, ge=0.0)
+
+
+class AgentConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    endpoint: AgentEndpointConfig = Field(default_factory=AgentEndpointConfig)
+    max_iterations: int = Field(default=8, ge=1, le=32)
+    list_max_rows: int = Field(default=50, ge=1, le=500)
+    sql_readonly_max_rows: int = Field(default=50, ge=1, le=500)
+    sql_statement_timeout_s: float = Field(default=5.0, ge=0.1)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1024, ge=64)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -196,6 +219,7 @@ class AppConfig(BaseModel):
     campaigns: CampaignsConfig = Field(default_factory=CampaignsConfig)
     api: APIConfig = Field(default_factory=APIConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

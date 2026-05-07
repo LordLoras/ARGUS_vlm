@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ad_classifier.api.routes.ads import router as ads_router
+from ad_classifier.api.routes.agent import router as agent_router
 from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.search import router as search_router
@@ -20,6 +21,9 @@ def create_app(
     config_path: Path | None = None,
     db_path: Path | None = None,
     upload_probe: Callable[[Path], object] | None = None,
+    agent_client_factory: Callable | None = None,
+    agent_text_embedder_factory: Callable | None = None,
+    agent_vector_store_factory: Callable | None = None,
 ) -> FastAPI:
     config, config_file = load_config(config_path)
     resolved_db = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
@@ -33,6 +37,9 @@ def create_app(
     app.state.config_file = config_file
     app.state.db_path = resolved_db
     app.state.upload_probe = upload_probe
+    app.state.agent_client_factory = agent_client_factory
+    app.state.agent_text_embedder_factory = agent_text_embedder_factory
+    app.state.agent_vector_store_factory = agent_vector_store_factory
 
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
@@ -55,6 +62,7 @@ def create_app(
     app.include_router(jobs_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
+    app.include_router(agent_router, prefix="/api")
 
     data_root = resolve_config_path(config.paths.data_root, config_file)
     data_root.mkdir(parents=True, exist_ok=True)

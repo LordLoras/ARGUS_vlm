@@ -103,3 +103,18 @@ api:
 worker:
   poll_interval_ms: 1000
   concurrency: 1
+
+agent:
+  endpoint:
+    endpoint: "http://127.0.0.1:1234/v1"
+    model: "google/gemma-4-26b-a4b"
+    api_key_env: null
+    timeout_s: 120
+    max_retries: 2
+    retry_delay_s: 2
+  max_iterations: 8
+  list_max_rows: 50
+  sql_readonly_max_rows: 50
+  sql_statement_timeout_s: 5
+  temperature: 0.1
+  max_tokens: 1024

@@ -240,19 +240,27 @@ the existing local stages end to end and supports injected mocks for tests.
 
 ## Phase 9 — NL Agent
 
+**Phase 9 status: complete.** Tool catalog (10 tools), read-only DB enforcement,
+live-schema renderer, full agent loop with conversation persistence, LM Studio
+HTTP client with `tools` param + retry, malformed-call fallback, FastAPI agent
+routes (sessions / query / SSE events / tools / schema), and the four CLI
+subcommands are all implemented. 46 new tests pass (251 total). LM Studio
+smoke test still pending — runs against a real Gemma instance.
+
 | | Item | Spec |
 |---|---|---|
-| [ ] | Tool catalog implementations (each tool against repo + mocks) | Prompt.md Z.1 |
-| [ ] | `compare_ads` tool: vector cosine + structured diff + verdict | Prompt.md Z.1, J |
-| [ ] | Read-only DB connection (`query_only=ON`) | Prompt.md Z.3 |
-| [ ] | Schema summary auto-rendered from live DB at startup | Prompt.md Z.4 |
-| [ ] | Agent loop: user → tool_call → tool_result → final | Prompt.md Z.2 |
-| [ ] | LM Studio integration with `tools` parameter | Prompt.md Z.8 |
-| [ ] | Malformed tool-call retry + fallback | Prompt.md Z.8 |
-| [ ] | Conversation persistence in `agent_sessions` / `agent_messages` | Prompt.md Z.2 |
-| [ ] | Agent endpoints + SSE event types | Prompt.md Z.5 |
-| [ ] | `agent ask` / `agent repl` / `agent show-tools` / `agent show-schema` CLI | Prompt.md Z.6 |
-| [ ] | Tests: each tool isolated, full loop with mock LM Studio, read-only enforcement, truncation reporting, SSE event ordering | Prompt.md Z.7 |
+| [x] | Tool catalog implementations (list_ads, count_ads, get_ad, get_campaign, list_campaigns, aggregate, hybrid_search, vector_similarity, sql_readonly, compare_ads) | Prompt.md Z.1 |
+| [x] | `compare_ads` tool: vector cosine + structured diff + verdict | Prompt.md Z.1, J |
+| [x] | Read-only DB connection (`query_only=ON`) | Prompt.md Z.3 |
+| [x] | Schema summary auto-rendered from live DB at startup | Prompt.md Z.4 |
+| [x] | Agent loop: user → tool_call → tool_result → final | Prompt.md Z.2 |
+| [x] | LM Studio integration with `tools` parameter | Prompt.md Z.8 |
+| [x] | Malformed tool-call retry + fallback | Prompt.md Z.8 |
+| [x] | Conversation persistence in `agent_sessions` / `agent_messages` | Prompt.md Z.2 |
+| [x] | Agent endpoints + SSE event types | Prompt.md Z.5 |
+| [x] | `agent ask` / `agent repl` / `agent show-tools` / `agent show-schema` CLI | Prompt.md Z.6 |
+| [x] | Tests: each tool isolated, full loop with mock LM Studio, read-only enforcement, truncation reporting, SSE event ordering | Prompt.md Z.7 |
+| [ ] | LM Studio smoke test (google/gemma-4-26b-a4b agent loop) | Prompt.md Z.8 |
 
 ---
 
