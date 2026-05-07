@@ -17,12 +17,11 @@ if not exist "config.yaml" (
 set "PORT_API=8000"
 set "PORT_WEB=5173"
 
-REM Kill anything already bound to the API or web ports so Vite gets 5173
-REM (otherwise it falls back to 5174 and CORS preflights from the wrong
-REM origin start failing with 400). taskkill /F is fine — these are dev
-REM servers, no data loss.
-call :free_port %PORT_API% "API"
-call :free_port %PORT_WEB% "web"
+REM Free the API and web ports so the new uvicorn / vite get to bind them.
+REM Without this, Vite falls back to 5174 and CORS preflights from that
+REM origin start failing 400 against the API allowlist.
+call :free_port %PORT_API% API
+call :free_port %PORT_WEB% web
 
 echo [start.bat] Starting ARGUS API, worker, and frontend...
 
@@ -50,23 +49,19 @@ exit /b 0
 
 
 :free_port
-REM %~1 = port number, %~2 = label for log line
+REM %~1 = port number, %~2 = label (no spaces)
 set "_port=%~1"
 set "_label=%~2"
-set "_killed="
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%_port% " ^| findstr "LISTENING"') do (
-  if not "%%P"=="0" (
-    if not defined _killed (
-      echo [start.bat] Port %_port% (%_label%) busy — killing PID %%P
-    ) else (
-      echo [start.bat] Port %_port% (%_label%) busy — also killing PID %%P
-    )
-    taskkill /F /PID %%P >nul 2>&1
-    set "_killed=1"
-  )
-)
-if defined _killed (
-  REM Brief pause so the kernel can release the socket before the new bind.
-  timeout /t 1 /nobreak >nul
-)
+set "_killed_any="
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%_port% " ^| findstr "LISTENING"') do call :kill_pid %%P %_port% %_label%
+if defined _killed_any timeout /t 1 /nobreak >nul
+exit /b 0
+
+
+:kill_pid
+REM %~1 = pid, %~2 = port, %~3 = label
+if "%~1"=="0" exit /b 0
+echo [start.bat] Port %~2 [%~3] busy. Killing PID %~1
+taskkill /F /PID %~1 >nul 2>&1
+set "_killed_any=1"
 exit /b 0
