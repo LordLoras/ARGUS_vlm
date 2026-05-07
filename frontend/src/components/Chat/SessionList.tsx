@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { relativeTime } from "../../lib/format";
-import { PlusIcon, SearchIcon } from "../../lib/icons";
+import { PlusIcon, SearchIcon, TrashIcon } from "../../lib/icons";
 import type { AgentSession } from "../../lib/types";
 
 function sessionLabel(session: AgentSession): string {
@@ -12,12 +12,14 @@ export function SessionList({
   sessions,
   activeId,
   onNew,
-  onSelect
+  onSelect,
+  onDelete
 }: {
   sessions: AgentSession[];
   activeId?: string | null;
   onNew: () => void;
   onSelect: (sessionId: string) => void;
+  onDelete?: (sessionId: string) => void;
 }) {
   const [filter, setFilter] = useState("");
   const filtered = sessions.filter((s) => {
@@ -57,11 +59,31 @@ export function SessionList({
               className={`session-item ${activeId === session.id ? "active" : ""}`}
               onClick={() => onSelect(session.id)}
             >
-              <div className="preview">{sessionLabel(session)}</div>
-              <div className="meta">
-                <span>{relativeTime(session.created_at)}</span>
-                <span>·</span>
-                <span className="session-id-meta">{session.id}</span>
+              <div className="session-row">
+                <div className="session-text">
+                  <div className="preview">{sessionLabel(session)}</div>
+                  <div className="meta">
+                    <span>{relativeTime(session.created_at)}</span>
+                    <span>·</span>
+                    <span className="session-id-meta">{session.id}</span>
+                  </div>
+                </div>
+                {onDelete ? (
+                  <button
+                    type="button"
+                    className="session-delete"
+                    aria-label={`Delete ${sessionLabel(session)}`}
+                    title="Delete chat"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Delete "${sessionLabel(session)}"? This cannot be undone.`)) {
+                        onDelete(session.id);
+                      }
+                    }}
+                  >
+                    <TrashIcon size={11} />
+                  </button>
+                ) : null}
               </div>
             </div>
           ))

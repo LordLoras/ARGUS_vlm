@@ -61,6 +61,18 @@ export function Agent() {
     }
   });
 
+  const deleteSession = useMutation({
+    mutationFn: (sessionId: string) => api.deleteAgentSession(sessionId),
+    onSuccess: async (_result, sessionId) => {
+      if (activeId === sessionId) {
+        setActiveId(null);
+        setStreamMessages([]);
+        setTools([]);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
+    }
+  });
+
   // Cancel an in-flight stream on unmount.
   useEffect(() => {
     return () => {
@@ -211,6 +223,7 @@ export function Agent() {
             setStreamMessages([]);
             setTools([]);
           }}
+          onDelete={(sessionId) => deleteSession.mutate(sessionId)}
         />
 
         <section className="chat-main">
