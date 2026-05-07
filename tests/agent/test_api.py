@@ -156,19 +156,24 @@ def test_agent_events_sse_ordering(config_path: Path):
         ) as response:
             body = "".join(response.iter_text())
 
-    # Verify the SSE event names appear in order
-    sequence = [
-        i
-        for i in (
-            body.find("event: session"),
-            body.find("event: tool_call"),
-            body.find("event: tool_result"),
-            body.find("event: final"),
-            body.find("event: done"),
+    # Each event MUST be present. (A previous version of this test only
+    # checked the order of events that did appear, which silently passed when
+    # the loop crashed before yielding anything.)
+    required = ["session", "message", "tool_call", "tool_result", "final", "done"]
+    for name in required:
+        assert f"event: {name}" in body, (
+            f"Missing SSE event {name!r}. body[:500]={body[:500]!r}"
         )
-        if i != -1
-    ]
-    assert sequence == sorted(sequence)
+
+    # Key skeleton must be ordered: session → tool_call → tool_result → final → done.
+    # `message` is interleaved (user echo before tool_call, assistant after).
+    skeleton = ["session", "tool_call", "tool_result", "final", "done"]
+    positions = [body.find(f"event: {name}") for name in skeleton]
+    assert positions == sorted(positions), positions
+
+    # Both user and assistant message events should appear.
+    assert body.count('"role": "user"') >= 1
+    assert body.count('"role": "assistant"') >= 1
 
 
 def test_agent_tools_endpoint(config_path: Path):

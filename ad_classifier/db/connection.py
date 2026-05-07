@@ -28,11 +28,17 @@ def _sqlite_uri(path: Path, mode: str) -> str:
 
 def open_database(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     db_path = path.expanduser().resolve()
+    # check_same_thread=False so a connection built on the FastAPI request
+    # thread can be used inside asyncio.to_thread(...) — the agent SSE handler
+    # iterates the loop generator on a worker thread. Caller is responsible
+    # for not running concurrent statements on a single connection.
     if not readonly:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, check_same_thread=False)
     else:
-        conn = sqlite3.connect(_sqlite_uri(db_path, "ro"), uri=True)
+        conn = sqlite3.connect(
+            _sqlite_uri(db_path, "ro"), uri=True, check_same_thread=False
+        )
 
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

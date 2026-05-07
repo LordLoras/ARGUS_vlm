@@ -154,6 +154,22 @@ def agent_query(session_id: str, body: AskRequest, request: Request) -> dict[str
         tool_conn.close()
 
 
+_SENTINEL_END = object()
+
+
+def _next_or_sentinel(iterator):
+    """Return next(iterator) or the sentinel when the iterator is exhausted.
+
+    PEP 479: StopIteration cannot propagate through a coroutine boundary, so
+    asyncio.to_thread(next, ...) wraps it in RuntimeError. Use a sentinel value
+    instead so the SSE pump can detect end-of-stream cleanly.
+    """
+    try:
+        return next(iterator)
+    except StopIteration:
+        return _SENTINEL_END
+
+
 @router.get("/agent/sessions/{session_id}/events")
 async def agent_events(
     session_id: str, q: str, request: Request
@@ -167,9 +183,8 @@ async def agent_events(
         iterator = iter(loop.stream(q, session_id=session_id))
         try:
             while True:
-                try:
-                    event = await asyncio.to_thread(next, iterator)
-                except StopIteration:
+                event = await asyncio.to_thread(_next_or_sentinel, iterator)
+                if event is _SENTINEL_END:
                     break
                 yield {
                     "event": event.type,
