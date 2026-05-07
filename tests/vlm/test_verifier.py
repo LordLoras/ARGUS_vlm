@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from ad_classifier.vlm.models import VLMVerificationResult
-from ad_classifier.vlm.verifier import MockVLMVerifier, HTTPVLMVerifier, _extract_json
-
+from ad_classifier.vlm.verifier import (
+    HTTPVLMVerifier,
+    MockVLMVerifier,
+    _extract_json,
+    _normalize_chat_endpoint,
+)
 
 # ---------------------------------------------------------------------------
 # _extract_json
@@ -21,12 +25,12 @@ def test_extract_json_plain():
 
 
 def test_extract_json_fenced():
-    raw = "```json\n{\"decision\": \"allow\"}\n```"
+    raw = '```json\n{"decision": "allow"}\n```'
     assert json.loads(_extract_json(raw)) == {"decision": "allow"}
 
 
 def test_extract_json_with_preamble():
-    raw = "Here is the result:\n{\"decision\": \"review\", \"confidence\": 0.4}"
+    raw = 'Here is the result:\n{"decision": "review", "confidence": 0.4}'
     result = json.loads(_extract_json(raw))
     assert result["decision"] == "review"
 
@@ -96,11 +100,20 @@ def test_parse_failure_factory():
 def _mock_response(payload: dict, status_code: int = 200):
     resp = MagicMock()
     resp.status_code = status_code
-    resp.json.return_value = {
-        "choices": [{"message": {"content": json.dumps(payload)}}]
-    }
+    resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
     resp.raise_for_status = MagicMock()
     return resp
+
+
+def test_normalize_chat_endpoint_accepts_base_v1_url():
+    assert (
+        _normalize_chat_endpoint("http://127.0.0.1:1234/v1/")
+        == "http://127.0.0.1:1234/v1/chat/completions"
+    )
+    assert (
+        _normalize_chat_endpoint("http://127.0.0.1:1234/v1/chat/completions")
+        == "http://127.0.0.1:1234/v1/chat/completions"
+    )
 
 
 def test_http_verifier_happy_path():
@@ -120,6 +133,39 @@ def test_http_verifier_happy_path():
     assert result.primary_category == "retail_ecommerce"
     assert result.confidence == pytest.approx(0.85)
     assert result.parse_ok is True
+
+
+def test_http_verifier_reads_reasoning_content_when_content_empty():
+    payload = {
+        "primary_category": "other",
+        "risk_labels": [],
+        "confidence": 0.7,
+        "decision": "allow",
+        "needs_human_review": False,
+        "summary": "reasoning field only",
+    }
+    resp = MagicMock()
+    resp.json.return_value = {
+        "choices": [{"message": {"content": "", "reasoning_content": json.dumps(payload)}}]
+    }
+    resp.raise_for_status = MagicMock()
+    bundle = _make_bundle()
+    with patch("httpx.post", return_value=resp):
+        verifier = HTTPVLMVerifier()
+        result = verifier.verify(bundle)
+    assert result.parse_ok is True
+    assert result.summary == "reasoning field only"
+
+
+def test_http_verifier_includes_error_body_on_http_failure():
+    request = httpx.Request("POST", "http://mock/v1/chat/completions")
+    response = httpx.Response(400, request=request, text="Channel Error")
+    bundle = _make_bundle()
+    with patch("httpx.post", return_value=response):
+        verifier = HTTPVLMVerifier(endpoint="http://mock/v1", max_retries=0)
+        result = verifier.verify(bundle)
+    assert result.parse_ok is False
+    assert "Channel Error" in result.parse_error
 
 
 def test_http_verifier_parses_fenced_json():

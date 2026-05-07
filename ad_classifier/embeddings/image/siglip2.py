@@ -28,7 +28,7 @@ class SigLIP2ImageEmbedder(ImageEmbedder):
                     "transformers and torch are required for SigLIP2ImageEmbedder. "
                     "Install with: pip install --no-deps transformers"
                 ) from exc
-            self._processor = AutoProcessor.from_pretrained(self._model_name)
+            self._processor = AutoProcessor.from_pretrained(self._model_name, use_fast=True)
             self._model = AutoModel.from_pretrained(self._model_name).to(self._device)
             self._model.eval()
             self._torch = torch

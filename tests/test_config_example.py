@@ -10,4 +10,4 @@ def test_example_config_uses_current_vlm_schema_and_model():
 
     assert source.name == "config.example.yaml"
     assert config.vlm.endpoint.model == "google/gemma-4-26b-a4b"
-    assert config.vlm.endpoint.endpoint == "http://localhost:1234/v1/chat/completions"
+    assert config.vlm.endpoint.endpoint == "http://127.0.0.1:1234/v1"

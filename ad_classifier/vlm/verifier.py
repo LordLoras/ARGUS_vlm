@@ -17,8 +17,7 @@ from ad_classifier.vlm.prompt import render_verifier_prompt
 
 class VLMVerifier(ABC):
     @abstractmethod
-    def verify(self, bundle: EvidenceBundle) -> VLMVerificationResult:
-        ...
+    def verify(self, bundle: EvidenceBundle) -> VLMVerificationResult: ...
 
 
 class MockVLMVerifier(VLMVerifier):
@@ -61,6 +60,15 @@ def _encode_image(path: Path) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def _normalize_chat_endpoint(endpoint: str) -> str:
+    normalized = endpoint.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return f"{normalized}/chat/completions"
+    return f"{normalized}/v1/chat/completions"
+
+
 def _build_content(bundle: EvidenceBundle) -> list[dict]:
     parts: list[dict] = []
 
@@ -100,10 +108,12 @@ def _build_content(bundle: EvidenceBundle) -> list[dict]:
         suffix = path.suffix.lower().lstrip(".")
         mime = "image/jpeg" if suffix in ("jpg", "jpeg") else f"image/{suffix}"
         encoded = _encode_image(path)
-        parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime};base64,{encoded}"},
-        })
+        parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{encoded}"},
+            }
+        )
 
     return parts
 
@@ -120,7 +130,7 @@ class HTTPVLMVerifier(VLMVerifier):
         retry_delay_s: float = 2.0,
         prompt_override: str | None = None,
     ) -> None:
-        self._endpoint = endpoint
+        self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout_s = timeout_s
         self._max_retries = max_retries
@@ -159,11 +169,19 @@ class HTTPVLMVerifier(VLMVerifier):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                raw = data["choices"][0]["message"]["content"]
+                message = data["choices"][0]["message"]
+                raw = message.get("content") or message.get("reasoning_content") or ""
                 json_str = _extract_json(raw)
                 parsed = json.loads(json_str)
                 return VLMVerificationResult.model_validate(parsed)
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except httpx.HTTPStatusError as exc:
+                body = exc.response.text[:1000] if exc.response is not None else ""
+                last_error = (
+                    f"HTTP error on attempt {attempt + 1}: "
+                    f"status={exc.response.status_code if exc.response is not None else 'unknown'} "
+                    f"body={body!r}"
+                )
+            except httpx.RequestError as exc:
                 last_error = f"HTTP error on attempt {attempt + 1}: {exc}"
             except (json.JSONDecodeError, KeyError, ValueError) as exc:
                 raw_text = raw if "raw" in dir() else ""
