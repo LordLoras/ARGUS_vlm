@@ -1,3 +1,5 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
 export function formatDuration(ms?: number | null) {
   if (!ms) return "-";
   const seconds = Math.round(ms / 1000);
@@ -32,9 +34,11 @@ export function relativeTime(value?: string | null) {
 export function filePathToDataUrl(path?: string | null) {
   if (!path) return "";
   const normalized = path.replace(/\\/g, "/");
+  if (/^(https?:|blob:|data:)/i.test(normalized)) return normalized;
   const dataIndex = normalized.lastIndexOf("/data/");
-  if (dataIndex >= 0) return normalized.slice(dataIndex);
-  if (normalized.startsWith("data/")) return `/${normalized}`;
+  if (dataIndex >= 0) return new URL(normalized.slice(dataIndex), API_BASE_URL).toString();
+  if (normalized.startsWith("/data/")) return new URL(normalized, API_BASE_URL).toString();
+  if (normalized.startsWith("data/")) return new URL(`/${normalized}`, API_BASE_URL).toString();
   return normalized;
 }
 
