@@ -158,6 +158,24 @@ def test_http_verifier_requests_structured_output():
     )
 
 
+def test_vlm_response_format_includes_tracking_fields():
+    schema = _vlm_response_format()["json_schema"]["schema"]
+    marketing_ref = schema["properties"]["marketing_entities"]["$ref"]
+    marketing_key = marketing_ref.removeprefix("#/$defs/")
+    marketing_schema = schema["$defs"][marketing_key]
+
+    for field in (
+        "contact_points",
+        "advertiser",
+        "landing_page",
+        "offer_terms",
+        "creative_attributes",
+        "campaign_signals",
+    ):
+        assert field in marketing_schema["properties"]
+        assert field in marketing_schema["required"]
+
+
 def test_http_verifier_reads_reasoning_content_when_content_empty():
     payload = {
         "primary_category": "other",

@@ -27,6 +27,10 @@ router = APIRouter(tags=["ads"])
 class AdPatch(BaseModel):
     brand_name: str | None = None
     brand_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    advertiser_name: str | None = None
+    website_domain: str | None = None
+    phone_number: str | None = None
+    landing_page_domain: str | None = None
     products_text: str | None = None
     primary_category: str | None = None
     decision: str | None = None
@@ -233,6 +237,22 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                 patch.brand_confidence
                 if patch.brand_confidence is not None
                 else current.brand_confidence
+            ),
+            advertiser_name=(
+                patch.advertiser_name
+                if patch.advertiser_name is not None
+                else current.advertiser_name
+            ),
+            website_domain=(
+                patch.website_domain if patch.website_domain is not None else current.website_domain
+            ),
+            phone_number=(
+                patch.phone_number if patch.phone_number is not None else current.phone_number
+            ),
+            landing_page_domain=(
+                patch.landing_page_domain
+                if patch.landing_page_domain is not None
+                else current.landing_page_domain
             ),
             products_text=(
                 patch.products_text if patch.products_text is not None else current.products_text

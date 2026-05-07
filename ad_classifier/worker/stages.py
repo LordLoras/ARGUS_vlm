@@ -17,6 +17,7 @@ from ad_classifier.embeddings.text.base import TextEmbedder
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
 from ad_classifier.ingest.models import IngestArtifacts, IngestEvent
 from ad_classifier.ingest.service import IngestService
+from ad_classifier.marketing.extract import extract_tracking_entities, merge_tracking_entities
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.evidence import build_evidence_bundle
@@ -169,8 +170,12 @@ def run_pipeline_for_job(
         rules,
         related_ads=related,
         vlm_model=config.vlm.endpoint.model,
-        vlm_prompt_version="verifier-2026.05.01",
+        vlm_prompt_version="verifier-2026.05.07",
         pipeline_version="0.1.0",
+    )
+    final.marketing_entities = merge_tracking_entities(
+        final.marketing_entities,
+        extract_tracking_entities(ocr_items=ocr_items, transcript=ingest.transcript),
     )
     ClassificationRepository(conn).upsert(
         ClassificationRecord(
@@ -195,6 +200,10 @@ def run_pipeline_for_job(
         ad_id,
         brand_name=final.marketing_entities.brand.name,
         brand_confidence=final.marketing_entities.brand.confidence,
+        advertiser_name=final.marketing_entities.advertiser.advertiser_name,
+        website_domain=final.marketing_entities.primary_website_domain,
+        phone_number=final.marketing_entities.primary_phone_number,
+        landing_page_domain=final.marketing_entities.landing_page.domain,
         products_text=final.marketing_entities.products_text,
         primary_category=final.primary_category,
         decision=final.decision,

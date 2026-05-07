@@ -25,6 +25,10 @@ class AdRecord(StrictModel):
     status: AdStatus | None = None
     brand_name: str | None = None
     brand_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    advertiser_name: str | None = None
+    website_domain: str | None = None
+    phone_number: str | None = None
+    landing_page_domain: str | None = None
     products_text: str | None = None
     primary_category: str | None = None
     decision: str | None = None

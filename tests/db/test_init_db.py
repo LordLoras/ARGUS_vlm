@@ -23,7 +23,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
     assert result.db_path == db_path.resolve()
     assert result.journal_mode == "wal"
     assert result.sqlite_vec_version is not None
-    assert result.migrations_applied == ["001_initial"]
+    assert result.migrations_applied == ["001_initial", "002_marketing_tracking"]
 
     conn = open_database(db_path)
     try:
@@ -46,6 +46,24 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         }.issubset(tables)
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        ad_columns = {row["name"] for row in conn.execute("PRAGMA table_info(ads)").fetchall()}
+        assert {
+            "advertiser_name",
+            "website_domain",
+            "phone_number",
+            "landing_page_domain",
+        }.issubset(ad_columns)
+        marketing_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(marketing_entities)").fetchall()
+        }
+        assert {
+            "contact_points_json",
+            "advertiser_json",
+            "landing_page_json",
+            "offer_terms_json",
+            "creative_attributes_json",
+            "campaign_signals_json",
+        }.issubset(marketing_columns)
     finally:
         conn.close()
 

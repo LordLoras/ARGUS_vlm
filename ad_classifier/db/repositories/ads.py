@@ -73,9 +73,15 @@ class AdRepository:
             clauses.append("status = ?")
             params.append(status)
         if q:
-            clauses.append("(id LIKE ? OR brand_name LIKE ? OR products_text LIKE ?)")
+            clauses.append(
+                "("
+                "id LIKE ? OR brand_name LIKE ? OR advertiser_name LIKE ? OR "
+                "products_text LIKE ? OR website_domain LIKE ? OR phone_number LIKE ? OR "
+                "landing_page_domain LIKE ?"
+                ")"
+            )
             pattern = f"%{q}%"
-            params.extend([pattern, pattern, pattern])
+            params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern])
 
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = self.conn.execute(
@@ -160,6 +166,10 @@ class AdRepository:
         *,
         brand_name: str | None,
         brand_confidence: float | None,
+        advertiser_name: str | None = None,
+        website_domain: str | None = None,
+        phone_number: str | None = None,
+        landing_page_domain: str | None = None,
         products_text: str | None,
         primary_category: str | None,
         decision: str | None,
@@ -169,6 +179,10 @@ class AdRepository:
             UPDATE ads
             SET brand_name = ?,
                 brand_confidence = ?,
+                advertiser_name = ?,
+                website_domain = ?,
+                phone_number = ?,
+                landing_page_domain = ?,
                 products_text = ?,
                 primary_category = ?,
                 decision = ?
@@ -177,6 +191,10 @@ class AdRepository:
             (
                 brand_name,
                 brand_confidence,
+                advertiser_name,
+                website_domain,
+                phone_number,
+                landing_page_domain,
                 products_text,
                 primary_category,
                 decision,

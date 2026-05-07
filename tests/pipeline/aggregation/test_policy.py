@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from ad_classifier.pipeline.aggregation.models import AggregationConfig
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.rules.models import RuleTrigger
@@ -125,6 +123,30 @@ def test_products_mapped():
     assert result.marketing_entities.products == ["Product A", "Product B"]
 
 
+def test_tracking_fields_mapped():
+    from ad_classifier.vlm.models import (
+        VLMLogoEvidence,
+        VLMPromoCode,
+        VLMWebsite,
+    )
+
+    vlm = _vlm()
+    vlm.marketing_entities.contact_points.websites = [
+        VLMWebsite(
+            url="https://example.com/deal",
+            domain="example.com",
+            evidence=[VLMLogoEvidence(time_ms=1000, frame_index=2, text="example.com")],
+        )
+    ]
+    vlm.marketing_entities.offer_terms.promo_codes = [VLMPromoCode(code="SAVE20")]
+    vlm.marketing_entities.creative_attributes.end_card = True
+    result = aggregate("ad_1", vlm, [])
+
+    assert result.marketing_entities.primary_website_domain == "example.com"
+    assert result.marketing_entities.offer_terms.promo_codes[0].code == "SAVE20"
+    assert result.marketing_entities.creative_attributes.end_card is True
+
+
 # ---------------------------------------------------------------------------
 # Evidence
 # ---------------------------------------------------------------------------
@@ -135,7 +157,9 @@ def test_vlm_evidence_included():
 
     vlm = _vlm()
     vlm.evidence = [
-        VLMEvidence(time_ms=1000, frame_index=2, source="vlm", text="sale 50% off", reason="visible text")
+        VLMEvidence(
+            time_ms=1000, frame_index=2, source="vlm", text="sale 50% off", reason="visible text"
+        )
     ]
     result = aggregate("ad_1", vlm, [])
     assert any(e.source == "vlm" for e in result.evidence)

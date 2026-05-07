@@ -1,20 +1,35 @@
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
+
+import yaml
 
 from ad_classifier.marketing.brand import brand_normalize
 from ad_classifier.models.classification import Decision
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
+    AdvertiserEntity,
+    AppStoreLinkEntity,
     BrandEntity,
-    CTAEntity,
+    CampaignSignals,
+    ContactPoints,
+    CreativeAttributes,
     CreativeFormat,
+    CTAEntity,
     DisclaimerEntity,
+    ExpiryEntity,
+    FinancingTerms,
+    LandingPageEntity,
     MarketingEntities,
     OfferEntity,
+    OfferTerms,
+    PhoneNumberEntity,
     PriceEntity,
+    PromoCodeEntity,
+    QRCodeEntity,
+    SocialHandleEntity,
     SocialProof,
+    WebsiteEntity,
 )
 from ad_classifier.pipeline.aggregation.models import (
     AggregationConfig,
@@ -49,6 +64,25 @@ def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
             )
         )
     return items
+
+
+def _entity_evidence(items) -> list[EvidenceItem]:
+    evidence: list[EvidenceItem] = []
+    for item in items:
+        text = item.text or item.reason
+        if not text:
+            continue
+        evidence.append(
+            EvidenceItem(
+                time_ms=item.time_ms,
+                frame_index=item.frame_index if item.frame_index != 0 else None,
+                source="vlm",
+                text=text,
+                confidence=item.confidence,
+                reason=item.reason or None,
+            )
+        )
+    return evidence
 
 
 def _rule_evidence(rules: list[RuleTrigger]) -> list[EvidenceItem]:
@@ -142,6 +176,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 
     social_proof = SocialProof(
         rating=me.social_proof.rating,
+        rating_count=_parse_rating_count(me.social_proof.rating_count),
         testimonials=list(me.social_proof.testimonials),
         badges=list(me.social_proof.badges),
     )
@@ -154,6 +189,130 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         has_on_screen_text=cf_vlm.has_on_screen_text,
     )
 
+    contact_points = ContactPoints(
+        websites=[
+            WebsiteEntity(
+                url=w.url,
+                domain=w.domain,
+                display_text=w.display_text,
+                evidence=_entity_evidence(w.evidence),
+            )
+            for w in me.contact_points.websites
+            if w.url
+        ],
+        phone_numbers=[
+            PhoneNumberEntity(
+                raw=p.raw,
+                normalized=p.normalized,
+                type=p.type,
+                evidence=_entity_evidence(p.evidence),
+            )
+            for p in me.contact_points.phone_numbers
+            if p.raw
+        ],
+        social_handles=[
+            SocialHandleEntity(
+                platform=s.platform,
+                handle=s.handle,
+                url=s.url,
+                evidence=_entity_evidence(s.evidence),
+            )
+            for s in me.contact_points.social_handles
+            if s.handle or s.url
+        ],
+        app_store_links=[
+            AppStoreLinkEntity(
+                platform=a.platform,
+                url=a.url,
+                app_name=a.app_name,
+                evidence=_entity_evidence(a.evidence),
+            )
+            for a in me.contact_points.app_store_links
+            if a.url
+        ],
+        qr_codes=[
+            QRCodeEntity(
+                present=q.present,
+                decoded_text=q.decoded_text,
+                destination_hint=q.destination_hint,
+                evidence=_entity_evidence(q.evidence),
+            )
+            for q in me.contact_points.qr_codes
+            if q.present or q.decoded_text or q.destination_hint
+        ],
+    )
+
+    advertiser = AdvertiserEntity(
+        advertiser_name=me.advertiser.advertiser_name,
+        brand_name=brand_normalize(me.advertiser.brand_name),
+        parent_company=me.advertiser.parent_company,
+        service_area=list(me.advertiser.service_area),
+        locations=list(me.advertiser.locations),
+        evidence=_entity_evidence(me.advertiser.evidence),
+    )
+
+    landing_page = LandingPageEntity(
+        url=me.landing_page.url,
+        domain=me.landing_page.domain,
+        path=me.landing_page.path,
+        utm_params=dict(me.landing_page.utm_params),
+        final_url=me.landing_page.final_url,
+        evidence=_entity_evidence(me.landing_page.evidence),
+    )
+
+    offer_terms = OfferTerms(
+        promo_codes=[
+            PromoCodeEntity(
+                code=p.code,
+                raw_text=p.raw_text,
+                evidence=_entity_evidence(p.evidence),
+            )
+            for p in me.offer_terms.promo_codes
+            if p.code
+        ],
+        expiry=ExpiryEntity(
+            text=me.offer_terms.expiry.text,
+            resolved_date=me.offer_terms.expiry.resolved_date,
+            evidence=_entity_evidence(me.offer_terms.expiry.evidence),
+        ),
+        financing=FinancingTerms(
+            text=me.offer_terms.financing.text,
+            apr=me.offer_terms.financing.apr,
+            monthly_payment=me.offer_terms.financing.monthly_payment,
+            currency=me.offer_terms.financing.currency,
+            duration_months=me.offer_terms.financing.duration_months,
+            evidence=_entity_evidence(me.offer_terms.financing.evidence),
+        ),
+        trial_terms=list(me.offer_terms.trial_terms),
+        guarantees=list(me.offer_terms.guarantees),
+        scarcity_signals=list(me.offer_terms.scarcity_signals),
+        urgency_signals=list(me.offer_terms.urgency_signals),
+    )
+
+    creative_attributes = CreativeAttributes(
+        format=me.creative_attributes.format,
+        aspect_ratio=me.creative_attributes.aspect_ratio or creative_format.aspect_ratio,
+        duration_ms=me.creative_attributes.duration_ms or creative_format.duration_ms,
+        voiceover=me.creative_attributes.voiceover or creative_format.has_voiceover,
+        music=me.creative_attributes.music,
+        testimonial=me.creative_attributes.testimonial,
+        before_after=me.creative_attributes.before_after,
+        demo=me.creative_attributes.demo,
+        ugc_style=me.creative_attributes.ugc_style,
+        end_card=me.creative_attributes.end_card,
+        disclaimer_density=me.creative_attributes.disclaimer_density,
+    )
+
+    campaign_signals = CampaignSignals(
+        slogan=me.campaign_signals.slogan,
+        recurring_offer=me.campaign_signals.recurring_offer,
+        product_model=me.campaign_signals.product_model,
+        sku=me.campaign_signals.sku,
+        creative_variant=me.campaign_signals.creative_variant,
+        campaign_theme=me.campaign_signals.campaign_theme,
+        evidence=_entity_evidence(me.campaign_signals.evidence),
+    )
+
     return MarketingEntities(
         brand=brand,
         products=list(me.products),
@@ -163,7 +322,20 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         social_proof=social_proof,
         disclaimers=disclaimers,
         creative_format=creative_format,
+        contact_points=contact_points,
+        advertiser=advertiser,
+        landing_page=landing_page,
+        offer_terms=offer_terms,
+        creative_attributes=creative_attributes,
+        campaign_signals=campaign_signals,
     )
+
+
+def _parse_rating_count(value: str | None) -> int | None:
+    if not value:
+        return None
+    digits = "".join(ch for ch in value if ch.isdigit())
+    return int(digits) if digits else None
 
 
 def _decide(
