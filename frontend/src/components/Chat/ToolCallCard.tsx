@@ -1,5 +1,6 @@
-import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+
+import { ChevronRightIcon } from "../../lib/icons";
 
 export type ToolCard = {
   id: string;
@@ -7,36 +8,69 @@ export type ToolCard = {
   args: unknown;
   result?: unknown;
   summary?: string;
+  status?: "running" | "done" | "failed";
+  durationMs?: number;
   truncated?: boolean;
 };
 
 export function ToolCallCard({ tool }: { tool: ToolCard }) {
   const [open, setOpen] = useState(false);
+  const status = tool.status ?? (tool.result != null ? "done" : "running");
   return (
-    <div className="ml-8 rounded-md border border-border border-l-violet-400 bg-surface">
-      <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm" onClick={() => setOpen(!open)}>
-        <ChevronRight className={`h-4 w-4 transition ${open ? "rotate-90" : ""}`} />
-        <span className="font-mono text-violet-100">{tool.name}</span>
-        <span className="text-muted-foreground">→ {tool.summary || "calling..."}</span>
-        {tool.truncated && <span className="ml-auto rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200">truncated</span>}
-      </button>
-      {open && (
-        <div className="space-y-2 border-t border-border p-3">
-          <CodeBlock label="args" value={tool.args} />
-          <CodeBlock label="result" value={tool.result ?? null} />
-        </div>
-      )}
+    <div className={`tool-call ${open ? "open" : ""}`}>
+      <div className="tc-head" onClick={() => setOpen((o) => !o)}>
+        <span className="chev">
+          <ChevronRightIcon size={11} />
+        </span>
+        <span style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0 }}>
+          <span className="tool-name">{tool.name}</span>
+          <span className="arrow">→</span>
+          <span className="tool-summary">{tool.summary || (status === "running" ? "calling…" : "no result")}</span>
+        </span>
+        <span className="tc-time">{tool.durationMs != null ? `${tool.durationMs}ms` : ""}</span>
+        <span className={`tc-status ${status}`}>{status}</span>
+      </div>
+      <div className="tc-body">
+        <Section label="Arguments" value={tool.args} />
+        <Section label="Result" value={tool.result ?? null} truncated={tool.truncated} />
+      </div>
     </div>
   );
 }
 
-function CodeBlock({ label, value }: { label: string; value: unknown }) {
+function Section({ label, value, truncated }: { label: string; value: unknown; truncated?: boolean }) {
   return (
-    <div>
-      <div className="mb-1 text-xs uppercase text-muted-foreground">{label}</div>
-      <pre className="max-h-56 overflow-auto rounded-md bg-background p-3 text-xs text-slate-200">
-        {JSON.stringify(value, null, 2)}
-      </pre>
+    <div className="tc-section">
+      <div className="tc-section-label">
+        {label}
+        {truncated ? (
+          <span className="badge badge-flag" style={{ marginLeft: 6 }}>
+            truncated
+          </span>
+        ) : null}
+      </div>
+      <pre dangerouslySetInnerHTML={{ __html: highlight(value) }} />
     </div>
   );
+}
+
+function highlight(value: unknown) {
+  const text = JSON.stringify(value, null, 2) ?? "null";
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped
+    .replace(
+      /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+      (match) => {
+        let cls = "json-num";
+        if (/^"/.test(match)) {
+          cls = /:$/.test(match) ? "json-key" : "json-str";
+        } else if (/true|false/.test(match)) cls = "json-bool";
+        else if (/null/.test(match)) cls = "json-null";
+        return `<span class="${cls}">${match}</span>`;
+      }
+    )
+    .replace(/[{}\[\],]/g, (m) => `<span class="json-punct">${m}</span>`);
 }

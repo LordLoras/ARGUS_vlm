@@ -1,5 +1,4 @@
-import { Badge } from "../ui/Badge";
-
 export function CategoryBadge({ category }: { category?: string | null }) {
-  return <Badge tone="accent">{category || "uncategorized"}</Badge>;
+  if (!category) return <span className="obs-empty">—</span>;
+  return <span className="badge badge-mono">{category}</span>;
 }

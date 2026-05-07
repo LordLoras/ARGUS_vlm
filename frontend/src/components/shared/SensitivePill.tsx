@@ -1,13 +1,12 @@
-import { Info } from "lucide-react";
-
-import { Badge } from "../ui/Badge";
-
-export function SensitivePill({ visible }: { visible: boolean }) {
-  if (!visible) return null;
+export function SensitivePill({ sensitive }: { sensitive: boolean }) {
+  if (!sensitive) return <span className="obs-empty">—</span>;
   return (
-    <Badge tone="amber" title="regulated content type; informational only">
-      <Info className="mr-1 h-3 w-3" />
+    <span
+      className="sensitive-pill"
+      title="Regulated content type — informational only, not a gating signal"
+    >
       Regulated
-    </Badge>
+      <span className="info-i">i</span>
+    </span>
   );
 }

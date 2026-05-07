@@ -9,6 +9,10 @@ export type AdRecord = {
   status?: string | null;
   brand_name?: string | null;
   brand_confidence?: number | null;
+  advertiser_name?: string | null;
+  website_domain?: string | null;
+  phone_number?: string | null;
+  landing_page_domain?: string | null;
   products_text?: string | null;
   primary_category?: string | null;
   decision?: string | null;

@@ -1,62 +1,136 @@
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
 import { useState } from "react";
 
+import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
-import { Button } from "../components/ui/Button";
-import { Card, CardTitle } from "../components/ui/Card";
-import { Input, Select } from "../components/ui/Form";
+import { Topbar } from "../components/Topbar";
+import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
+import { SearchIcon } from "../lib/icons";
+
+const MODES = [
+  { key: "hybrid", label: "hybrid" },
+  { key: "keyword", label: "keyword" },
+  { key: "text", label: "text vector" },
+  { key: "visual", label: "visual" }
+] as const;
 
 export function SearchPage() {
   const [q, setQ] = useState("");
-  const [mode, setMode] = useState("hybrid");
-  const [submitted, setSubmitted] = useState("");
+  const [adId, setAdId] = useState("");
+  const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("hybrid");
+  const [submitted, setSubmitted] = useState<{ q: string; ad_id: string; mode: string } | null>(null);
+  const health = useApiHealth();
 
   const query = useQuery({
-    queryKey: ["search", submitted, mode],
-    queryFn: () => api.search({ q: submitted, mode, k: 10 }),
-    enabled: submitted.length > 0
+    queryKey: ["search", submitted],
+    queryFn: () => api.search({ ...submitted!, k: 20 }),
+    enabled: Boolean(submitted)
   });
 
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Search</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Keyword, vector text, and hybrid retrieval over persisted ads.</p>
-      </div>
-      <Card>
-        <div className="flex gap-3">
-          <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="financing, health claim, brand..." className="flex-1" />
-          <Select value={mode} onChange={(event) => setMode(event.target.value)} className="w-40">
-            <option value="hybrid">hybrid</option>
-            <option value="keyword">keyword</option>
-            <option value="text">text vector</option>
-          </Select>
-          <Button variant="primary" onClick={() => setSubmitted(q)}>
-            Search
-          </Button>
-        </div>
-      </Card>
+  const canSubmit = mode === "visual" ? Boolean(adId) : Boolean(q || adId);
 
-      <div className="mt-6">
-        {!submitted ? (
-          <EmptyState icon={<Search className="h-10 w-10" />} title="Search the local index" body="Run a query after ads have been embedded into sqlite-vec and FTS5." />
-        ) : (
-          <Card>
-            <CardTitle>Results</CardTitle>
-            <div className="mt-3 space-y-2">
-              {(query.data?.items ?? []).map((hit) => (
-                <div key={hit.ad_id} className="flex items-center justify-between rounded-md bg-muted p-3">
-                  <span className="font-mono">{hit.ad_id}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{hit.score ?? hit.distance ?? "-"}</span>
-                </div>
+  return (
+    <>
+      <Topbar crumbs={["Workspace", "Search"]} />
+      <ApiOfflineBanner offline={health.isError} />
+
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">Search</h1>
+            <p className="page-sub">Keyword, vector text, hybrid, or visual retrieval over persisted ads.</p>
+          </div>
+        </div>
+
+        <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
+          <div className="row" style={{ gap: 8 }}>
+            <input
+              className="input"
+              placeholder={mode === "visual" ? "(query ignored in visual mode)" : "financing, health claim, brand…"}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              style={{ flex: 1 }}
+              disabled={mode === "visual"}
+            />
+            <input
+              className="input"
+              placeholder="seed ad id (optional)"
+              value={adId}
+              onChange={(e) => setAdId(e.target.value)}
+              style={{ width: 220 }}
+            />
+            <div className="row" style={{ gap: 4 }}>
+              {MODES.map((m) => (
+                <button
+                  key={m.key}
+                  className={`btn btn-sm ${mode === m.key ? "btn-primary" : ""}`}
+                  onClick={() => setMode(m.key)}
+                >
+                  {m.label}
+                </button>
               ))}
-              {query.isSuccess && query.data.items.length === 0 && <p className="text-sm text-muted-foreground">No results.</p>}
             </div>
-          </Card>
-        )}
+            <button
+              className="btn btn-primary"
+              disabled={!canSubmit}
+              onClick={() => setSubmitted({ q, ad_id: adId, mode })}
+            >
+              <SearchIcon size={11} />
+              <span>Search</span>
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 24, flex: 1, overflow: "auto" }}>
+          {!submitted ? (
+            <EmptyState
+              icon={<SearchIcon size={18} />}
+              title="Run a query"
+              hint="Hybrid combines BM25 + sqlite-vec via reciprocal rank fusion."
+            />
+          ) : query.isLoading ? (
+            <div className="obs-empty">Searching…</div>
+          ) : (query.data?.items ?? []).length === 0 ? (
+            <div className="obs-empty">No results for this query.</div>
+          ) : (
+            <div className="dcard">
+              <div className="dcard-head">
+                <span>{query.data?.mode ?? mode} results</span>
+                <span className="count-pill">{query.data?.items.length ?? 0}</span>
+              </div>
+              <div className="dcard-body">
+                {(query.data?.items ?? []).map((hit, idx) => (
+                  <div
+                    key={`${hit.ad_id}-${idx}`}
+                    className="row"
+                    style={{
+                      padding: "8px 0",
+                      borderBottom: "1px solid var(--border)",
+                      gap: 12
+                    }}
+                  >
+                    <span className="badge badge-mono">#{idx + 1}</span>
+                    <span className="mono" style={{ color: "var(--accent-2)", flex: 1 }}>
+                      {hit.ad_id}
+                    </span>
+                    {hit.source ? <span className="badge">{hit.source}</span> : null}
+                    {hit.score != null ? (
+                      <span className="mono" style={{ color: "var(--fg-mute)" }}>
+                        {hit.score.toFixed(3)}
+                      </span>
+                    ) : hit.distance != null ? (
+                      <span className="mono" style={{ color: "var(--fg-mute)" }}>
+                        d={hit.distance.toFixed(3)}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

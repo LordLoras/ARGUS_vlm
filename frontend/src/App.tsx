@@ -1,18 +1,33 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
+import { Topbar } from "./components/Topbar";
+import { EmptyState } from "./components/shared/EmptyState";
 import { Agent } from "./pages/Agent";
 import { Campaigns } from "./pages/Campaigns";
 import { Library } from "./pages/Library";
 import { SearchPage } from "./pages/SearchPage";
 import { Upload } from "./pages/Upload";
 
-function Placeholder({ title }: { title: string }) {
+function Placeholder({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div>
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">This operational view is reserved for a later build.</p>
-    </div>
+    <>
+      <Topbar crumbs={["System", title]} />
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{title}</h1>
+            <p className="page-sub">Reserved for a later build.</p>
+          </div>
+        </div>
+        <div style={{ padding: 32 }}>
+          <EmptyState
+            title="Not implemented yet"
+            hint={hint ?? "This operational view will arrive in a follow-up phase."}
+          />
+        </div>
+      </div>
+    </>
   );
 }
 

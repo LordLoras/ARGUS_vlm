@@ -1,9 +1,4 @@
-import { RotateCcw, Search } from "lucide-react";
-
 import { categories, riskLabels } from "../lib/taxonomy";
-import { Button } from "./ui/Button";
-import { Card, CardTitle } from "./ui/Card";
-import { Input, Select } from "./ui/Form";
 
 export type LibraryFilters = {
   q: string;
@@ -14,102 +9,148 @@ export type LibraryFilters = {
   risk: string;
 };
 
+type Counts = {
+  total: number;
+  sensitive: number;
+  hasRisk: number;
+  byCategory: Record<string, number>;
+  byRisk: Record<string, number>;
+};
+
 export function FilterSidebar({
   filters,
+  counts,
   onChange,
   onClear
 }: {
   filters: LibraryFilters;
+  counts: Counts;
   onChange: (filters: LibraryFilters) => void;
   onClear: () => void;
 }) {
+  const activeRisks = filters.risk ? filters.risk.split(",").filter(Boolean) : [];
+  const toggleRisk = (label: string) => {
+    const set = new Set(activeRisks);
+    set.has(label) ? set.delete(label) : set.add(label);
+    onChange({ ...filters, risk: Array.from(set).join(",") });
+  };
+
   return (
-    <Card className="sticky top-7 h-fit w-72 shrink-0">
-      <div className="mb-4 flex items-center justify-between">
-        <CardTitle>Filters</CardTitle>
-        <Button variant="ghost" className="h-8 px-2" onClick={onClear}>
-          <RotateCcw className="h-4 w-4" />
-          Clear
-        </Button>
-      </div>
-
-      <div className="space-y-5">
-        <label className="block">
-          <span className="mb-2 flex items-center gap-2 text-xs uppercase text-muted-foreground">
-            <Search className="h-3.5 w-3.5" />
-            Search
+    <aside className="filters">
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Search</span>
+          <span className="clear-link" onClick={onClear}>
+            clear all
           </span>
-          <Input
-            value={filters.q}
-            onChange={(event) => onChange({ ...filters, q: event.target.value })}
-            placeholder="brand, OCR, transcript"
-            className="w-full"
-          />
-        </label>
-
-        <div className="space-y-3">
-          <label className="flex items-center justify-between gap-3 text-sm">
-            Sensitive only
-            <input
-              type="checkbox"
-              checked={filters.sensitiveOnly}
-              onChange={(event) => onChange({ ...filters, sensitiveOnly: event.target.checked })}
-              className="h-4 w-4 accent-violet-500"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 text-sm">
-            Has risk tags
-            <input
-              type="checkbox"
-              checked={filters.hasRiskTags}
-              onChange={(event) => onChange({ ...filters, hasRiskTags: event.target.checked })}
-              className="h-4 w-4 accent-violet-500"
-            />
-          </label>
         </div>
-
-        <label className="block">
-          <span className="mb-2 block text-xs uppercase text-muted-foreground">Category</span>
-          <Select
-            value={filters.category}
-            onChange={(event) => onChange({ ...filters, category: event.target.value })}
-            className="w-full"
-          >
-            <option value="">All categories</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <label className="block">
-          <span className="mb-2 block text-xs uppercase text-muted-foreground">Brand</span>
-          <Input
-            value={filters.brand}
-            onChange={(event) => onChange({ ...filters, brand: event.target.value })}
-            placeholder="type a brand"
-            className="w-full"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-2 block text-xs uppercase text-muted-foreground">Risk labels</span>
-          <Select
-            value={filters.risk}
-            onChange={(event) => onChange({ ...filters, risk: event.target.value })}
-            className="w-full"
-          >
-            <option value="">Any observation tag</option>
-            {riskLabels.map((label) => (
-              <option key={label} value={label}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <input
+          className="input"
+          placeholder="Transcript, OCR, brand…"
+          value={filters.q}
+          onChange={(e) => onChange({ ...filters, q: e.target.value })}
+        />
       </div>
-    </Card>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Quick filters</span>
+        </div>
+        <div
+          className="switch-row"
+          onClick={() => onChange({ ...filters, sensitiveOnly: !filters.sensitiveOnly })}
+        >
+          <span className={`switch ${filters.sensitiveOnly ? "on" : ""}`} />
+          <span className="switch-label">Sensitive only</span>
+          <span className="count">{counts.sensitive}</span>
+        </div>
+        <div
+          className="switch-row"
+          onClick={() => onChange({ ...filters, hasRiskTags: !filters.hasRiskTags })}
+        >
+          <span className={`switch ${filters.hasRiskTags ? "on" : ""}`} />
+          <span className="switch-label">Has risk tags</span>
+          <span className="count">{counts.hasRisk}</span>
+        </div>
+      </div>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Category</span>
+        </div>
+        {categories.map((category) => {
+          const active = filters.category === category;
+          return (
+            <div
+              key={category}
+              className="check-row"
+              onClick={() => onChange({ ...filters, category: active ? "" : category })}
+            >
+              <span className={`check ${active ? "on" : ""}`} />
+              <span>{category}</span>
+              <span className="count">{counts.byCategory[category] ?? 0}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Brand</span>
+        </div>
+        <input
+          className="input"
+          placeholder="fastloan, aurora, jeep…"
+          value={filters.brand}
+          onChange={(e) => onChange({ ...filters, brand: e.target.value })}
+        />
+      </div>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Risk labels</span>
+          <span className="clear-link">
+            {activeRisks.length} / {riskLabels.length}
+          </span>
+        </div>
+        <div className="pill-row">
+          {riskLabels.map((label) => (
+            <span
+              key={label}
+              className={`tag-pill ${activeRisks.includes(label) ? "on" : ""}`}
+              onClick={() => toggleRisk(label)}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Date range</span>
+        </div>
+        <div
+          className="row"
+          style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--fg-mute)" }}
+        >
+          <span>last 30d</span>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <span>today</span>
+        </div>
+      </div>
+
+      <div className="filter-group">
+        <div className="filter-head">
+          <span>Status</span>
+        </div>
+        {["completed", "processing", "failed", "duplicate"].map((status) => (
+          <div key={status} className="check-row">
+            <span className="check" />
+            <span>{status}</span>
+          </div>
+        ))}
+      </div>
+    </aside>
   );
 }

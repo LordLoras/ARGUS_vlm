@@ -1,8 +1,14 @@
-import { Send, Square } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "../ui/Button";
-import { Textarea } from "../ui/Form";
+import { SendIcon, StopIcon } from "../../lib/icons";
+
+const ACTIVE_TOOLS = [
+  "list_ads",
+  "hybrid_search",
+  "compare_ads",
+  "aggregate",
+  "vector_similarity"
+];
 
 export function ChatInput({
   disabled,
@@ -16,41 +22,71 @@ export function ChatInput({
   onStop: () => void;
 }) {
   const [value, setValue] = useState("");
+
   return (
-    <div className="border-t border-border bg-background/95 p-4">
-      <div className="mb-2 text-right font-mono text-xs text-muted-foreground">Tool calls and results are logged. Read-only DB access.</div>
-      <div className="flex gap-3">
-        <Textarea
-          value={value}
-          disabled={disabled || streaming}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (value.trim()) {
-                onSubmit(value.trim());
-                setValue("");
+    <div className="chat-input-wrap">
+      <div className="chat-input-inner">
+        <div className="chat-input-meta">
+          <span>gemma-3-12b · ctx 8k · temp 0.2</span>
+          <span className="tools-active">
+            {ACTIVE_TOOLS.map((tool) => (
+              <span key={tool} className="tool-chip">
+                {tool}
+              </span>
+            ))}
+          </span>
+        </div>
+        <div className="chat-textarea-wrap">
+          <textarea
+            className="chat-textarea"
+            placeholder="Ask about your ads…"
+            value={value}
+            disabled={disabled}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (value.trim()) {
+                  onSubmit(value.trim());
+                  setValue("");
+                }
               }
-            }
-          }}
-          placeholder="Ask about your ads..."
-          className="max-h-36 min-h-12 flex-1"
-        />
-        <Button
-          variant="primary"
-          className="h-12 w-12 rounded-full p-0"
-          disabled={disabled || (!streaming && !value.trim())}
-          onClick={() => {
-            if (streaming) {
-              onStop();
-            } else if (value.trim()) {
-              onSubmit(value.trim());
-              setValue("");
-            }
-          }}
-        >
-          {streaming ? <Square className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-        </Button>
+            }}
+            rows={1}
+          />
+          <div className="chat-input-row">
+            <div className="left">
+              <button className="btn btn-sm" disabled>
+                Context: all ads
+              </button>
+              <button className="btn btn-sm" disabled>
+                SQL mode off
+              </button>
+            </div>
+            {streaming ? (
+              <button className="btn btn-sm btn-icon" onClick={onStop} title="Stop streaming">
+                <StopIcon size={11} />
+              </button>
+            ) : (
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={disabled || !value.trim()}
+                onClick={() => {
+                  if (value.trim()) {
+                    onSubmit(value.trim());
+                    setValue("");
+                  }
+                }}
+              >
+                <SendIcon size={11} />
+                <span>Send</span>
+                <span className="kbd" style={{ marginLeft: 4 }}>
+                  ⏎
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

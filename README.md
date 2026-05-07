@@ -1,8 +1,8 @@
-# AdScope Local
+# ARGUS
 
-Local-first multimodal ad categorization, marketing-entity extraction, campaign tracking, hybrid search, and a management UI over one SQLite database.
+**Ad Retrieval, Graphing & Understanding System** — local-first multimodal ad categorization, marketing-entity extraction, campaign tracking, hybrid search, and a management UI over one SQLite database.
 
-The Python package and CLI are named `ad-classifier` / `ad_classifier`. The product name used in docs and the frontend is `AdScope Local`.
+The Python package and CLI keep their original names — `ad-classifier` / `ad_classifier` — for stability. The user-facing product name (browser title, sidebar brand, docs) is **ARGUS**.
 
 ## What Runs Locally
 

@@ -1,15 +1,39 @@
-import { ImageIcon } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import { filePathToDataUrl } from "../../lib/format";
+import { PlayIcon } from "../../lib/icons";
 
-export function FrameThumbnail({ path, alt = "frame" }: { path?: string | null; alt?: string }) {
-  const src = filePathToDataUrl(path);
-  if (!src) {
-    return (
-      <div className="flex h-12 w-20 items-center justify-center rounded bg-muted text-muted-foreground">
-        <ImageIcon className="h-4 w-4" />
-      </div>
-    );
-  }
-  return <img src={src} alt={alt} loading="lazy" className="h-12 w-20 rounded object-cover" />;
+export function FrameThumbnail({
+  src,
+  path,
+  ar,
+  seedA,
+  seedB,
+  showPlay = true,
+  className
+}: {
+  src?: string | null;
+  path?: string | null;
+  ar?: string | null;
+  seedA?: string;
+  seedB?: string;
+  showPlay?: boolean;
+  className?: string;
+}) {
+  const resolvedSrc = src ?? (path ? filePathToDataUrl(path) : "");
+  const style = {
+    "--seed-a": seedA,
+    "--seed-b": seedB
+  } as CSSProperties;
+  return (
+    <div className={`thumb ${className ?? ""}`.trim()} style={style}>
+      {resolvedSrc ? <img className="thumb-img" src={resolvedSrc} alt="" loading="lazy" /> : null}
+      {showPlay && !resolvedSrc ? (
+        <span className="play-glyph">
+          <PlayIcon size={20} />
+        </span>
+      ) : null}
+      {ar ? <span className="ar">{ar}</span> : null}
+    </div>
+  );
 }

@@ -1,13 +1,15 @@
-import { formatPercent } from "../../lib/format";
+import { cn } from "../../lib/utils";
 
 export function ConfidenceBar({ value }: { value?: number | null }) {
-  const width = Math.max(0, Math.min(100, Math.round((value ?? 0) * 100)));
+  if (value == null) return <span className="obs-empty">—</span>;
+  const pct = Math.max(0, Math.min(1, value));
+  const tone = pct >= 0.85 ? "high" : pct >= 0.7 ? "med" : "low";
   return (
-    <div className="flex min-w-28 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-accent" style={{ width: `${width}%` }} />
+    <div className={cn("conf", tone)}>
+      <div className="conf-bar">
+        <span style={{ width: `${pct * 100}%` }} />
       </div>
-      <span className="w-9 text-right font-mono text-xs text-muted-foreground">{formatPercent(value)}</span>
+      <span>{pct.toFixed(2)}</span>
     </div>
   );
 }

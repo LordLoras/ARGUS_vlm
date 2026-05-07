@@ -1,81 +1,109 @@
-import { ArrowDownUp } from "lucide-react";
-
+import { ChevronDownIcon, ChevronRightIcon } from "../lib/icons";
 import { formatDuration, relativeTime } from "../lib/format";
+import { aspectFromDims, deriveSeed } from "../lib/style-helpers";
 import { sensitiveCategories } from "../lib/taxonomy";
 import type { AdDetail, AdRecord } from "../lib/types";
 import { CategoryBadge } from "./shared/CategoryBadge";
 import { ConfidenceBar } from "./shared/ConfidenceBar";
-import { ObservationTagPill } from "./shared/ObservationTagPill";
+import { FrameThumbnail } from "./shared/FrameThumbnail";
+import { ObservationTagOverflow, ObservationTagPill } from "./shared/ObservationTagPill";
 import { SensitivePill } from "./shared/SensitivePill";
 
 export function AdTable({
   ads,
   details,
+  framePreviews,
+  selectedId,
   onSelect
 }: {
   ads: AdRecord[];
   details: Record<string, AdDetail | undefined>;
+  framePreviews?: Record<string, string | undefined>;
+  selectedId?: string | null;
   onSelect: (adId: string) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface/80">
-      <table className="w-full table-fixed border-collapse text-sm">
-        <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+    <div className="table-wrap">
+      <table className="tbl">
+        <thead>
           <tr>
-            <th className="w-40 px-4 py-3 text-left">Ad</th>
-            <th className="px-4 py-3 text-left">
-              <span className="inline-flex items-center gap-1">
-                Brand <ArrowDownUp className="h-3 w-3" />
-              </span>
+            <th style={{ width: 120 }}>Frame</th>
+            <th>Brand</th>
+            <th>Category</th>
+            <th>Sensitive</th>
+            <th className="sortable">
+              Confidence <ChevronDownIcon size={9} className="sort-arrow" />
             </th>
-            <th className="w-52 px-4 py-3 text-left">Category</th>
-            <th className="w-36 px-4 py-3 text-left">Confidence</th>
-            <th className="w-60 px-4 py-3 text-left">Risk tags</th>
-            <th className="w-24 px-4 py-3 text-right">Duration</th>
-            <th className="w-28 px-4 py-3 text-right">Ingested</th>
+            <th>Risk tags</th>
+            <th className="num">Duration</th>
+            <th className="sortable">
+              Ingested <ChevronDownIcon size={9} className="sort-arrow" />
+            </th>
+            <th style={{ width: 32 }} />
           </tr>
         </thead>
         <tbody>
           {ads.map((ad) => {
-            const classification = details[ad.id]?.classification;
-            const risks = classification?.risk_labels ?? [];
-            const category = classification?.primary_category ?? ad.primary_category;
+            const detail = details[ad.id];
+            const cls = detail?.classification;
+            const category = cls?.primary_category ?? ad.primary_category ?? null;
+            const risks = cls?.risk_labels ?? [];
+            const confidence = cls?.confidence ?? ad.brand_confidence ?? null;
+            const ar = aspectFromDims(ad.width, ad.height);
+            const isSensitive = sensitiveCategories.has(category ?? "");
+            const seed = deriveSeed(ad.id);
             return (
               <tr
                 key={ad.id}
+                className={selectedId === ad.id ? "selected" : ""}
                 onClick={() => onSelect(ad.id)}
-                className="cursor-pointer border-t border-border/70 transition hover:bg-muted/40"
               >
-                <td className="px-4 py-3">
-                  <div className="font-mono text-xs text-violet-100">{ad.id}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{ad.status ?? "unknown"}</div>
+                <td>
+                  <FrameThumbnail
+                    src={framePreviews?.[ad.id]}
+                    ar={ar}
+                    seedA={seed.seedA}
+                    seedB={seed.seedB}
+                  />
                 </td>
-                <td className="truncate px-4 py-3">{ad.brand_name || "Unknown brand"}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <CategoryBadge category={category} />
-                    <SensitivePill visible={sensitiveCategories.has(category ?? "")} />
+                <td>
+                  <div className="brand-cell">
+                    <span className="name">{ad.brand_name || "Unknown brand"}</span>
+                    <span className="sub">{ad.advertiser_name || ad.id}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3">
-                  <ConfidenceBar value={classification?.confidence} />
+                <td>
+                  <CategoryBadge category={category} />
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
+                <td>
+                  <SensitivePill sensitive={isSensitive} />
+                </td>
+                <td>
+                  <ConfidenceBar value={confidence} />
+                </td>
+                <td>
+                  <div className="risk-cell">
                     {risks.length === 0 ? (
-                      <span className="text-muted-foreground">-</span>
+                      <span className="obs-empty">—</span>
                     ) : (
                       <>
-                        {risks.slice(0, 2).map((risk) => (
-                          <ObservationTagPill key={risk} label={risk} />
+                        {risks.slice(0, 2).map((label) => (
+                          <ObservationTagPill key={label} label={label} />
                         ))}
-                        {risks.length > 2 && <span className="text-xs text-muted-foreground">+{risks.length - 2}</span>}
+                        {risks.length > 2 ? (
+                          <ObservationTagOverflow count={risks.length - 2} />
+                        ) : null}
                       </>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xs">{formatDuration(ad.duration_ms)}</td>
-                <td className="px-4 py-3 text-right text-xs text-muted-foreground">{relativeTime(ad.ingested_at)}</td>
+                <td className="num mono">{formatDuration(ad.duration_ms)}</td>
+                <td className="mono" title={ad.ingested_at ?? undefined}>
+                  {relativeTime(ad.ingested_at)}
+                </td>
+                <td>
+                  <ChevronRightIcon size={11} style={{ color: "var(--fg-quiet)" }} />
+                </td>
               </tr>
             );
           })}
