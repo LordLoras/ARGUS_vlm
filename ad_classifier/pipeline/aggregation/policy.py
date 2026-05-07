@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -86,8 +87,19 @@ def _entity_evidence(items) -> list[EvidenceItem]:
 
 
 def _rule_evidence(rules: list[RuleTrigger]) -> list[EvidenceItem]:
+    deduped: dict[tuple[str, str], RuleTrigger] = {}
     items: list[EvidenceItem] = []
-    for r in rules:
+    for rule in rules:
+        text = _normalize_rule_evidence_text(rule.evidence_text or rule.rule_id)
+        key = (rule.rule_id, _compact_evidence_key(text))
+        current = deduped.get(key)
+        if current is None or _rule_evidence_score(rule) > _rule_evidence_score(current):
+            deduped[key] = rule.model_copy(update={"evidence_text": text})
+
+    for r in sorted(
+        deduped.values(),
+        key=lambda rule: (rule.time_ms or 0, rule.frame_index or 0, rule.rule_id),
+    ):
         items.append(
             EvidenceItem(
                 time_ms=r.time_ms or 0,
@@ -98,6 +110,42 @@ def _rule_evidence(rules: list[RuleTrigger]) -> list[EvidenceItem]:
             )
         )
     return items
+
+
+def _normalize_rule_evidence_text(text: str) -> str:
+    text = text.replace("％", "%")
+    text = re.sub(r"\bONSELECT\b", "ON SELECT", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bOffersexclude\b", "Offers exclude", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bAPRfinancing\b", "APR financing", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<=[a-zA-Z])(?=\$)", " ", text)
+    text = re.sub(r"(?<=\d)(?=\$)", " ", text)
+    text = re.sub(r"(?<=[a-z])\.(?=[A-Z0-9])", ". ", text)
+    text = re.sub(r"(?<=\d)\.(?=[A-Z])", ". ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _compact_evidence_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _rule_evidence_score(rule: RuleTrigger) -> int:
+    text = _normalize_rule_evidence_text(rule.evidence_text or rule.rule_id)
+    return len(text) + text.count(" ") * 2 + text.count(". ") * 3
+
+
+def _currency_symbol(currency: str | None) -> str:
+    normalized = (currency or "$").strip().upper()
+    if normalized in {"USD", "US$", "$"}:
+        return "$"
+    return currency or "$"
+
+
+def _format_amount(amount: float) -> str:
+    return str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}".rstrip("0").rstrip(".")
+
+
+def _format_price(currency: str | None, amount: float) -> str:
+    return f"{_currency_symbol(currency)}{_format_amount(amount)}"
 
 
 def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
@@ -121,15 +169,15 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 
     prices = [
         PriceEntity(
-            text=f"{p.currency or ''}{p.amount}" if p.amount else "",
+            text=_format_price(p.currency, p.amount),
             amount=p.amount if p.amount else None,
-            currency=p.currency or None,
+            currency=_currency_symbol(p.currency),
             evidence=[
                 EvidenceItem(
                     time_ms=p.time_ms,
                     frame_index=p.frame_index if p.frame_index != 0 else None,
                     source="vlm",
-                    text=f"{p.currency}{p.amount}",
+                    text=_format_price(p.currency, p.amount),
                 )
             ],
         )

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from ad_classifier.ingest.models import TranscriptSegment, WhisperTranscript
+from ad_classifier.marketing.commercial import merge_commercial_entities
 from ad_classifier.marketing.extract import (
     enrich_marketing_entities,
     extract_tracking_entities,
     merge_tracking_entities,
 )
-from ad_classifier.models.marketing import MarketingEntities
+from ad_classifier.models.common import EvidenceItem
+from ad_classifier.models.marketing import DisclaimerEntity, MarketingEntities, OfferEntity
 from ad_classifier.pipeline.ocr.models import OCRItem
 
 
@@ -129,6 +131,103 @@ def test_extract_commercial_terms_from_joined_ocr_frame():
     assert extracted.offer_terms.financing.apr == 0.0
     assert extracted.offer_terms.financing.duration_months == 60
     assert any("0% FINANCING FOR 60 MONTHS" in offer.text for offer in extracted.offers)
+
+
+def test_extract_price_context_prefers_joined_ocr_frame():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=7,
+                time_ms=3500,
+                text="2026 JEEP WRANGLER",
+                confidence=0.98,
+                engine="test",
+            ),
+            OCRItem(frame_index=7, time_ms=3500, text="LEASE FOR:", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="$400", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="/MO", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="LEASE", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="36MOS", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="$0", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="DUEAT", confidence=0.98, engine="test"),
+            OCRItem(frame_index=7, time_ms=3500, text="SIGNING", confidence=0.98, engine="test"),
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    prices = {price.text: price for price in extracted.prices}
+    assert set(prices) == {"$400", "$0"}
+    assert "36 MOS" in prices["$400"].evidence[0].text
+    assert "DUE AT SIGNING" in prices["$0"].evidence[0].text
+
+
+def test_exact_disclaimers_ignore_plain_sales_tax_copy():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=8,
+                time_ms=4000,
+                text="WE'LL COVER YOUR SALES TAX ON SELECT GRAND CHEROKEE MODELS",
+                confidence=0.98,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.disclaimers == []
+
+
+def test_enrich_marketing_entities_dedupes_generic_financing_offer():
+    base = MarketingEntities()
+    base.offers = [OfferEntity(text="0% financing")]
+
+    enriched = enrich_marketing_entities(
+        base,
+        ocr_items=[
+            OCRItem(
+                frame_index=4,
+                time_ms=2000,
+                text="0% APR financing for 60 months on select models",
+                confidence=0.98,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert [offer.text for offer in enriched.offers] == [
+        "0% APR financing for 60 months on select models"
+    ]
+
+
+def test_merge_disclaimers_prefers_clean_vlm_text_over_ocr_context():
+    base = MarketingEntities()
+    base.disclaimers = [
+        DisclaimerEntity(
+            text=(
+                "Offers exclude 4xe models. 0% APR financing for 60 months equals "
+                "$16.67 per month per $1,000 financed for well-qualified buyers."
+            ),
+            evidence=[EvidenceItem(time_ms=1000, source="vlm", text="clean")],
+        )
+    ]
+    extracted = MarketingEntities()
+    extracted.disclaimers = [
+        DisclaimerEntity(
+            text=(
+                "...YOUR SALES TAX Offers exclude 4xe models.0% APR financing for 60 months "
+                "equals$16.67 per month per$1,000 financed for well-qualified buyers "
+                "regardless of down payment garbled copy..."
+            ),
+            evidence=[EvidenceItem(time_ms=1500, source="ocr", text="garbled")],
+        )
+    ]
+
+    merged = merge_commercial_entities(base, extracted)
+
+    assert len(merged.disclaimers) == 1
+    assert merged.disclaimers[0].evidence[0].source == "vlm"
 
 
 def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():

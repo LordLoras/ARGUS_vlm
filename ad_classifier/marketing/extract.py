@@ -224,7 +224,8 @@ def _evidence_from_sources(
     transcript: WhisperTranscript,
 ) -> list[EvidenceItem]:
     ocr_list = list(ocr_items)
-    evidence: list[EvidenceItem] = [
+    evidence = _joined_ocr_evidence(ocr_list)
+    evidence.extend(
         EvidenceItem(
             time_ms=item.time_ms,
             frame_index=item.frame_index,
@@ -235,8 +236,7 @@ def _evidence_from_sources(
         )
         for item in ocr_list
         if item.text
-    ]
-    evidence.extend(_joined_ocr_evidence(ocr_list))
+    )
     evidence.extend(
         EvidenceItem(
             time_ms=segment.start_ms,

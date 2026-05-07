@@ -133,6 +133,17 @@ def test_zero_amount_prices_are_not_mapped():
     assert [price.amount for price in result.marketing_entities.prices] == [95]
 
 
+def test_usd_prices_render_as_dollar_amounts():
+    from ad_classifier.vlm.models import VLMPrice
+
+    vlm = _vlm()
+    vlm.marketing_entities.prices = [VLMPrice(amount=400, currency="USD", time_ms=1000)]
+    result = aggregate("ad_1", vlm, [])
+
+    assert result.marketing_entities.prices[0].text == "$400"
+    assert result.marketing_entities.prices[0].currency == "$"
+
+
 def test_tracking_fields_mapped():
     from ad_classifier.vlm.models import (
         VLMLogoEvidence,
@@ -178,3 +189,37 @@ def test_vlm_evidence_included():
 def test_rule_evidence_included():
     result = aggregate("ad_1", _vlm(), [_rule()])
     assert any(e.source == "rule" for e in result.evidence)
+
+
+def test_duplicate_rule_evidence_collapses_adjacent_ocr_variants():
+    rules = [
+        RuleTrigger(
+            rule_id="financial_apr",
+            severity="low",
+            evidence_text=(
+                "Offers exclude 4xe models.0% APR financing for 60 months equals$16.67 "
+                "per month per$1,000 financed"
+            ),
+            source="ocr",
+            time_ms=15000,
+            frame_index=30,
+        ),
+        RuleTrigger(
+            rule_id="financial_apr",
+            severity="low",
+            evidence_text=(
+                "Offers exclude 4xe models. 0% APR financing for 60 months equals $16.67 "
+                "per month per $1,000 financed"
+            ),
+            source="ocr",
+            time_ms=16000,
+            frame_index=32,
+        ),
+    ]
+
+    result = aggregate("ad_1", _vlm(), rules)
+    rule_evidence = [item for item in result.evidence if item.source == "rule"]
+
+    assert len(rule_evidence) == 1
+    assert "equals $16.67" in rule_evidence[0].text
+    assert "per $1,000" in rule_evidence[0].text

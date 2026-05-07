@@ -12,7 +12,7 @@ export function formatPrice(price: PriceLike, context?: string | null) {
     const amount = Number.isInteger(price.amount)
       ? price.amount.toFixed(0)
       : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    return `${price.currency ?? "$"}${amount}`;
+    return `${displayCurrency(price.currency)}${amount}`;
   }
   if (price.text?.trim()) return price.text;
   const contextPrice = context?.match(/[$€£]\s?\d[\d,.]*/)?.[0];
@@ -66,4 +66,10 @@ function isMoreContextual(text: string, priceLabel: string) {
 
 function normalize(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function displayCurrency(currency?: string | null) {
+  const normalized = (currency ?? "$").trim().toUpperCase();
+  if (normalized === "USD" || normalized === "US$" || normalized === "$") return "$";
+  return currency ?? "$";
 }

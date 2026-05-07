@@ -65,7 +65,15 @@ _DISCLAIMER_TERMS = (
     "expires",
 )
 _DISCLAIMER_START_PATTERN = re.compile(
-    r"\b(?:offers?\s+exclude|for\s+well-qualified|not\s+all\s+buyers|tax|msrp\s+excludes|dealer\s+installed|expires)\b",
+    r"\b(?:offers?\s+exclude|for\s+well-qualified|not\s+all\s+buyers|"
+    r"msrp\s+excludes|dealer\s+installed|expires|subject\s+to|must\s+be\s+registered)\b",
+    re.IGNORECASE,
+)
+_EXACT_DISCLAIMER_PATTERN = re.compile(
+    r"\b(?:offers?\s+exclude|for\s+well-qualified|well-qualified|not\s+all\s+buyers|"
+    r"msrp\s+excludes|dealer\s+installed|terms\s+(?:and|&)\s+conditions|"
+    r"see\s+dealer|expires|through\s+[A-Z][A-Za-z]+|subject\s+to|"
+    r"must\s+be\s+registered)\b",
     re.IGNORECASE,
 )
 
@@ -77,6 +85,12 @@ def normalize_ocr_text(text: str) -> str:
     text = re.sub(r"\bONSELECT\b", "ON SELECT", text, flags=re.IGNORECASE)
     text = re.sub(r"\bOffersexclude\b", "Offers exclude", text, flags=re.IGNORECASE)
     text = re.sub(r"\bAPRfinancing\b", "APR financing", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bDUEAT\b", "DUE AT", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bLEASEDETAILS\b", "LEASE DETAILS", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bCALL(?=\d)", "CALL ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(\d{1,3})MOS\b", r"\1 MOS", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<=[a-z])\.(?=[A-Z0-9])", ". ", text)
+    text = re.sub(r"(?<=\d)\.(?=[A-Z])", ". ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -139,7 +153,7 @@ def merge_commercial_entities(
 ) -> MarketingEntities:
     base.products = _merge_strings(base.products, extracted.products)
     base.prices = [
-        price
+        _normalize_price_entity(price)
         for price in base.prices
         if price.text.strip() or (price.amount is not None and price.amount > 0)
     ]
@@ -153,6 +167,7 @@ def merge_commercial_entities(
         existing = {_compact_key(item.text) for item in base.offers}
         if _compact_key(offer.text) not in existing:
             base.offers.append(offer)
+    base.offers = _dedupe_offers(base.offers)
 
     for cta in extracted.ctas:
         existing = {_compact_key(item.text) for item in base.ctas}
@@ -163,6 +178,7 @@ def merge_commercial_entities(
         existing = {_compact_key(item.text) for item in base.disclaimers}
         if _compact_key(disclaimer.text) not in existing:
             base.disclaimers.append(disclaimer)
+    base.disclaimers = _dedupe_disclaimers(base.disclaimers)
 
     if base.offer_terms.expiry.text is None:
         base.offer_terms.expiry = extracted.offer_terms.expiry
@@ -289,7 +305,12 @@ def _extract_disclaimer_signal(
 
     if not allow_exact_text:
         return
-    disclaimer_text = _clean_entity_text(_context_window(text, 0, min(len(text), 160), max_len=220))
+    match = _EXACT_DISCLAIMER_PATTERN.search(text)
+    if not match:
+        return
+    disclaimer_text = _clean_entity_text(
+        _context_window(text, match.start(), min(len(text), match.start() + 160), max_len=220)
+    )
     key = _compact_key(disclaimer_text)
     if key and key not in seen_disclaimers:
         seen_disclaimers.add(key)
@@ -370,8 +391,116 @@ def _is_reliable_commercial_evidence(evidence: EvidenceItem) -> bool:
 
 def _price_key(price: PriceEntity) -> str:
     if price.amount is not None:
-        return f"{price.currency or ''}:{price.amount:.2f}"
+        return f"{_currency_symbol(price.currency)}:{price.amount:.2f}"
     return _compact_key(price.text)
+
+
+def _normalize_price_entity(price: PriceEntity) -> PriceEntity:
+    if price.amount is None:
+        return price
+    currency = _currency_symbol(price.currency)
+    text = _format_price(currency, price.amount)
+    return price.model_copy(update={"currency": currency, "text": text})
+
+
+def _currency_symbol(currency: str | None) -> str:
+    normalized = (currency or "$").strip().upper()
+    if normalized in {"USD", "US$", "$"}:
+        return "$"
+    return currency or "$"
+
+
+def _format_price(currency: str | None, amount: float) -> str:
+    amount_text = (
+        str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}".rstrip("0").rstrip(".")
+    )
+    return f"{_currency_symbol(currency)}{amount_text}"
+
+
+def _dedupe_offers(offers: list[OfferEntity]) -> list[OfferEntity]:
+    merged: dict[str, OfferEntity] = {}
+    order: list[str] = []
+    for offer in offers:
+        key = _offer_family_key(offer.text)
+        current = merged.get(key)
+        if current is None:
+            merged[key] = offer
+            order.append(key)
+            continue
+        if _offer_specificity(offer.text) > _offer_specificity(current.text):
+            evidence = offer.evidence or current.evidence
+            merged[key] = offer.model_copy(update={"evidence": evidence})
+    return [merged[key] for key in order]
+
+
+def _offer_family_key(text: str) -> str:
+    lower = text.lower()
+    apr = re.search(r"\b(\d+(?:\.\d+)?)\s*%", lower)
+    if "financing" in lower or "apr" in lower:
+        return f"financing:{apr.group(1) if apr else ''}"
+    if "monthly payment" in lower or "payments for" in lower:
+        return "payment_deferral"
+    if "sales tax" in lower:
+        return "sales_tax"
+    return _compact_key(text)
+
+
+def _offer_specificity(text: str) -> int:
+    lower = text.lower()
+    score = len(text)
+    if "apr" in lower:
+        score += 20
+    if re.search(r"\b\d{1,3}\s+months?\b", lower):
+        score += 15
+    if re.search(r"\b\d+(?:\.\d+)?\s*%", lower):
+        score += 10
+    return score
+
+
+def _dedupe_disclaimers(disclaimers: list[DisclaimerEntity]) -> list[DisclaimerEntity]:
+    merged: dict[str, DisclaimerEntity] = {}
+    order: list[str] = []
+    for disclaimer in disclaimers:
+        key = _disclaimer_family_key(disclaimer.text)
+        current = merged.get(key)
+        if current is None:
+            merged[key] = disclaimer
+            order.append(key)
+            continue
+        if _disclaimer_quality(disclaimer) > _disclaimer_quality(current):
+            evidence = disclaimer.evidence or current.evidence
+            merged[key] = disclaimer.model_copy(update={"evidence": evidence})
+    return [merged[key] for key in order]
+
+
+def _disclaimer_family_key(text: str) -> str:
+    lower = text.lower()
+    if "apr financing" in lower and ("4xe" in lower or "well-qualified" in lower):
+        return "apr_financing_terms"
+    if "well-qualified" in lower and "stellantis" in lower:
+        return "qualified_buyer_financing_terms"
+    if "offer ends" in lower or "expires" in lower:
+        return "offer_expiry"
+    if "see dealer" in lower:
+        return "dealer_details"
+    compact = _compact_key(text)
+    return compact[:120]
+
+
+def _disclaimer_quality(disclaimer: DisclaimerEntity) -> int:
+    text = _clean_entity_text(disclaimer.text)
+    source = disclaimer.evidence[0].source if disclaimer.evidence else None
+    score = 0
+    if source == "vlm":
+        score += 100
+    if not text.startswith("..."):
+        score += 20
+    if "..." not in text:
+        score += 10
+    score -= text.count("|") * 10
+    score -= text.count("***") * 10
+    score -= max(0, len(text) - 220) // 10
+    return score
 
 
 def _compact_key(value: str) -> str:
