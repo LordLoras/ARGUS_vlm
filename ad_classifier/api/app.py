@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -28,6 +29,17 @@ def create_app(
     config, config_file = load_config(config_path)
     resolved_db = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
     initialize_database(resolved_db)
+
+    # Surface agent loop diagnostics in the uvicorn console so SSE failures are
+    # visible without needing structlog wiring. Idempotent across re-creation.
+    agent_logger = logging.getLogger("ad_classifier.agent")
+    if agent_logger.level == logging.NOTSET or agent_logger.level > logging.INFO:
+        agent_logger.setLevel(logging.INFO)
+    if not agent_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        agent_logger.addHandler(handler)
+        agent_logger.propagate = False
 
     app = FastAPI(
         title="Ad Classifier API",

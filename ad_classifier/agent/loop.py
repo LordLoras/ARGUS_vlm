@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
@@ -19,6 +20,8 @@ from ad_classifier.db.repositories.agent import (
     AgentSessionRepository,
 )
 from ad_classifier.models.agent import AgentMessageRecord, AgentSessionRecord
+
+logger = logging.getLogger("ad_classifier.agent")
 
 
 def _new_session_id() -> str:
@@ -70,6 +73,7 @@ class AgentLoop:
         self, user_text: str, *, session_id: str | None = None
     ) -> Iterator[AgentEvent]:
         sid = self.ensure_session(session_id)
+        logger.info("agent.stream.start session=%s text=%r", sid, user_text[:120])
         yield AgentEvent(type="session", payload={"session_id": sid})
 
         history = _build_history(self.run.persistence_conn, sid)
@@ -99,13 +103,25 @@ class AgentLoop:
 
         final_text: str | None = None
         for iteration in range(1, self.run.config.max_iterations + 1):
+            logger.info(
+                "agent.stream.calling_lm session=%s iteration=%d msgs=%d tools=%d",
+                sid,
+                iteration,
+                len(messages),
+                len(tools),
+            )
             try:
                 response = self.run.client.complete(messages, tools=tools)
             except AgentClientError as exc:
                 error = f"agent client error: {exc}"
+                logger.warning("agent.stream.lm_error session=%s err=%s", sid, exc)
                 self._record_assistant_text(sid, error)
                 yield AgentEvent(
                     type="error", payload={"session_id": sid, "message": str(exc)}
+                )
+                yield AgentEvent(
+                    type="message",
+                    payload={"role": "assistant", "content": error, "session_id": sid},
                 )
                 yield AgentEvent(
                     type="final",
@@ -119,6 +135,13 @@ class AgentLoop:
                 yield AgentEvent(type="done", payload={"session_id": sid})
                 return
 
+            logger.info(
+                "agent.stream.lm_returned session=%s iteration=%d tool_calls=%d content_len=%d",
+                sid,
+                iteration,
+                len(response.tool_calls),
+                len(response.content or ""),
+            )
             assistant_message = _serialize_assistant(response)
             messages.append(assistant_message)
 
@@ -184,6 +207,10 @@ class AgentLoop:
         )
         self._record_assistant_text(sid, cap_msg)
         yield AgentEvent(type="error", payload={"session_id": sid, "message": cap_msg})
+        yield AgentEvent(
+            type="message",
+            payload={"role": "assistant", "content": cap_msg, "session_id": sid},
+        )
         yield AgentEvent(
             type="final",
             payload={

@@ -30,7 +30,10 @@ function projectMessages(messages: AgentMessage[] | undefined): RenderedMessage[
 export function Agent() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [localMessages, setLocalMessages] = useState<RenderedMessage[]>([]);
+  // Live messages appended from SSE `message` events during the current turn.
+  // Server is the source of truth; we render these on top of session.data?.messages
+  // until the loop reports `done`, at which point we refetch and clear.
+  const [streamMessages, setStreamMessages] = useState<RenderedMessage[]>([]);
   const [tools, setTools] = useState<ToolCard[]>([]);
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -52,7 +55,7 @@ export function Agent() {
     mutationFn: api.createAgentSession,
     onSuccess: async (result) => {
       setActiveId(result.session_id);
-      setLocalMessages([]);
+      setStreamMessages([]);
       setTools([]);
       await queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
     }
@@ -69,9 +72,12 @@ export function Agent() {
     () => projectMessages(session.data?.messages),
     [session.data?.messages]
   );
-  const messages: RenderedMessage[] = streaming || localMessages.length
-    ? [...serverMessages, ...localMessages]
-    : serverMessages;
+  // While streaming we show server history + this turn's stream events.
+  // After the turn ends and we refetch, server has everything → drop stream.
+  const messages: RenderedMessage[] =
+    streaming || streamMessages.length
+      ? [...serverMessages, ...streamMessages]
+      : serverMessages;
 
   const toolCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -82,13 +88,19 @@ export function Agent() {
   }, [tools]);
 
   const handleStreamEvent = (event: AgentStreamEvent) => {
+    // eslint-disable-next-line no-console
+    console.debug("[agent] event", event);
     switch (event.type) {
       case "session":
-        // session id already known to us
         break;
       case "message":
-        // The loop echoes user + assistant messages; we add user optimistically
-        // on submit and append assistant text on `final`. Skip both here.
+        setStreamMessages((current) => [
+          ...current,
+          {
+            role: event.payload.role,
+            content: event.payload.content
+          }
+        ]);
         break;
       case "tool_call":
         setTools((current) => [
@@ -121,32 +133,25 @@ export function Agent() {
         );
         break;
       case "final":
-        if (event.payload.text) {
-          setLocalMessages((current) => [
-            ...current,
-            { role: "assistant", content: event.payload.text }
-          ]);
-        }
-        break;
       case "error":
-        // `final` will follow with the same text, so the bubble is added there.
-        // Keep this branch for logging/future inline error styling.
+        // Both events carry text already delivered via a prior `message`
+        // event in this turn — nothing additional to render.
         break;
       case "done":
         setStreaming(false);
         cleanupRef.current = null;
-        void queryClient.invalidateQueries({ queryKey: ["agent-session", activeId] });
+        // Server has the persisted user + assistant rows; refetch and drop the
+        // local stream copies so we don't double-render.
+        void queryClient
+          .invalidateQueries({ queryKey: ["agent-session", activeId] })
+          .then(() => setStreamMessages([]));
         void queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
-        // Server now has both user + assistant rows; drop optimistic copies so
-        // we don't double-render once the refetch completes.
-        setLocalMessages([]);
         break;
     }
   };
 
   const submit = async (message: string) => {
     if (!message.trim() || streaming) return;
-    setLocalMessages((current) => [...current, { role: "user", content: message }]);
 
     let sid = activeId;
     if (!sid) {
@@ -157,8 +162,9 @@ export function Agent() {
         await queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
       } catch (err) {
         const text = err instanceof Error ? err.message : String(err);
-        setLocalMessages((current) => [
+        setStreamMessages((current) => [
           ...current,
+          { role: "user", content: message },
           { role: "assistant", content: `Failed to start session: ${text}` }
         ]);
         return;
@@ -166,6 +172,7 @@ export function Agent() {
     }
 
     setStreaming(true);
+    setTools([]);
     cleanupRef.current = streamAgentQuery(sid, message, handleStreamEvent);
   };
 
@@ -201,7 +208,7 @@ export function Agent() {
           onNew={() => newSession.mutate()}
           onSelect={(sessionId) => {
             setActiveId(sessionId);
-            setLocalMessages([]);
+            setStreamMessages([]);
             setTools([]);
           }}
         />
