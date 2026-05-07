@@ -57,18 +57,16 @@ export function ResultPanel({
             </div>
           </div>
           {sensitive ? <SensitivePill sensitive /> : null}
+          <div className="result-actions">
+            <Link className="btn btn-primary" to={`/library?ad=${detail.ad.id}`}>
+              Open full detail
+            </Link>
+            <button className="btn" onClick={onReset}>
+              Upload another
+            </button>
+          </div>
         </div>
       </div>
-
-      <Block title="Video preview">
-        {videoSrc ? (
-          <video src={videoSrc} controls playsInline style={{ width: "100%", borderRadius: 6, background: "#000" }} />
-        ) : (
-          <div className="obs-empty" style={{ padding: 24, textAlign: "center" }}>
-            preview unavailable
-          </div>
-        )}
-      </Block>
 
       <Block title="Brand & product">
         <dl className="kv">
@@ -92,7 +90,7 @@ export function ResultPanel({
               ) : null}
               <span className="badge badge-violet">price</span>
               <span style={{ flex: 1 }}>
-                <span>{formatPrice(price)}</span>
+                <span>{formatPrice(price, context)}</span>
                 {context ? <span className="price-context">{context}</span> : null}
               </span>
             </div>
@@ -115,6 +113,21 @@ export function ResultPanel({
         {prices.length === 0 && offers.length === 0 && ctas.length === 0 ? (
           <div className="obs-empty">No prices, offers, or CTAs detected.</div>
         ) : null}
+      </Block>
+
+      <Block title="Video preview">
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            controls
+            playsInline
+            style={{ width: "100%", maxHeight: 460, objectFit: "contain", borderRadius: 6, background: "#000" }}
+          />
+        ) : (
+          <div className="obs-empty" style={{ padding: 24, textAlign: "center" }}>
+            preview unavailable
+          </div>
+        )}
       </Block>
 
       <Block title="Disclaimers" count={disclaimers.length}>
@@ -195,22 +208,6 @@ export function ResultPanel({
           ))
         )}
       </Block>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          marginTop: 12,
-          justifyContent: "flex-end"
-        }}
-      >
-        <button className="btn" onClick={onReset}>
-          Upload another
-        </button>
-        <Link className="btn btn-primary" to={`/library?ad=${detail.ad.id}`}>
-          Open full detail
-        </Link>
-      </div>
     </div>
   );
 }

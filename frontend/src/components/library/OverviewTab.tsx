@@ -85,7 +85,7 @@ export function OverviewTab({
                   <TimestampChip timeMs={evidence?.time_ms} onSeek={onSeek} />
                   <span className="badge badge-violet">price</span>
                   <span style={{ flex: 1 }}>
-                    <span>{formatPrice(price)}</span>
+                    <span>{formatPrice(price, context)}</span>
                     {context ? <span className="price-context">{context}</span> : null}
                   </span>
                 </div>

@@ -7,28 +7,35 @@ type PriceLike = {
   evidence?: EvidenceItem[];
 };
 
-export function formatPrice(price: PriceLike) {
+export function formatPrice(price: PriceLike, context?: string | null) {
   if (price.amount != null) {
     const amount = Number.isInteger(price.amount)
       ? price.amount.toFixed(0)
       : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
     return `${price.currency ?? "$"}${amount}`;
   }
-  return price.text || "-";
+  if (price.text?.trim()) return price.text;
+  const contextPrice = context?.match(/[$€£]\s?\d[\d,.]*/)?.[0];
+  if (contextPrice) return contextPrice.replace(/\s+/g, "");
+  return "Price mentioned";
 }
 
 export function priceContext(price: PriceLike, evidenceItems: EvidenceItem[] = []) {
   const ownEvidence = price.evidence?.[0];
   const timeMs = ownEvidence?.time_ms;
   const priceLabel = formatPrice(price);
-  const tokens = priceTokens(price, priceLabel);
+  const tokens = priceTokens(price, priceLabel === "Price mentioned" ? "" : priceLabel);
 
   if (timeMs != null) {
-    const candidate = evidenceItems
+    const nearby = evidenceItems
       .filter((item) => item.text && item.time_ms != null)
       .filter((item) => Math.abs(Number(item.time_ms) - timeMs) <= 1500)
-      .filter((item) => hasAnyToken(item.text ?? "", tokens))
-      .sort((left, right) => Math.abs(Number(left.time_ms) - timeMs) - Math.abs(Number(right.time_ms) - timeMs))
+      .filter((item) => !tokens.length || hasAnyToken(item.text ?? "", tokens));
+    const candidate = nearby
+      .sort(
+        (left, right) =>
+          Math.abs(Number(left.time_ms) - timeMs) - Math.abs(Number(right.time_ms) - timeMs)
+      )
       .find((item) => isMoreContextual(item.text ?? "", priceLabel));
     if (candidate?.text) return candidate.text;
   }
@@ -45,7 +52,7 @@ function priceTokens(price: PriceLike, priceLabel: string) {
     price.text,
     price.amount != null ? String(price.amount) : null,
     price.amount != null ? String(Math.trunc(price.amount)) : null
-  ].filter((value): value is string => Boolean(value));
+  ].filter((value): value is string => Boolean(value && normalize(value).length > 0));
 }
 
 function hasAnyToken(text: string, tokens: string[]) {

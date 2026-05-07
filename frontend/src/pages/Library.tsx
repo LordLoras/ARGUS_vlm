@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AdDetailDrawer } from "../components/AdDetailDrawer";
 import { AdTable } from "../components/AdTable";
@@ -26,10 +26,24 @@ const emptyFilters: LibraryFilters = {
 
 export function Library() {
   const [filters, setFilters] = useState(emptyFilters);
-  const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedAdId, setSelectedAdIdState] = useState<string | null>(() => searchParams.get("ad"));
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const health = useApiHealth();
+  const queryAdId = searchParams.get("ad");
+
+  useEffect(() => {
+    if (queryAdId && queryAdId !== selectedAdId) setSelectedAdIdState(queryAdId);
+  }, [queryAdId, selectedAdId]);
+
+  const setSelectedAdId = (adId: string | null) => {
+    setSelectedAdIdState(adId);
+    const next = new URLSearchParams(searchParams);
+    if (adId) next.set("ad", adId);
+    else next.delete("ad");
+    setSearchParams(next, { replace: true });
+  };
 
   const adsQuery = useQuery({
     queryKey: ["ads", filters.q, filters.category, filters.brand],

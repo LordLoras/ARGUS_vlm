@@ -18,6 +18,7 @@ export function Upload() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<LogLine[]>([]);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const job = useJobEvents(jobId);
   const health = useApiHealth();
@@ -29,6 +30,7 @@ export function Upload() {
       setAdId(result.ad_id);
       setJobId(result.job_id ?? null);
       setStartedAt(Date.now());
+      setFinishedAt(null);
       setLogLines([
         timestampedLog("info", `accepted ${result.ad_id}`),
         ...(result.duplicate_of
@@ -42,9 +44,10 @@ export function Upload() {
   });
 
   useEffect(() => {
+    if (!startedAt || finishedAt) return;
     const handle = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(handle);
-  }, []);
+  }, [finishedAt, startedAt]);
 
   useEffect(() => {
     if (!job) return;
@@ -56,7 +59,14 @@ export function Upload() {
     setLogLines((lines) => [...lines, timestampedLog(level, `${job.state}: ${msg}`)]);
   }, [job]);
 
-  const isDone = (job?.state === "completed") || (adId && jobId === null);
+  const isDuplicateOrSkipped = Boolean(adId && jobId === null);
+  const isDone = job?.state === "completed" || isDuplicateOrSkipped;
+  const isTerminal = isDone || job?.state === "failed" || job?.state === "cancelled";
+
+  useEffect(() => {
+    if (isTerminal && startedAt && !finishedAt) setFinishedAt(Date.now());
+  }, [finishedAt, isTerminal, startedAt]);
+
   const detailQuery = useQuery({
     queryKey: ["upload-detail", adId],
     queryFn: () => api.getAd(adId ?? ""),
@@ -74,7 +84,7 @@ export function Upload() {
   });
 
   const sizeText = useMemo(() => (file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : ""), [file]);
-  const elapsed = startedAt ? now - startedAt : 0;
+  const elapsed = startedAt ? (finishedAt ?? now) - startedAt : 0;
 
   const reset = () => {
     setFile(null);
@@ -82,6 +92,7 @@ export function Upload() {
     setJobId(null);
     setLogLines([]);
     setStartedAt(null);
+    setFinishedAt(null);
     uploadMutation.reset();
   };
 
