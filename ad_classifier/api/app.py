@@ -38,9 +38,14 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "ad-classifier"}
 
+    # Local-first: allow any localhost / 127.0.0.1 port in addition to the
+    # explicit allowlist. Browsers treat localhost and 127.0.0.1 as different
+    # origins, and Vite may fall back to 5174 if 5173 is held; the regex
+    # covers both without forcing the analyst to edit config.yaml.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.api.cors_origins,
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -20,13 +20,17 @@ export function ResultPanel({
   onReset: () => void;
 }) {
   const cls = detail.classification;
-  const category = cls?.primary_category ?? detail.ad.primary_category ?? "uncategorized";
+  const category = detail.ad.primary_category ?? cls?.primary_category ?? "uncategorized";
   const sensitive = sensitiveCategories.has(category);
   const confidence = cls?.confidence ?? null;
   const risks = cls?.risk_labels ?? [];
-  const ent = detail.marketing_entities?.entities;
+  const ent = detail.marketing_entities;
   const evidence = (cls?.evidence ?? []).slice(0, 3);
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
+  const products = detail.ad.products_text
+    ? detail.ad.products_text.split(/,\s*/).filter(Boolean)
+    : ent?.products ?? [];
+  const disclaimers = ent?.disclaimers ?? [];
 
   return (
     <div className="upload-card" style={{ background: "transparent", border: 0, padding: 0 }}>
@@ -61,16 +65,14 @@ export function ResultPanel({
         )}
       </Block>
 
-      <Block title="Brand & creative">
+      <Block title="Brand & product">
         <dl className="kv">
           <dt>Brand</dt>
-          <dd>{ent?.brand?.name || detail.ad.brand_name || "—"}</dd>
+          <dd>{detail.ad.brand_name || ent?.brand?.name || "—"}</dd>
           <dt>Tagline</dt>
           <dd>{ent?.brand?.tagline || "—"}</dd>
           <dt>Products</dt>
-          <dd>{ent?.products?.join(", ") || detail.ad.products_text || "—"}</dd>
-          <dt>Aspect ratio</dt>
-          <dd className="mono">{ent?.creative_format?.aspect_ratio || "—"}</dd>
+          <dd>{products.length ? products.join(", ") : "—"}</dd>
         </dl>
       </Block>
 
@@ -78,18 +80,36 @@ export function ResultPanel({
         {(ent?.offers ?? []).map((offer, idx) => (
           <div key={`offer-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
             <span className="badge badge-violet">{offer.type ?? "offer"}</span>
-            <span style={{ flex: 1 }}>{offer.value || "—"}</span>
+            <span style={{ flex: 1 }}>{offer.text || offer.value || "—"}</span>
           </div>
         ))}
         {(ent?.ctas ?? []).map((cta, idx) => (
           <div key={`cta-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-            {cta.time_ms != null ? <span className="ts-link">{formatTimestamp(cta.time_ms)}</span> : null}
+            {cta.time_ms != null || cta.evidence?.[0]?.time_ms != null ? (
+              <span className="ts-link">{formatTimestamp(cta.time_ms ?? cta.evidence?.[0]?.time_ms)}</span>
+            ) : null}
             <span style={{ flex: 1 }}>{cta.text || "—"}</span>
           </div>
         ))}
         {(ent?.offers ?? []).length === 0 && (ent?.ctas ?? []).length === 0 ? (
           <div className="obs-empty">No offers or CTAs detected.</div>
         ) : null}
+      </Block>
+
+      <Block title="Disclaimers" count={disclaimers.length}>
+        {disclaimers.length === 0 ? (
+          <div className="obs-empty">No disclaimers extracted.</div>
+        ) : (
+          disclaimers.map((disclaimer, idx) => {
+            const timeMs = disclaimer.time_ms ?? disclaimer.evidence?.[0]?.time_ms;
+            return (
+              <div key={`disclaimer-${idx}`} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                {timeMs != null ? <span className="ts-link">{formatTimestamp(timeMs)}</span> : null}
+                <span style={{ flex: 1 }}>{disclaimer.text || "—"}</span>
+              </div>
+            );
+          })
+        )}
       </Block>
 
       <Block title="Observation tags" count={risks.length}>

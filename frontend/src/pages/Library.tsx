@@ -13,7 +13,7 @@ import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
 import { DownloadIcon, LibraryIcon, PlusIcon } from "../lib/icons";
 import { sensitiveCategories } from "../lib/taxonomy";
-import type { AdDetail } from "../lib/types";
+import type { AdDetail, AdRecord } from "../lib/types";
 
 const emptyFilters: LibraryFilters = {
   q: "",
@@ -65,7 +65,7 @@ export function Library() {
   const filteredAds = useMemo(() => {
     return ads.filter((ad) => {
       const detail = detailMap[ad.id];
-      const category = detail?.classification?.primary_category ?? ad.primary_category ?? "";
+      const category = ad.primary_category ?? detail?.classification?.primary_category ?? "";
       const riskLabels = detail?.classification?.risk_labels ?? [];
       if (filters.sensitiveOnly && !sensitiveCategories.has(category)) return false;
       if (filters.hasRiskTags && riskLabels.length === 0) return false;
@@ -81,7 +81,7 @@ export function Library() {
     let hasRisk = 0;
     ads.forEach((ad) => {
       const detail = detailMap[ad.id];
-      const category = detail?.classification?.primary_category ?? ad.primary_category ?? "";
+      const category = ad.primary_category ?? detail?.classification?.primary_category ?? "";
       const risks = detail?.classification?.risk_labels ?? [];
       if (category) byCategory[category] = (byCategory[category] ?? 0) + 1;
       risks.forEach((r) => (byRisk[r] = (byRisk[r] ?? 0) + 1));
@@ -105,11 +105,21 @@ export function Library() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: (patch: { brand_name?: string | null; products_text?: string | null; primary_category?: string | null }) =>
-      api.patchAd(selectedAdId ?? "", patch),
-    onSuccess: async () => {
+    mutationFn: ({ adId, patch }: { adId: string; patch: { brand_name?: string | null; products_text?: string | null; primary_category?: string | null } }) =>
+      api.patchAd(adId, patch),
+    onSuccess: async (updated) => {
+      queryClient.setQueryData<AdDetail>(["ad-detail", updated.id], (current) =>
+        current ? { ...current, ad: updated } : current
+      );
+      queryClient.setQueriesData<{ items: AdRecord[]; limit: number; offset: number }>(
+        { queryKey: ["ads"] },
+        (current) =>
+          current
+            ? { ...current, items: current.items.map((ad) => (ad.id === updated.id ? updated : ad)) }
+            : current
+      );
       await queryClient.invalidateQueries({ queryKey: ["ads"] });
-      await queryClient.invalidateQueries({ queryKey: ["ad-detail", selectedAdId] });
+      await queryClient.invalidateQueries({ queryKey: ["ad-detail", updated.id] });
     }
   });
 
@@ -237,7 +247,7 @@ export function Library() {
           frames={framesQuery.data?.items ?? []}
           related={relatedQuery.data}
           onClose={() => setSelectedAdId(null)}
-          onSave={(patch) => patchMutation.mutate(patch)}
+          onSave={(patch) => patchMutation.mutate({ adId: selectedDetail.ad.id, patch })}
           saving={patchMutation.isPending}
           onDelete={() => {
             if (

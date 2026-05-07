@@ -47,51 +47,59 @@ export type ClassificationRecord = {
 
 export type MarketingEntities = {
   ad_id?: string;
-  entities?: {
-    brand?: {
-      name?: string | null;
-      logo_present?: boolean | null;
-      logo_evidence?: unknown[];
-      tagline?: string | null;
-    };
-    products?: string[];
-    prices?: Array<{
-      amount?: number | null;
-      currency?: string | null;
-      frame_index?: number | null;
-      time_ms?: number | null;
-    }>;
-    offers?: Array<{
-      type?: string | null;
-      value?: string | null;
-      expiry_text?: string | null;
-      scarcity_signals?: string[];
-      urgency_signals?: string[];
-    }>;
-    ctas?: Array<{
-      text?: string | null;
-      destination_hint?: string | null;
-      time_ms?: number | null;
-      frame_index?: number | null;
-    }>;
-    social_proof?: {
-      rating?: number | null;
-      rating_count?: string | number | null;
-      testimonials?: string[];
-      badges?: string[];
-    };
-    disclaimers?: Array<{
-      text?: string | null;
-      time_ms?: number | null;
-      frame_index?: number | null;
-      is_small_print?: boolean | null;
-    }>;
-    creative_format?: {
-      aspect_ratio?: string | null;
-      duration_ms?: number | null;
-      has_voiceover?: boolean | null;
-      has_on_screen_text?: boolean | null;
-    };
+  brand?: {
+    name?: string | null;
+    confidence?: number | null;
+    logo_present?: boolean | null;
+    logo_evidence?: EvidenceItem[];
+    tagline?: string | null;
+  };
+  products?: string[];
+  prices?: Array<{
+    text?: string | null;
+    amount?: number | null;
+    currency?: string | null;
+    evidence?: EvidenceItem[];
+  }>;
+  offers?: Array<{
+    text?: string | null;
+    type?: string | null;
+    value?: string | null;
+    expiry_text?: string | null;
+    evidence?: EvidenceItem[];
+  }>;
+  ctas?: Array<{
+    text?: string | null;
+    destination_hint?: string | null;
+    time_ms?: number | null;
+    frame_index?: number | null;
+    evidence?: EvidenceItem[];
+  }>;
+  social_proof?: {
+    rating?: number | null;
+    rating_count?: string | number | null;
+    testimonials?: string[];
+    badges?: string[];
+  };
+  disclaimers?: Array<{
+    text?: string | null;
+    time_ms?: number | null;
+    frame_index?: number | null;
+    is_small_print?: boolean | null;
+    evidence?: EvidenceItem[];
+  }>;
+  creative_format?: {
+    aspect_ratio?: string | null;
+    duration_ms?: number | null;
+    has_voiceover?: boolean | null;
+    has_on_screen_text?: boolean | null;
+  };
+  contact_points?: {
+    websites?: Array<{ url?: string | null; domain?: string | null; display_text?: string | null; evidence?: EvidenceItem[] }>;
+    phone_numbers?: Array<{ raw?: string | null; normalized?: string | null; type?: string | null; evidence?: EvidenceItem[] }>;
+    social_handles?: unknown[];
+    app_store_links?: unknown[];
+    qr_codes?: unknown[];
   };
 };
 

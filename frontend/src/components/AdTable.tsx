@@ -46,7 +46,7 @@ export function AdTable({
           {ads.map((ad) => {
             const detail = details[ad.id];
             const cls = detail?.classification;
-            const category = cls?.primary_category ?? ad.primary_category ?? null;
+            const category = ad.primary_category ?? cls?.primary_category ?? null;
             const risks = cls?.risk_labels ?? [];
             const confidence = cls?.confidence ?? ad.brand_confidence ?? null;
             const ar = aspectFromDims(ad.width, ad.height);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { categories } from "../../lib/taxonomy";
 import type { AdDetail } from "../../lib/types";
@@ -21,8 +21,20 @@ export function EditTab({
   const [brand, setBrand] = useState(detail.ad.brand_name ?? "");
   const [products, setProducts] = useState(detail.ad.products_text ?? "");
   const [category, setCategory] = useState(
-    detail.classification?.primary_category ?? detail.ad.primary_category ?? "other"
+    detail.ad.primary_category ?? detail.classification?.primary_category ?? "other"
   );
+
+  useEffect(() => {
+    setBrand(detail.ad.brand_name ?? "");
+    setProducts(detail.ad.products_text ?? "");
+    setCategory(detail.ad.primary_category ?? detail.classification?.primary_category ?? "other");
+  }, [
+    detail.ad.id,
+    detail.ad.brand_name,
+    detail.ad.products_text,
+    detail.ad.primary_category,
+    detail.classification?.primary_category
+  ]);
 
   return (
     <div className="dcard">

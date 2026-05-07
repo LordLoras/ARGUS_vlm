@@ -32,6 +32,8 @@ export function AdDetailDrawer({
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
+  const videoAspect =
+    detail.ad.width && detail.ad.height ? `${detail.ad.width} / ${detail.ad.height}` : "16 / 9";
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -62,7 +64,7 @@ export function AdDetailDrawer({
           </span>
           <span style={{ color: "var(--fg-quiet)" }}>·</span>
           <span className="mono" style={{ color: "var(--accent-2)", fontSize: 12 }}>
-            {detail.classification?.primary_category ?? detail.ad.primary_category ?? "uncategorized"}
+            {detail.ad.primary_category ?? detail.classification?.primary_category ?? "uncategorized"}
           </span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             <button className="btn btn-sm" onClick={() => setTab("Edit")}>
@@ -83,13 +85,13 @@ export function AdDetailDrawer({
         </header>
 
         <div className="drawer-body">
-          <div className="video-stage">
+          <div className="video-stage" style={{ aspectRatio: videoAspect }}>
             {videoSrc ? (
               <video
                 src={videoSrc}
                 controls
                 playsInline
-                style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", objectFit: "cover", background: "#000" }}
+                style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
               />
             ) : (
               <>
