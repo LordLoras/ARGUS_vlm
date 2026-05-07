@@ -123,6 +123,16 @@ def test_products_mapped():
     assert result.marketing_entities.products == ["Product A", "Product B"]
 
 
+def test_zero_amount_prices_are_not_mapped():
+    from ad_classifier.vlm.models import VLMPrice
+
+    vlm = _vlm()
+    vlm.marketing_entities.prices = [VLMPrice(amount=0), VLMPrice(amount=95, currency="$")]
+    result = aggregate("ad_1", vlm, [])
+
+    assert [price.amount for price in result.marketing_entities.prices] == [95]
+
+
 def test_tracking_fields_mapped():
     from ad_classifier.vlm.models import (
         VLMLogoEvidence,

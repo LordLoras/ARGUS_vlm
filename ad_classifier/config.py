@@ -79,7 +79,7 @@ class PaddleVLGatingConfig(BaseModel):
 class PaddleVLConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    enabled: bool = True
+    enabled: bool = False
     command: str = (
         "paddlex --pipeline PaddleOCR-VL-native.yaml" " --input {image_path} --output {output_dir}"
     )

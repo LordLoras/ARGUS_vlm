@@ -5,6 +5,12 @@ from collections.abc import Iterable
 from urllib.parse import parse_qsl, urlparse
 
 from ad_classifier.ingest.models import WhisperTranscript
+from ad_classifier.marketing.commercial import (
+    extract_commercial_entities,
+    merge_commercial_entities,
+    normalize_ocr_text,
+    repair_products,
+)
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
     ContactPoints,
@@ -58,8 +64,9 @@ def extract_tracking_entities(
     transcript: WhisperTranscript,
 ) -> MarketingEntities:
     evidence_items = _evidence_from_sources(ocr_items, transcript)
-    contact_points = ContactPoints()
-    offer_terms = OfferTerms()
+    entities = MarketingEntities(contact_points=ContactPoints(), offer_terms=OfferTerms())
+    contact_points = entities.contact_points
+    offer_terms = entities.offer_terms
 
     seen_urls: set[str] = set()
     seen_phones: set[str] = set()
@@ -67,12 +74,13 @@ def extract_tracking_entities(
     seen_codes: set[str] = set()
 
     for evidence in evidence_items:
-        text = evidence.text
+        text = normalize_ocr_text(evidence.text)
+        normalized_evidence = evidence.model_copy(update={"text": text})
         if not _is_reliable_tracking_evidence(evidence):
             continue
 
         for raw_url in _URL_PATTERN.findall(text):
-            website = _website_from_match(raw_url, evidence)
+            website = _website_from_match(raw_url, normalized_evidence)
             if website is None or website.url in seen_urls:
                 continue
             seen_urls.add(website.url)
@@ -89,19 +97,19 @@ def extract_tracking_entities(
                             platform=platform,
                             handle=handle,
                             url=website.url,
-                            evidence=[evidence],
+                            evidence=[normalized_evidence],
                         )
                     )
 
         for raw_phone in _PHONE_PATTERN.findall(text):
-            phone = _phone_entity(raw_phone, evidence, phone_type="phone")
+            phone = _phone_entity(raw_phone, normalized_evidence, phone_type="phone")
             key = phone.normalized or phone.raw
             if key not in seen_phones:
                 seen_phones.add(key)
                 contact_points.phone_numbers.append(phone)
 
         for raw_phone in _VANITY_PHONE_PATTERN.findall(text):
-            phone = _phone_entity(raw_phone, evidence, phone_type="vanity")
+            phone = _phone_entity(raw_phone, normalized_evidence, phone_type="vanity")
             key = phone.normalized or phone.raw
             if key not in seen_phones:
                 seen_phones.add(key)
@@ -112,7 +120,7 @@ def extract_tracking_entities(
             if key not in seen_handles:
                 seen_handles.add(key)
                 contact_points.social_handles.append(
-                    SocialHandleEntity(platform="other", handle=handle, evidence=[evidence])
+                    SocialHandleEntity(platform="other", handle=handle, evidence=[normalized_evidence])
                 )
 
         for code in _PROMO_CODE_PATTERN.findall(text):
@@ -120,13 +128,17 @@ def extract_tracking_entities(
             if normalized not in seen_codes:
                 seen_codes.add(normalized)
                 offer_terms.promo_codes.append(
-                    PromoCodeEntity(code=normalized, raw_text=code, evidence=[evidence])
+                    PromoCodeEntity(code=normalized, raw_text=code, evidence=[normalized_evidence])
                 )
 
         lower = text.lower()
         if "qr" in lower and "code" in lower:
             contact_points.qr_codes.append(
-                QRCodeEntity(present=True, destination_hint="visible QR code", evidence=[evidence])
+                QRCodeEntity(
+                    present=True,
+                    destination_hint="visible QR code",
+                    evidence=[normalized_evidence],
+                )
             )
         for term in _SCARCITY_TERMS:
             if term in lower and term not in offer_terms.scarcity_signals:
@@ -136,16 +148,27 @@ def extract_tracking_entities(
                 offer_terms.urgency_signals.append(term)
 
     landing_page = _landing_page_from_websites(contact_points.websites)
-    return MarketingEntities(
-        contact_points=contact_points,
-        landing_page=landing_page,
-        offer_terms=offer_terms,
-    )
+    entities.landing_page = landing_page
+    return merge_commercial_entities(entities, extract_commercial_entities(evidence_items))
+
+
+def enrich_marketing_entities(
+    base: MarketingEntities,
+    *,
+    ocr_items: Iterable[OCRItem],
+    transcript: WhisperTranscript,
+) -> MarketingEntities:
+    """Repair VLM entities with cheap deterministic OCR/transcript extraction."""
+    base.products = repair_products(base.products, base.brand.name or base.advertiser.brand_name)
+    extracted = extract_tracking_entities(ocr_items=ocr_items, transcript=transcript)
+    return merge_tracking_entities(base, extracted)
 
 
 def merge_tracking_entities(
     base: MarketingEntities, extracted: MarketingEntities
 ) -> MarketingEntities:
+    base = merge_commercial_entities(base, extracted)
+
     for website in extracted.contact_points.websites:
         existing_urls = {item.url for item in base.contact_points.websites}
         existing_domains = {
@@ -200,6 +223,7 @@ def _evidence_from_sources(
     ocr_items: Iterable[OCRItem],
     transcript: WhisperTranscript,
 ) -> list[EvidenceItem]:
+    ocr_list = list(ocr_items)
     evidence: list[EvidenceItem] = [
         EvidenceItem(
             time_ms=item.time_ms,
@@ -209,9 +233,10 @@ def _evidence_from_sources(
             bbox=item.bbox,
             confidence=item.confidence,
         )
-        for item in ocr_items
+        for item in ocr_list
         if item.text
     ]
+    evidence.extend(_joined_ocr_evidence(ocr_list))
     evidence.extend(
         EvidenceItem(
             time_ms=segment.start_ms,
@@ -223,6 +248,34 @@ def _evidence_from_sources(
         if segment.text
     )
     return evidence
+
+
+def _joined_ocr_evidence(ocr_items: list[OCRItem]) -> list[EvidenceItem]:
+    by_frame: dict[int, list[OCRItem]] = {}
+    for item in ocr_items:
+        if item.text:
+            by_frame.setdefault(item.frame_index, []).append(item)
+
+    joined: list[EvidenceItem] = []
+    for frame_index, frame_items in by_frame.items():
+        if len(frame_items) < 2:
+            continue
+        text = normalize_ocr_text(" ".join(item.text for item in frame_items if item.text))
+        if not text:
+            continue
+        confidences = [item.confidence for item in frame_items if item.confidence is not None]
+        confidence = sum(confidences) / len(confidences) if confidences else None
+        joined.append(
+            EvidenceItem(
+                time_ms=frame_items[0].time_ms,
+                frame_index=frame_index,
+                source="ocr",
+                text=text,
+                confidence=confidence,
+                reason="joined OCR frame text",
+            )
+        )
+    return joined
 
 
 def _website_from_match(raw_url: str, evidence: EvidenceItem) -> WebsiteEntity | None:
@@ -285,7 +338,7 @@ def _landing_page_from_websites(websites: list[WebsiteEntity]) -> LandingPageEnt
 def _merge_strings(left: list[str], right: list[str]) -> list[str]:
     merged = list(left)
     for item in right:
-        if item not in merged:
+        if item and item not in merged:
             merged.append(item)
     return merged
 

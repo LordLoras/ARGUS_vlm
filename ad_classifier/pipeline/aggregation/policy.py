@@ -134,6 +134,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
             ],
         )
         for p in me.prices
+        if p.amount > 0
     ]
 
     offers = [
