@@ -72,6 +72,22 @@ def test_tool_call_then_answer(writable_conn, readonly_conn):
     assert tool_row.tool_result_json is not None
 
 
+def test_empty_final_after_list_ads_gets_deterministic_fallback(writable_conn, readonly_conn):
+    tool_call = ToolCall(id="call_1", name="list_ads", arguments={"brand": "Jeep"})
+    client = MockAgentClient(
+        [
+            AgentMessage(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
+            AgentMessage(content="", tool_calls=[], finish_reason="stop"),
+        ]
+    )
+    loop = _build_loop(writable_conn, readonly_conn, client)
+    answer = loop.ask("what Jeep models?")
+
+    assert "`ad_jeep_a`" in answer.text
+    assert "Wrangler" in answer.text
+    assert "Grand Cherokee" in answer.text
+
+
 def test_unknown_tool_call_returns_error_to_model(writable_conn, readonly_conn):
     bad_call = ToolCall(id="call_x", name="hack_db", arguments={})
     client = MockAgentClient(

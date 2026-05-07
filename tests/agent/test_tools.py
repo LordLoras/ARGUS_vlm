@@ -28,6 +28,7 @@ def test_list_ads_returns_seeded_ads(readonly_conn, agent_config):
 def test_list_ads_brand_filter(readonly_conn, agent_config):
     result = ListAdsTool().call({"brand": "Jeep"}, _ctx(readonly_conn, agent_config))
     assert {item["ad_id"] for item in result.data} == {"ad_jeep_a", "ad_jeep_b"}
+    assert {item["products"] for item in result.data} == {"Wrangler", "Grand Cherokee"}
 
 
 def test_list_ads_truncation_flag(readonly_conn, agent_config):
@@ -40,6 +41,13 @@ def test_count_ads(readonly_conn, agent_config):
     result = CountAdsTool().call({"brand": "Jeep"}, _ctx(readonly_conn, agent_config))
     assert result.ok
     assert result.data["count"] == 2
+
+
+def test_count_ads_q_filter(readonly_conn, agent_config):
+    result = CountAdsTool().call({"q": "Wrangler"}, _ctx(readonly_conn, agent_config))
+    assert result.ok
+    assert result.data["count"] == 1
+    assert result.data["filters"] == {"q": "Wrangler"}
 
 
 def test_get_ad_returns_classification_and_marketing(readonly_conn, agent_config):

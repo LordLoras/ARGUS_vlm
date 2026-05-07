@@ -134,7 +134,11 @@ def test_extract_commercial_terms_from_joined_ocr_frame():
 def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
     base = MarketingEntities()
     base.brand.name = "Jeep"
-    base.products = ["2025 Grand Cherokee", "20MT66 Jeep Grand Cherokee Limited 4x4"]
+    base.products = [
+        "2025 Grand Cherokee",
+        "20MT66 Jeep Grand Cherokee Limited 4x4",
+        "2026 Jeep Wrangler 4-Door Sport S",
+    ]
 
     enriched = enrich_marketing_entities(
         base,
@@ -152,6 +156,7 @@ def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
 
     assert "20MT66" not in ", ".join(enriched.products)
     assert "Grand Cherokee Limited 4x4" in enriched.products
+    assert "2026 Wrangler 4-Door Sport S" in enriched.products
     assert enriched.prices[0].amount == 4500
     assert any("BONUS CASH ALLOWANCE" in offer.text for offer in enriched.offers)
 

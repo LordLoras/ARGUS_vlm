@@ -1301,10 +1301,30 @@ button.ts-link:hover {
   border-bottom-color: transparent;
 }
 .bubble-assistant .body { white-space: pre-wrap; word-wrap: break-word; }
-.bubble-assistant .body p { margin: 0 0 8px; }
-.bubble-assistant .body p:last-child { margin: 0; }
-.bubble-assistant .body strong { color: var(--fg); font-weight: 600; }
-.bubble-assistant .body code {
+.md-message {
+  white-space: normal;
+  word-break: normal;
+}
+.md-message p { margin: 0 0 8px; }
+.md-message p:last-child { margin: 0; }
+.md-message h3,
+.md-message h4 {
+  margin: 14px 0 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--fg);
+  font-weight: 650;
+}
+.md-message h3:first-child,
+.md-message h4:first-child { margin-top: 0; }
+.md-message ul,
+.md-message ol {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+.md-message li { margin: 3px 0; }
+.md-message strong { color: var(--fg); font-weight: 650; }
+.md-message code {
   font-family: var(--mono);
   font-size: 12px;
   background: var(--bg-2);
@@ -1312,6 +1332,20 @@ button.ts-link:hover {
   border-radius: 3px;
   border: 1px solid var(--border);
 }
+.md-message pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.md-message a { color: var(--accent-2); text-decoration: underline; text-underline-offset: 2px; }
 
 .streaming-cursor {
   display: inline-block;

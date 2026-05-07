@@ -1,3 +1,4 @@
+import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCallCard, type ToolCard } from "./ToolCallCard";
 
 type RenderedMessage = { role: "user" | "assistant"; content: string };
@@ -97,7 +98,9 @@ function Bubble({ role, content }: RenderedMessage) {
   return (
     <div className="bubble-assistant">
       <div className="avatar" />
-      <div className="body">{content}</div>
+      <div className="body">
+        <MarkdownMessage content={content} />
+      </div>
     </div>
   );
 }

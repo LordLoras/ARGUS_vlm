@@ -12,7 +12,8 @@ class ListAdsTool(AgentTool):
     description = (
         "List ads filtered by brand, primary_category, status, or a free-text "
         "substring (matches id, brand, advertiser, products, website, phone, "
-        "landing page domain). Use this for browsing; for counts, prefer count_ads."
+        "landing page domain). Returns products_text so product/model questions "
+        "can usually be answered without get_ad. For counts, prefer count_ads."
     )
 
     def parameters(self) -> dict[str, Any]:
@@ -66,6 +67,10 @@ class ListAdsTool(AgentTool):
                     "primary_category": ad.primary_category,
                     "status": ad.status,
                     "duration_ms": ad.duration_ms,
+                    "products": ad.products_text,
+                    "website_domain": ad.website_domain,
+                    "phone_number": ad.phone_number,
+                    "landing_page_domain": ad.landing_page_domain,
                     "ingested_at": ad.ingested_at.isoformat() if ad.ingested_at else None,
                 }
                 for ad in ads

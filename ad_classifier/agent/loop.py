@@ -102,6 +102,7 @@ class AgentLoop:
         tools = self.run.catalog.openai_tools()
 
         final_text: str | None = None
+        turn_tool_results: list[ToolResult] = []
         for iteration in range(1, self.run.config.max_iterations + 1):
             logger.info(
                 "agent.stream.calling_lm session=%s iteration=%d msgs=%d tools=%d",
@@ -147,6 +148,8 @@ class AgentLoop:
 
             if not response.tool_calls:
                 final_text = response.content or ""
+                if not final_text.strip() and turn_tool_results:
+                    final_text = _fallback_answer_from_tool_results(turn_tool_results)
                 self._record_assistant_text(sid, final_text)
                 yield AgentEvent(
                     type="message",
@@ -185,6 +188,7 @@ class AgentLoop:
                     result = self.run.catalog.call(call.name, call.arguments, ctx)
 
                 self._record_tool(sid, call, result)
+                turn_tool_results.append(result)
                 messages.append(_serialize_tool_result(call, result))
                 yield AgentEvent(
                     type="tool_result",
@@ -278,6 +282,42 @@ def _serialize_tool_result(call: ToolCall, result: ToolResult) -> dict[str, Any]
         "name": call.name,
         "content": json.dumps(result.to_payload(), default=str),
     }
+
+
+def _fallback_answer_from_tool_results(results: list[ToolResult]) -> str:
+    latest = results[-1]
+    if latest.name == "count_ads" and latest.ok and isinstance(latest.data, dict):
+        count = latest.data.get("count")
+        filters = latest.data.get("filters") or {}
+        filter_text = ", ".join(f"{key}={value}" for key, value in filters.items())
+        suffix = f" matching {filter_text}" if filter_text else ""
+        return f"I found {count} ads{suffix}."
+
+    if latest.name == "list_ads" and latest.ok and isinstance(latest.data, list):
+        rows = latest.data
+        if not rows:
+            return "I could not find matching ads."
+        lines = [f"I found {len(rows)} matching ads:"]
+        for row in rows[:10]:
+            ad_id = row.get("ad_id") or row.get("id") or "unknown"
+            brand = row.get("brand") or "unknown brand"
+            products = row.get("products") or row.get("products_text") or "products not stored"
+            lines.append(f"- `{ad_id}` ({brand}): {products}")
+        if latest.truncated:
+            lines.append("- Results were truncated; narrow the filter or ask for the next page.")
+        return "\n".join(lines)
+
+    if latest.name == "get_ad" and latest.ok and isinstance(latest.data, dict):
+        ad = latest.data.get("ad") or {}
+        marketing = latest.data.get("marketing_entities") or {}
+        products = marketing.get("products") or ad.get("products_text") or []
+        if isinstance(products, list):
+            product_text = ", ".join(products) if products else "products not stored"
+        else:
+            product_text = str(products)
+        return f"`{ad.get('id', 'ad')}` is a {ad.get('brand_name') or 'brand'} ad. Products: {product_text}."
+
+    return "I ran the requested database tool, but the model returned an empty answer."
 
 
 def _build_history(conn: sqlite3.Connection, session_id: str) -> list[dict[str, Any]]:

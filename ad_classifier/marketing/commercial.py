@@ -119,6 +119,12 @@ def repair_products(products: list[str], brand_name: str | None) -> list[str]:
                 cleaned,
                 flags=re.IGNORECASE,
             ).strip()
+            cleaned = re.sub(
+                rf"^\s*(20\d{{2}})\s+{re.escape(brand_name)}\s+",
+                r"\1 ",
+                cleaned,
+                flags=re.IGNORECASE,
+            ).strip()
         cleaned = cleaned.strip(" ,-")
         if len(cleaned) < 2:
             continue
