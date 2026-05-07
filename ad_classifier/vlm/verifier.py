@@ -118,6 +118,338 @@ def _build_content(bundle: EvidenceBundle) -> list[dict]:
     return parts
 
 
+def _vlm_response_format() -> dict:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "ad_verification_result",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "primary_category": {"type": "string"},
+                    "risk_labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                    },
+                    "decision": {
+                        "type": "string",
+                        "enum": ["allow", "flag", "review"],
+                    },
+                    "needs_human_review": {"type": "boolean"},
+                    "ocr_quality": {
+                        "type": "object",
+                        "properties": {
+                            "overall": {
+                                "type": "string",
+                                "enum": ["good", "mixed", "poor"],
+                            },
+                            "possible_errors": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "time_ms": {"type": "integer"},
+                                        "frame_index": {"type": "integer"},
+                                        "raw_ocr": {"type": "string"},
+                                        "corrected_text": {"type": "string"},
+                                        "confidence": {
+                                            "anyOf": [
+                                                {"type": "number", "minimum": 0, "maximum": 1},
+                                                {"type": "null"},
+                                            ]
+                                        },
+                                        "reason": {"type": "string"},
+                                    },
+                                    "required": [
+                                        "time_ms",
+                                        "frame_index",
+                                        "raw_ocr",
+                                        "corrected_text",
+                                        "confidence",
+                                        "reason",
+                                    ],
+                                },
+                            },
+                            "missed_text": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "time_ms": {"type": "integer"},
+                                        "frame_index": {"type": "integer"},
+                                        "text": {"type": "string"},
+                                        "location": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "confidence": {
+                                            "anyOf": [
+                                                {"type": "number", "minimum": 0, "maximum": 1},
+                                                {"type": "null"},
+                                            ]
+                                        },
+                                        "reason": {"type": "string"},
+                                    },
+                                    "required": [
+                                        "time_ms",
+                                        "frame_index",
+                                        "text",
+                                        "location",
+                                        "confidence",
+                                        "reason",
+                                    ],
+                                },
+                            },
+                        },
+                        "required": ["overall", "possible_errors", "missed_text"],
+                    },
+                    "evidence": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "time_ms": {"type": "integer"},
+                                "frame_index": {"type": "integer"},
+                                "source": {"type": "string"},
+                                "text": {"type": "string"},
+                                "reason": {"type": "string"},
+                                "confidence": {
+                                    "anyOf": [
+                                        {"type": "number", "minimum": 0, "maximum": 1},
+                                        {"type": "null"},
+                                    ]
+                                },
+                            },
+                            "required": [
+                                "time_ms",
+                                "frame_index",
+                                "source",
+                                "text",
+                                "reason",
+                                "confidence",
+                            ],
+                        },
+                    },
+                    "marketing_entities": {
+                        "type": "object",
+                        "properties": {
+                            "brand": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                                    "logo_present": {"type": "boolean"},
+                                    "logo_evidence": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "time_ms": {"type": "integer"},
+                                                "frame_index": {"type": "integer"},
+                                                "reason": {"type": "string"},
+                                            },
+                                            "required": ["time_ms", "frame_index", "reason"],
+                                        },
+                                    },
+                                    "tagline": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                                },
+                                "required": [
+                                    "name",
+                                    "logo_present",
+                                    "logo_evidence",
+                                    "tagline",
+                                ],
+                            },
+                            "products": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "prices": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "amount": {"type": "number"},
+                                        "currency": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "frame_index": {"type": "integer"},
+                                        "time_ms": {"type": "integer"},
+                                        "discounted_from": {
+                                            "anyOf": [{"type": "number"}, {"type": "null"}]
+                                        },
+                                        "discount_pct": {
+                                            "anyOf": [{"type": "number"}, {"type": "null"}]
+                                        },
+                                    },
+                                    "required": [
+                                        "amount",
+                                        "currency",
+                                        "frame_index",
+                                        "time_ms",
+                                        "discounted_from",
+                                        "discount_pct",
+                                    ],
+                                },
+                            },
+                            "offers": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {"type": "string"},
+                                        "value": {"type": "string"},
+                                        "expiry_text": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "expiry_resolved": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "promo_code": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "scarcity_signals": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "urgency_signals": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                    },
+                                    "required": [
+                                        "type",
+                                        "value",
+                                        "expiry_text",
+                                        "expiry_resolved",
+                                        "promo_code",
+                                        "scarcity_signals",
+                                        "urgency_signals",
+                                    ],
+                                },
+                            },
+                            "ctas": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "text": {"type": "string"},
+                                        "destination_hint": {
+                                            "anyOf": [{"type": "string"}, {"type": "null"}]
+                                        },
+                                        "time_ms": {"type": "integer"},
+                                        "frame_index": {"type": "integer"},
+                                    },
+                                    "required": [
+                                        "text",
+                                        "destination_hint",
+                                        "time_ms",
+                                        "frame_index",
+                                    ],
+                                },
+                            },
+                            "social_proof": {
+                                "type": "object",
+                                "properties": {
+                                    "rating": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                                    "rating_count": {
+                                        "anyOf": [{"type": "string"}, {"type": "null"}]
+                                    },
+                                    "testimonials": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                    "badges": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                },
+                                "required": ["rating", "rating_count", "testimonials", "badges"],
+                            },
+                            "disclaimers": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "text": {"type": "string"},
+                                        "time_ms": {"type": "integer"},
+                                        "frame_index": {"type": "integer"},
+                                        "is_small_print": {"type": "boolean"},
+                                    },
+                                    "required": [
+                                        "text",
+                                        "time_ms",
+                                        "frame_index",
+                                        "is_small_print",
+                                    ],
+                                },
+                            },
+                            "creative_format": {
+                                "type": "object",
+                                "properties": {
+                                    "aspect_ratio": {
+                                        "anyOf": [{"type": "string"}, {"type": "null"}]
+                                    },
+                                    "duration_ms": {"type": "integer"},
+                                    "has_voiceover": {"type": "boolean"},
+                                    "has_on_screen_text": {"type": "boolean"},
+                                },
+                                "required": [
+                                    "aspect_ratio",
+                                    "duration_ms",
+                                    "has_voiceover",
+                                    "has_on_screen_text",
+                                ],
+                            },
+                        },
+                        "required": [
+                            "brand",
+                            "products",
+                            "prices",
+                            "offers",
+                            "ctas",
+                            "social_proof",
+                            "disclaimers",
+                            "creative_format",
+                        ],
+                    },
+                    "conflicts": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "description": {"type": "string"},
+                                "sources": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "resolution": {"type": "string"},
+                            },
+                            "required": ["description", "sources", "resolution"],
+                        },
+                    },
+                    "summary": {"type": "string"},
+                },
+                "required": [
+                    "primary_category",
+                    "risk_labels",
+                    "confidence",
+                    "decision",
+                    "needs_human_review",
+                    "ocr_quality",
+                    "evidence",
+                    "marketing_entities",
+                    "conflicts",
+                    "summary",
+                ],
+            },
+        },
+    }
+
+
 class HTTPVLMVerifier(VLMVerifier):
     def __init__(
         self,
@@ -154,6 +486,7 @@ class HTTPVLMVerifier(VLMVerifier):
             ],
             "temperature": 0.1,
             "max_tokens": 4096,
+            "response_format": _vlm_response_format(),
         }
 
         last_error: str = "no attempts made"

@@ -12,6 +12,7 @@ from ad_classifier.vlm.verifier import (
     MockVLMVerifier,
     _extract_json,
     _normalize_chat_endpoint,
+    _vlm_response_format,
 )
 
 # ---------------------------------------------------------------------------
@@ -133,6 +134,28 @@ def test_http_verifier_happy_path():
     assert result.primary_category == "retail_ecommerce"
     assert result.confidence == pytest.approx(0.85)
     assert result.parse_ok is True
+
+
+def test_http_verifier_requests_structured_output():
+    payload = {
+        "primary_category": "retail_ecommerce",
+        "risk_labels": [],
+        "confidence": 0.85,
+        "decision": "allow",
+        "needs_human_review": False,
+        "summary": "clean ad",
+    }
+    bundle = _make_bundle()
+    with patch("httpx.post", return_value=_mock_response(payload)) as post:
+        verifier = HTTPVLMVerifier(endpoint="http://mock/v1/chat/completions")
+        verifier.verify(bundle)
+
+    request_payload = post.call_args.kwargs["json"]
+    assert request_payload["response_format"]["type"] == "json_schema"
+    assert (
+        request_payload["response_format"]["json_schema"]["name"]
+        == _vlm_response_format()["json_schema"]["name"]
+    )
 
 
 def test_http_verifier_reads_reasoning_content_when_content_empty():
