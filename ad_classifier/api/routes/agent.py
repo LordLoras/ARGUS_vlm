@@ -14,7 +14,6 @@ from sse_starlette.sse import EventSourceResponse
 from ad_classifier.agent.catalog import ToolCatalog
 from ad_classifier.agent.client import AgentClient, HTTPAgentClient
 from ad_classifier.agent.loop import AgentLoop, AgentRunContext
-from ad_classifier.agent.models import AgentEvent
 from ad_classifier.agent.prompt import render_agent_prompt
 from ad_classifier.agent.schema import render_schema_summary
 from ad_classifier.api.deps import get_config, get_db_path
@@ -160,31 +159,39 @@ async def agent_events(
     session_id: str, q: str, request: Request
 ) -> EventSourceResponse:
     loop, persistence, tool_conn = _build_loop(request)
-    queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
-    main_loop = asyncio.get_running_loop()
-
-    def producer() -> None:
-        try:
-            for event in loop.stream(q, session_id=session_id):
-                asyncio.run_coroutine_threadsafe(queue.put(event), main_loop)
-        finally:
-            asyncio.run_coroutine_threadsafe(queue.put(None), main_loop)
-            persistence.close()
-            tool_conn.close()
 
     async def stream():
-        producer_task = asyncio.create_task(asyncio.to_thread(producer))
+        # The loop is a sync generator (httpx is sync). Pull each event in a
+        # threadpool so the FastAPI event loop stays responsive, and yield each
+        # one immediately so sse-starlette flushes it to the client.
+        iterator = iter(loop.stream(q, session_id=session_id))
         try:
             while True:
-                event = await queue.get()
-                if event is None:
+                try:
+                    event = await asyncio.to_thread(next, iterator)
+                except StopIteration:
                     break
                 yield {
                     "event": event.type,
                     "data": json.dumps(event.payload, default=str),
                 }
+        except Exception as exc:  # pragma: no cover - surfaced as SSE error
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {
+                        "session_id": session_id,
+                        "message": f"{type(exc).__name__}: {exc}",
+                    }
+                ),
+            }
+            yield {
+                "event": "done",
+                "data": json.dumps({"session_id": session_id}),
+            }
         finally:
-            await asyncio.gather(producer_task, return_exceptions=True)
+            persistence.close()
+            tool_conn.close()
 
     return EventSourceResponse(stream())
 

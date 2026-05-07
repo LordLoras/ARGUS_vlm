@@ -58,12 +58,6 @@ export function Agent() {
     }
   });
 
-  // When the user switches sessions, drop optimistic state — server data wins.
-  useEffect(() => {
-    setLocalMessages([]);
-    setTools([]);
-  }, [activeId]);
-
   // Cancel an in-flight stream on unmount.
   useEffect(() => {
     return () => {
