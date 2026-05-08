@@ -107,6 +107,17 @@ def _mock_response(payload: dict, status_code: int = 200):
     return resp
 
 
+def _make_http_verifier(**overrides):
+    kwargs = {
+        "endpoint": "http://mock/v1/chat/completions",
+        "model": "test-vlm",
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    }
+    kwargs.update(overrides)
+    return HTTPVLMVerifier(**kwargs)
+
+
 def test_normalize_chat_endpoint_accepts_base_v1_url():
     assert (
         _normalize_chat_endpoint("http://127.0.0.1:1234/v1/")
@@ -129,7 +140,7 @@ def test_http_verifier_happy_path():
     }
     bundle = _make_bundle()
     with patch("httpx.post", return_value=_mock_response(payload)):
-        verifier = HTTPVLMVerifier(endpoint="http://mock/v1/chat/completions")
+        verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "allow"
     assert result.primary_category == "retail_ecommerce"
@@ -148,10 +159,13 @@ def test_http_verifier_requests_structured_output():
     }
     bundle = _make_bundle()
     with patch("httpx.post", return_value=_mock_response(payload)) as post:
-        verifier = HTTPVLMVerifier(endpoint="http://mock/v1/chat/completions")
+        verifier = _make_http_verifier()
         verifier.verify(bundle)
 
     request_payload = post.call_args.kwargs["json"]
+    assert request_payload["model"] == "test-vlm"
+    assert request_payload["temperature"] == 0.1
+    assert request_payload["max_tokens"] == 4096
     assert request_payload["response_format"]["type"] == "json_schema"
     assert (
         request_payload["response_format"]["json_schema"]["name"]
@@ -193,7 +207,7 @@ def test_http_verifier_reads_reasoning_content_when_content_empty():
     resp.raise_for_status = MagicMock()
     bundle = _make_bundle()
     with patch("httpx.post", return_value=resp):
-        verifier = HTTPVLMVerifier()
+        verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.parse_ok is True
     assert result.summary == "reasoning field only"
@@ -204,7 +218,7 @@ def test_http_verifier_includes_error_body_on_http_failure():
     response = httpx.Response(400, request=request, text="Channel Error")
     bundle = _make_bundle()
     with patch("httpx.post", return_value=response):
-        verifier = HTTPVLMVerifier(endpoint="http://mock/v1", max_retries=0)
+        verifier = _make_http_verifier(endpoint="http://mock/v1", max_retries=0)
         result = verifier.verify(bundle)
     assert result.parse_ok is False
     assert "Channel Error" in result.parse_error
@@ -224,7 +238,7 @@ def test_http_verifier_parses_fenced_json():
     resp.raise_for_status = MagicMock()
     bundle = _make_bundle()
     with patch("httpx.post", return_value=resp):
-        verifier = HTTPVLMVerifier()
+        verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "review"
 
@@ -240,9 +254,33 @@ def test_http_verifier_ignores_unknown_fields():
     }
     bundle = _make_bundle()
     with patch("httpx.post", return_value=_mock_response(payload)):
-        verifier = HTTPVLMVerifier()
+        verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "allow"
+
+
+def test_http_verifier_uses_generation_settings_from_constructor():
+    payload = {
+        "primary_category": "other",
+        "risk_labels": [],
+        "confidence": 0.8,
+        "decision": "allow",
+        "needs_human_review": False,
+        "summary": "ok",
+    }
+    bundle = _make_bundle()
+    with patch("httpx.post", return_value=_mock_response(payload)) as post:
+        verifier = _make_http_verifier(
+            model="qwen-test-model",
+            temperature=0.0,
+            max_tokens=2048,
+        )
+        verifier.verify(bundle)
+
+    request_payload = post.call_args.kwargs["json"]
+    assert request_payload["model"] == "qwen-test-model"
+    assert request_payload["temperature"] == 0.0
+    assert request_payload["max_tokens"] == 2048
 
 
 def test_parse_vlm_content_salvages_malformed_nested_json():

@@ -352,19 +352,27 @@ class HTTPVLMVerifier(VLMVerifier):
     def __init__(
         self,
         *,
-        endpoint: str = "http://localhost:1234/v1/chat/completions",
-        model: str = "google/gemma-4-26b-a4b",
+        endpoint: str,
+        model: str,
         api_key_env: str | None = None,
         timeout_s: float = 120.0,
         max_retries: int = 2,
         retry_delay_s: float = 2.0,
+        temperature: float,
+        max_tokens: int,
         prompt_override: str | None = None,
     ) -> None:
+        if not endpoint.strip():
+            raise ValueError("VLM endpoint must be provided")
+        if not model.strip():
+            raise ValueError("VLM model must be provided")
         self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout_s = timeout_s
         self._max_retries = max_retries
         self._retry_delay_s = retry_delay_s
+        self._temperature = temperature
+        self._max_tokens = max_tokens
         self._system_prompt = prompt_override or render_verifier_prompt()
 
         api_key: str | None = None
@@ -382,8 +390,8 @@ class HTTPVLMVerifier(VLMVerifier):
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": content},
             ],
-            "temperature": 0.1,
-            "max_tokens": 4096,
+            "temperature": self._temperature,
+            "max_tokens": self._max_tokens,
             "response_format": _vlm_response_format(),
         }
 
