@@ -62,6 +62,41 @@ def test_merge_tracking_entities_adds_missing_values_without_duplicates():
     assert merged.landing_page.domain == "example.com"
 
 
+def test_merge_tracking_entities_dedupes_vanity_phone_with_normalized_phone():
+    base = MarketingEntities()
+    base.contact_points.phone_numbers.append(
+        extract_tracking_entities(
+            ocr_items=[],
+            transcript=WhisperTranscript(
+                segments=[
+                    TranscriptSegment(
+                        start_ms=0,
+                        end_ms=100,
+                        text="Call 1-888-925-JEEP.",
+                    )
+                ]
+            ),
+        ).contact_points.phone_numbers[0]
+    )
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=1,
+                time_ms=500,
+                text="CALL 1-888-925-JEEP FOR LEASE DETAILS",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    merged = merge_tracking_entities(base, extracted)
+
+    assert len(merged.contact_points.phone_numbers) == 1
+    assert merged.contact_points.phone_numbers[0].normalized == "+18889255337"
+
+
 def test_extract_tracking_entities_ignores_low_confidence_ocr_domains():
     extracted = extract_tracking_entities(
         ocr_items=[
@@ -182,6 +217,73 @@ def test_extract_price_context_prefers_joined_ocr_frame():
     assert "DUE AT SIGNING" in prices["$0"].evidence[0].text
 
 
+def test_extract_campaign_and_vehicle_variant_from_end_card_ocr():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=40,
+                time_ms=20000,
+                text=(
+                    "2026JEEPGRANDCHEROKEE LIMITED4x4 PURCHASE AND GET 4,500 "
+                    "TOTAL BONUS CASH ALLOWANCE DECLARATION OFDEALS Jeep"
+                ),
+                confidence=0.96,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(
+            segments=[
+                TranscriptSegment(
+                    start_ms=18460,
+                    end_ms=20180,
+                    text="Jeep, there's only one.",
+                )
+            ]
+        ),
+    )
+
+    assert "2026 Grand Cherokee Limited 4x4" in extracted.products
+    assert extracted.campaign_signals.creative_variant == "Declaration of Deals"
+    assert extracted.campaign_signals.campaign_theme == "Declaration of Deals"
+    assert extracted.campaign_signals.slogan == "There's only one"
+    assert extracted.creative_attributes.end_card is True
+
+
+def test_extract_shared_jeep_campaign_models_from_offer_card_ocr():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=25,
+                time_ms=12500,
+                text="0% FINANCING FOR 60 MONTHS ON SELECT 2025 GRAND CHEROKEE AND GLADIATOR MODELS",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert "2025 Grand Cherokee" in extracted.products
+    assert "2025 Gladiator" in extracted.products
+
+
+def test_extract_vehicle_products_ignores_excluded_models():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=34,
+                time_ms=17000,
+                text="Excludes 4xe models and 2026 Wrangler 392. See dealer for details.",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.products == []
+
+
 def test_exact_disclaimers_ignore_plain_sales_tax_copy():
     extracted = extract_tracking_entities(
         ocr_items=[
@@ -190,6 +292,43 @@ def test_exact_disclaimers_ignore_plain_sales_tax_copy():
                 time_ms=4000,
                 text="WE'LL COVER YOUR SALES TAX ON SELECT GRAND CHEROKEE MODELS",
                 confidence=0.98,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.disclaimers == []
+
+
+def test_extract_disclaimer_starts_at_disclaimer_phrase():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=34,
+                time_ms=17000,
+                text=(
+                    "NO MONTHLY PAYMENTS FOR 90 DAYS ON SELECT GRAND CHEROKEE MODELS "
+                    "See dealer for details. Offer ends 4/30/26."
+                ),
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.disclaimers[0].text == "See dealer for details. Offer ends 4/30/26."
+
+
+def test_extract_disclaimer_drops_obvious_ocr_fragments():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=34,
+                time_ms=17000,
+                text="For well-qualified buyers when financed through Stellantis Financial Sery",
+                confidence=0.95,
                 engine="test",
             )
         ],
@@ -251,6 +390,32 @@ def test_merge_disclaimers_prefers_clean_vlm_text_over_ocr_context():
     assert merged.disclaimers[0].evidence[0].source == "vlm"
 
 
+def test_merge_disclaimers_prefers_clean_lease_exclusion_over_garbled_ocr():
+    base = MarketingEntities()
+    base.disclaimers = [
+        DisclaimerEntity(
+            text="Excludes leases. Offer not available in DC.",
+            evidence=[EvidenceItem(time_ms=1000, source="vlm", text="clean")],
+        )
+    ]
+    extracted = MarketingEntities()
+    extracted.disclaimers = [
+        DisclaimerEntity(
+            text=(
+                "For well-qualified buyers when financed through Stellantis Financial Sery "
+                "accrues from date of purchase. Excludes leases. Offer not available in DC."
+            ),
+            evidence=[EvidenceItem(time_ms=1500, source="ocr", text="garbled")],
+        )
+    ]
+
+    merged = merge_commercial_entities(base, extracted)
+
+    assert [item.text for item in merged.disclaimers] == [
+        "Excludes leases. Offer not available in DC."
+    ]
+
+
 def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
     base = MarketingEntities()
     base.brand.name = "Jeep"
@@ -280,6 +445,28 @@ def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
     assert enriched.prices[0].text == "$4,500"
     assert enriched.prices[0].amount == 4500
     assert any("BONUS CASH ALLOWANCE" in offer.text for offer in enriched.offers)
+
+
+def test_enrich_marketing_entities_skips_weaker_vehicle_product_variants():
+    base = MarketingEntities()
+    base.brand.name = "Jeep"
+    base.products = ["2026 Wrangler 4-Door Sport S"]
+
+    enriched = enrich_marketing_entities(
+        base,
+        ocr_items=[
+            OCRItem(
+                frame_index=10,
+                time_ms=5000,
+                text="the 2026 Jeep Wrangler Sport S for $400 a month",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert enriched.products == ["2026 Wrangler 4-Door Sport S"]
 
 
 def test_extract_disclaimer_density_without_exact_low_confidence_text():

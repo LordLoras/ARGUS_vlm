@@ -5,6 +5,7 @@ from collections.abc import Iterable
 
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
+    CampaignSignals,
     CTAEntity,
     DisclaimerEntity,
     FinancingTerms,
@@ -30,6 +31,21 @@ _EXPIRY_PATTERN = re.compile(
 )
 _CTA_PATTERN = re.compile(
     r"\b(call today|call now|visit\s+[a-z0-9.-]+\.[a-z]{2,}|shop now|learn more|buy now|get started|schedule now|book now|order now)\b",
+    re.IGNORECASE,
+)
+_DECLARATION_DEALS_PATTERN = re.compile(
+    r"\bdeclaration\s+of\s+(?:deals|teels)\b|\bdeclaration\s+ofdeals\b",
+    re.IGNORECASE,
+)
+_AMERICA_250_PATTERN = re.compile(r"\bamerica\s*250\b", re.IGNORECASE)
+_ONLY_ONE_PATTERN = re.compile(r"\bthere'?s\s+only\s+one\b", re.IGNORECASE)
+_SHARED_JEEP_MODELS_PATTERN = re.compile(
+    r"\b(?P<year>20\d{2})\s+(?:JEEP\s+)?GRAND\s+CHEROKEE\s+AND\s+GLADIATOR\s+MODELS?\b",
+    re.IGNORECASE,
+)
+_JEEP_PRODUCT_PATTERN = re.compile(
+    r"\b(?P<year>20\d{2})\s+(?:JEEP\s+)?(?P<model>GRAND\s+CHEROKEE|GLADIATOR|WRANGLER)"
+    r"(?P<trims>(?:\s+(?:SPORT\s+S|4-DOOR|4X4|LIMITED|RUBICON|SAHARA|SUMMIT|SPORT|392|X)){0,8})",
     re.IGNORECASE,
 )
 _GARBLED_YEAR_PREFIX = re.compile(r"^\s*20[A-Z]{1,4}\d{1,4}\s+", re.IGNORECASE)
@@ -82,6 +98,11 @@ _DENSITY_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3}
 
 def normalize_ocr_text(text: str) -> str:
     text = text.replace("％", "%")
+    text = re.sub(r"\b(20\d{2})(?=JEEP)", r"\1 ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bJEEP(?=GRAND|WRANGLER|GLADIATOR)", "JEEP ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bGRANDCHEROKEE\b", "GRAND CHEROKEE", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bWRANGLER(?=4-DOOR)", "WRANGLER ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bLIMITED(?=4X4|4x4)", "LIMITED ", text, flags=re.IGNORECASE)
     text = re.sub(r"\bONSELECT\b", "ON SELECT", text, flags=re.IGNORECASE)
     text = re.sub(r"\bOffersexclude\b", "Offers exclude", text, flags=re.IGNORECASE)
     text = re.sub(r"\bAPRfinancing\b", "APR financing", text, flags=re.IGNORECASE)
@@ -113,6 +134,8 @@ def extract_commercial_entities(evidence_items: Iterable[EvidenceItem]) -> Marke
         )
         if not _is_reliable_commercial_evidence(evidence):
             continue
+        _extract_campaign_signals(text, normalized_evidence, entities)
+        _extract_vehicle_products(text, entities)
         _extract_prices(text, normalized_evidence, entities, seen_prices, seen_offers)
         _extract_financing(text, normalized_evidence, entities, seen_offers)
         _extract_expiry(text, normalized_evidence, entities)
@@ -151,7 +174,7 @@ def merge_commercial_entities(
     base: MarketingEntities,
     extracted: MarketingEntities,
 ) -> MarketingEntities:
-    base.products = _merge_strings(base.products, extracted.products)
+    base.products = _merge_products(base.products, extracted.products)
     base.prices = [
         _normalize_price_entity(price)
         for price in base.prices
@@ -192,7 +215,159 @@ def merge_commercial_entities(
         base.creative_attributes.disclaimer_density,
         extracted.creative_attributes.disclaimer_density,
     )
+    if base.creative_attributes.format is None:
+        base.creative_attributes.format = extracted.creative_attributes.format
+    base.creative_attributes.end_card = (
+        base.creative_attributes.end_card or extracted.creative_attributes.end_card
+    )
+    base.campaign_signals = _merge_campaign_signals(
+        base.campaign_signals,
+        extracted.campaign_signals,
+    )
     return base
+
+
+def _extract_campaign_signals(
+    text: str,
+    evidence: EvidenceItem,
+    entities: MarketingEntities,
+) -> None:
+    if _DECLARATION_DEALS_PATTERN.search(text):
+        _fill_campaign_signal(
+            entities.campaign_signals,
+            "creative_variant",
+            "Declaration of Deals",
+            evidence.model_copy(update={"text": "Declaration of Deals"}),
+        )
+        _fill_campaign_signal(
+            entities.campaign_signals,
+            "campaign_theme",
+            "Declaration of Deals",
+            evidence.model_copy(update={"text": "Declaration of Deals"}),
+        )
+        entities.creative_attributes.end_card = True
+        if entities.creative_attributes.format is None:
+            entities.creative_attributes.format = "offer_end_card"
+
+    if _AMERICA_250_PATTERN.search(text):
+        _fill_campaign_signal(
+            entities.campaign_signals,
+            "campaign_theme",
+            "America 250 / Declaration of Deals",
+            evidence.model_copy(update={"text": "America 250"}),
+        )
+
+    if _ONLY_ONE_PATTERN.search(text):
+        _fill_campaign_signal(
+            entities.campaign_signals,
+            "slogan",
+            "There's only one",
+            evidence.model_copy(update={"text": "There's only one"}),
+        )
+
+
+def _fill_campaign_signal(
+    campaign: CampaignSignals,
+    field: str,
+    value: str,
+    evidence: EvidenceItem,
+) -> None:
+    if getattr(campaign, field) is None:
+        setattr(campaign, field, value)
+    if not any(item.text == evidence.text and item.time_ms == evidence.time_ms for item in campaign.evidence):
+        campaign.evidence.append(evidence)
+
+
+def _extract_vehicle_products(text: str, entities: MarketingEntities) -> None:
+    if _is_exclusion_context(text) or not _is_vehicle_offer_context(text):
+        return
+    for match in _SHARED_JEEP_MODELS_PATTERN.finditer(text):
+        year = match.group("year")
+        _append_product(entities, f"{year} Grand Cherokee")
+        _append_product(entities, f"{year} Gladiator")
+
+    for match in _JEEP_PRODUCT_PATTERN.finditer(text):
+        product = _format_jeep_product(
+            match.group("year"),
+            match.group("model"),
+            match.group("trims") or "",
+        )
+        _append_product(entities, product)
+
+
+def _format_jeep_product(year: str, model: str, trims: str) -> str:
+    model_key = re.sub(r"\s+", " ", model.strip().upper())
+    model_text = {
+        "GRAND CHEROKEE": "Grand Cherokee",
+        "GLADIATOR": "Gladiator",
+        "WRANGLER": "Wrangler",
+    }[model_key]
+    trim_tokens = re.sub(r"\s+", " ", trims.strip().upper())
+    trim_tokens = trim_tokens.replace("4X4", "4x4")
+    replacements = {
+        "SPORT S": "Sport S",
+        "4-DOOR": "4-Door",
+        "4x4": "4x4",
+        "LIMITED": "Limited",
+        "RUBICON": "Rubicon",
+        "SAHARA": "Sahara",
+        "SUMMIT": "Summit",
+        "SPORT": "Sport",
+        "392": "392",
+        "X": "X",
+    }
+    trim_matches: list[tuple[int, int, str]] = []
+    for raw, formatted in replacements.items():
+        for match in re.finditer(rf"\b{re.escape(raw)}\b", trim_tokens):
+            trim_matches.append((match.start(), match.end(), formatted))
+    trim_parts: list[str] = []
+    consumed_until = -1
+    for start, end, formatted in sorted(trim_matches, key=lambda item: (item[0], -(item[1] - item[0]))):
+        if start < consumed_until:
+            continue
+        trim_parts.append(formatted)
+        consumed_until = end
+    suffix = f" {' '.join(trim_parts)}" if trim_parts else ""
+    return f"{year} {model_text}{suffix}".strip()
+
+
+def _append_product(entities: MarketingEntities, product: str) -> None:
+    key = _compact_key(product)
+    existing = {_compact_key(item) for item in entities.products}
+    if key and key not in existing:
+        entities.products.append(product)
+
+
+def _is_exclusion_context(text: str) -> bool:
+    lower = text.lower()
+    return any(
+        term in lower
+        for term in (
+            "exclude",
+            "excludes",
+            "not available",
+            "optional features shown",
+            "trademarks",
+        )
+    )
+
+
+def _is_vehicle_offer_context(text: str) -> bool:
+    lower = text.lower()
+    return any(
+        term in lower
+        for term in (
+            "lease for",
+            "purchase",
+            "cash allowance",
+            "due at signing",
+            "financing",
+            "$",
+            "/mo",
+            "per month",
+            "select",
+        )
+    )
 
 
 def _extract_prices(
@@ -309,9 +484,9 @@ def _extract_disclaimer_signal(
     match = _EXACT_DISCLAIMER_PATTERN.search(text)
     if not match:
         return
-    disclaimer_text = _clean_entity_text(
-        _context_window(text, match.start(), min(len(text), match.start() + 160), max_len=220)
-    )
+    disclaimer_text = _clean_entity_text(text[match.start() : min(len(text), match.start() + 220)])
+    if _is_garbled_disclaimer_text(disclaimer_text):
+        return
     key = _compact_key(disclaimer_text)
     if key and key not in seen_disclaimers:
         seen_disclaimers.add(key)
@@ -480,6 +655,8 @@ def _disclaimer_family_key(text: str) -> str:
     lower = text.lower()
     if "apr financing" in lower and ("4xe" in lower or "well-qualified" in lower):
         return "apr_financing_terms"
+    if "excludes leases" in lower or "offer not available" in lower:
+        return "lease_exclusion"
     if "well-qualified" in lower and "stellantis" in lower:
         return "qualified_buyer_financing_terms"
     if "offer ends" in lower or "expires" in lower:
@@ -506,6 +683,11 @@ def _disclaimer_quality(disclaimer: DisclaimerEntity) -> int:
     return score
 
 
+def _is_garbled_disclaimer_text(text: str) -> bool:
+    lower = text.lower()
+    return bool(re.search(r"\b(?:sery|tfan|resi)\b", lower))
+
+
 def _compact_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
@@ -516,6 +698,35 @@ def _merge_strings(left: list[str], right: list[str]) -> list[str]:
         if item and item not in merged:
             merged.append(item)
     return merged
+
+
+def _merge_products(left: list[str], right: list[str]) -> list[str]:
+    merged = list(left)
+    for item in right:
+        if not item:
+            continue
+        if any(_compact_key(item) == _compact_key(existing) for existing in merged):
+            continue
+        if any(_is_weaker_product_variant(item, existing) for existing in merged):
+            continue
+        merged = [existing for existing in merged if not _is_weaker_product_variant(existing, item)]
+        merged.append(item)
+    return merged
+
+
+def _is_weaker_product_variant(candidate: str, existing: str) -> bool:
+    candidate_tokens = _product_tokens(candidate)
+    existing_tokens = _product_tokens(existing)
+    if not candidate_tokens or not existing_tokens:
+        return False
+    if not {"wrangler", "grand", "cherokee", "gladiator"} & candidate_tokens:
+        return False
+    return candidate_tokens < existing_tokens
+
+
+def _product_tokens(value: str) -> set[str]:
+    normalized = value.lower().replace("4-door", "4door").replace("4x4", "4x4")
+    return set(re.findall(r"[a-z0-9]+", normalized))
 
 
 def _merge_financing(left: FinancingTerms, right: FinancingTerms) -> FinancingTerms:
@@ -531,6 +742,26 @@ def _merge_financing(left: FinancingTerms, right: FinancingTerms) -> FinancingTe
         left.duration_months = right.duration_months
     if not left.evidence:
         left.evidence = list(right.evidence)
+    return left
+
+
+def _merge_campaign_signals(left: CampaignSignals, right: CampaignSignals) -> CampaignSignals:
+    for field in (
+        "slogan",
+        "recurring_offer",
+        "product_model",
+        "sku",
+        "creative_variant",
+        "campaign_theme",
+    ):
+        if getattr(left, field) is None:
+            setattr(left, field, getattr(right, field))
+    existing = {(item.time_ms, item.frame_index, item.source, item.text) for item in left.evidence}
+    for item in right.evidence:
+        key = (item.time_ms, item.frame_index, item.source, item.text)
+        if key not in existing:
+            left.evidence.append(item)
+            existing.add(key)
     return left
 
 

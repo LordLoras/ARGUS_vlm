@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ad_classifier.db.connection import apply_migrations, load_sqlite_vec, open_database
+from ad_classifier.db.repositories.ads import AdRepository
+from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.dedup.similarity import (
     cosine_similarity,
     enrich_related_ads,
     find_similar_by_text,
 )
 from ad_classifier.embeddings.text.mock import MockTextEmbedder
+from ad_classifier.models.ads import AdRecord
+from ad_classifier.models.marketing import BrandEntity, MarketingEntities, OfferEntity
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 
@@ -64,6 +66,19 @@ def test_find_similar_returns_at_most_k(store_with_ads):
     assert len(results) <= 2
 
 
+def test_find_similar_rescores_candidates_with_cosine():
+    class FakeStore:
+        def search_text(self, query, k):
+            return [("ad_scaled", 100.0)]
+
+        def get_text(self, ad_id):
+            return [10.0, 0.0] if ad_id == "ad_scaled" else None
+
+    results = find_similar_by_text(FakeStore(), "ad_query", [1.0, 0.0], min_score=0.95)
+
+    assert results == [("ad_scaled", 1.0)]
+
+
 def test_enrich_related_ads_returns_related(store_with_ads):
     store, emb = store_with_ads
     vec = emb.embed("ad_0")
@@ -78,3 +93,57 @@ def test_enrich_related_ads_sorted_by_score(store_with_ads):
     related = enrich_related_ads(store, "ad_0", text_vector=vec, k=4, min_score=0.0)
     scores = [r.overall_score for r in related.semantically_similar]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_enrich_related_ads_marks_same_campaign_variant(tmp_path):
+    db = tmp_path / "related.db"
+    conn = open_database(db)
+    apply_migrations(conn)
+    try:
+        load_sqlite_vec(conn)
+    except Exception:
+        pytest.skip("sqlite-vec not available")
+
+    ads = AdRepository(conn)
+    marketing = MarketingEntityRepository(conn)
+    store = SqliteVecStore(conn, text_dim=3, visual_dim=3)
+    store.ensure_tables()
+
+    ads.create(AdRecord(id="ad_a", source_path="a.mp4", status="completed"))
+    ads.create(AdRecord(id="ad_b", source_path="b.mp4", status="completed"))
+    marketing.upsert(
+        "ad_a",
+        MarketingEntities(
+            brand=BrandEntity(name="Jeep"),
+            products=["Wrangler"],
+            offers=[OfferEntity(text="$400/mo lease")],
+        ),
+    )
+    marketing.upsert(
+        "ad_b",
+        MarketingEntities(
+            brand=BrandEntity(name="Jeep"),
+            products=["Grand Cherokee"],
+            offers=[OfferEntity(text="$4,500 bonus cash")],
+        ),
+    )
+    store.upsert_text("ad_a", [1.0, 0.0, 0.0])
+    store.upsert_text("ad_b", [0.8, 0.6, 0.0])
+    store.upsert_visual("ad_a", [1.0, 0.0, 0.0])
+    store.upsert_visual("ad_b", [1.0, 0.0, 0.0])
+    conn.commit()
+
+    related = enrich_related_ads(
+        store,
+        "ad_a",
+        text_vector=[1.0, 0.0, 0.0],
+        visual_vector=[1.0, 0.0, 0.0],
+        min_score=0.7,
+    )
+
+    match = related.semantically_similar[0]
+    assert match.ad_id == "ad_b"
+    assert match.verdict == "same_campaign_different_sku"
+    assert match.text_score == 0.8
+    assert match.visual_score == 1.0
+    assert {diff["field"] for diff in match.differences} >= {"products", "offers"}

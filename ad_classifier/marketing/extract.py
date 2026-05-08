@@ -40,6 +40,16 @@ _PROMO_CODE_PATTERN = re.compile(
     r"\b(?:use\s+)?(?:promo|coupon|discount|offer)?\s*code[:\s]+([A-Z0-9][A-Z0-9-]{2,20})\b",
     re.IGNORECASE,
 )
+_PHONE_KEYPAD = {
+    **dict.fromkeys("ABC", "2"),
+    **dict.fromkeys("DEF", "3"),
+    **dict.fromkeys("GHI", "4"),
+    **dict.fromkeys("JKL", "5"),
+    **dict.fromkeys("MNO", "6"),
+    **dict.fromkeys("PQRS", "7"),
+    **dict.fromkeys("TUV", "8"),
+    **dict.fromkeys("WXYZ", "9"),
+}
 _SOCIAL_DOMAINS = {
     "facebook": "facebook",
     "fb": "facebook",
@@ -116,14 +126,14 @@ def extract_tracking_entities(
 
         for raw_phone in _PHONE_PATTERN.findall(text):
             phone = _phone_entity(raw_phone, normalized_evidence, phone_type="phone")
-            key = phone.normalized or phone.raw
+            key = _phone_key(phone)
             if key not in seen_phones:
                 seen_phones.add(key)
                 contact_points.phone_numbers.append(phone)
 
         for raw_phone in _VANITY_PHONE_PATTERN.findall(text):
             phone = _phone_entity(raw_phone, normalized_evidence, phone_type="vanity")
-            key = phone.normalized or phone.raw
+            key = _phone_key(phone)
             if key not in seen_phones:
                 seen_phones.add(key)
                 contact_points.phone_numbers.append(phone)
@@ -194,8 +204,8 @@ def merge_tracking_entities(
             base.contact_points.websites.append(website)
 
     for phone in extracted.contact_points.phone_numbers:
-        key = phone.normalized or phone.raw
-        existing = {item.normalized or item.raw for item in base.contact_points.phone_numbers}
+        key = _phone_key(phone)
+        existing = {_phone_key(item) for item in base.contact_points.phone_numbers}
         if key not in existing:
             base.contact_points.phone_numbers.append(phone)
 
@@ -305,7 +315,7 @@ def _website_from_match(raw_url: str, evidence: EvidenceItem) -> WebsiteEntity |
 
 
 def _phone_entity(raw_phone: str, evidence: EvidenceItem, *, phone_type: str) -> PhoneNumberEntity:
-    digits = "".join(ch for ch in raw_phone if ch.isdigit())
+    digits = _phone_digits(raw_phone)
     normalized = None
     if len(digits) == 10:
         normalized = f"+1{digits}"
@@ -317,6 +327,27 @@ def _phone_entity(raw_phone: str, evidence: EvidenceItem, *, phone_type: str) ->
         type=phone_type,
         evidence=[evidence],
     )
+
+
+def _phone_digits(raw_phone: str) -> str:
+    digits: list[str] = []
+    for ch in raw_phone.upper():
+        if ch.isdigit():
+            digits.append(ch)
+        elif ch in _PHONE_KEYPAD:
+            digits.append(_PHONE_KEYPAD[ch])
+    return "".join(digits)
+
+
+def _phone_key(phone: PhoneNumberEntity) -> str:
+    if phone.normalized:
+        return phone.normalized
+    digits = _phone_digits(phone.raw)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    return phone.raw.upper()
 
 
 def _platform_from_domain(domain: str | None) -> str | None:
