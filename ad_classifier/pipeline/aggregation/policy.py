@@ -51,6 +51,14 @@ def _sensitive_categories() -> set[str]:
         return set()
 
 
+def _allowed_risk_labels() -> set[str]:
+    try:
+        data = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
+        return set(data.get("risk_labels", []))
+    except Exception:
+        return set()
+
+
 def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
     for e in vlm.evidence:
@@ -141,7 +149,9 @@ def _currency_symbol(currency: str | None) -> str:
 
 
 def _format_amount(amount: float) -> str:
-    return str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}".rstrip("0").rstrip(".")
+    if float(amount).is_integer():
+        return f"{int(amount):,}"
+    return f"{amount:,.2f}".rstrip("0").rstrip(".")
 
 
 def _format_price(currency: str | None, amount: float) -> str:
@@ -430,9 +440,18 @@ def aggregate(
 ) -> FinalAdClassification:
     cfg = config or AggregationConfig()
 
-    rule_risk_labels = [r.risk_label for r in rules_triggered if r.risk_label]
+    allowed_risks = _allowed_risk_labels()
+    rule_risk_labels = [
+        r.risk_label
+        for r in rules_triggered
+        if r.risk_label and (not allowed_risks or r.risk_label in allowed_risks)
+    ]
 
-    combined_risk_labels = list(dict.fromkeys(vlm_result.risk_labels + rule_risk_labels))
+    combined_risk_labels = [
+        label
+        for label in dict.fromkeys(vlm_result.risk_labels + rule_risk_labels)
+        if not allowed_risks or label in allowed_risks
+    ]
 
     decision, needs_review = _decide(
         vlm_result.decision,

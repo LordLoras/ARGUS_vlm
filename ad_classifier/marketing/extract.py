@@ -53,6 +53,19 @@ _SOCIAL_DOMAINS = {
     "pinterest": "pinterest",
     "snapchat": "snapchat",
 }
+_ALLOWED_OCR_TLDS = {
+    "com",
+    "net",
+    "org",
+    "co",
+    "us",
+    "tv",
+    "io",
+    "biz",
+    "info",
+    "edu",
+    "gov",
+}
 _SCARCITY_TERMS = ("while supplies last", "limited quantities", "limited supply", "only left")
 _URGENCY_TERMS = ("limited time", "today only", "ends soon", "call today", "now", "hurry")
 _MIN_TRACKING_CONFIDENCE = 0.75
@@ -284,6 +297,9 @@ def _website_from_match(raw_url: str, evidence: EvidenceItem) -> WebsiteEntity |
     parsed = urlparse(url)
     domain = parsed.netloc.lower().removeprefix("www.")
     if not domain or "." not in domain:
+        return None
+    tld = domain.rsplit(".", 1)[-1]
+    if evidence.source == "ocr" and tld not in _ALLOWED_OCR_TLDS:
         return None
     return WebsiteEntity(url=url, domain=domain, display_text=raw_url, evidence=[evidence])
 

@@ -12,6 +12,7 @@ from ad_classifier.vlm.verifier import (
     MockVLMVerifier,
     _extract_json,
     _normalize_chat_endpoint,
+    _parse_vlm_content,
     _vlm_response_format,
 )
 
@@ -242,3 +243,38 @@ def test_http_verifier_ignores_unknown_fields():
         verifier = HTTPVLMVerifier()
         result = verifier.verify(bundle)
     assert result.decision == "allow"
+
+
+def test_parse_vlm_content_salvages_malformed_nested_json():
+    raw = (
+        '{"primary_category":"automotive","risk_labels":["rate_disclosure"],'
+        '"confidence":0.95,"decision":"allow","needs_human_review":false,'
+        '"evidence":[{"time_ms":11000,"frame_index":22,"source":"ocr",'
+        '"text":"0% APR financing","confidence":0.95}],'
+        '"marketing_entities":{"brand":{"name":"Jeep","logo_present":true,'
+        '"logo_evidence":[],"tagline":"There is only one"},'
+        '"products":["2025 Grand Cherokee"],'
+        '"offers":[{"type":"flat_off","value":"$4,500 bonus cash"}],'
+        '"contact_points":{"websites":[{"url":"string","domain":"Twin Cities Jeep",'
+        '"display_text":"twincitiesjeep.com","evidence":[]}]},'
+        '"offer_terms":{"expiry":{"text":"Must take retail delivery","evidence":['
+        '{"time_ms":11000,"text":"Must take retail delivery","reason":"\\", '
+        '\\"confidence\\": 0.0}] } BROKEN,'
+        '"creative_attributes":{"format":"brand_spot","disclaimer_density":"medium"},'
+        '"campaign_signals":{"campaign_theme":"Declaration of Deals","evidence":[]}},'
+        '"summary":"usable summary"}'
+    )
+
+    result = _parse_vlm_content(raw)
+
+    assert result.parse_ok is False
+    assert result.primary_category == "automotive"
+    assert result.confidence == pytest.approx(0.95)
+    assert result.evidence[0].text == "0% APR financing"
+    assert result.marketing_entities.brand.name == "Jeep"
+    assert result.marketing_entities.products == ["2025 Grand Cherokee"]
+    assert result.marketing_entities.offers[0].value == "$4,500 bonus cash"
+    assert result.marketing_entities.contact_points.websites[0].url == "https://twincitiesjeep.com"
+    assert result.marketing_entities.contact_points.websites[0].domain == "twincitiesjeep.com"
+    assert result.marketing_entities.creative_attributes.format == "brand_spot"
+    assert result.marketing_entities.campaign_signals.campaign_theme == "Declaration of Deals"

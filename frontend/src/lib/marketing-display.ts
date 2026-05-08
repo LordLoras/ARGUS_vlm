@@ -9,9 +9,10 @@ type PriceLike = {
 
 export function formatPrice(price: PriceLike, context?: string | null) {
   if (price.amount != null) {
-    const amount = Number.isInteger(price.amount)
-      ? price.amount.toFixed(0)
-      : price.amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    const amount = new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(price.amount);
     return `${displayCurrency(price.currency)}${amount}`;
   }
   if (price.text?.trim()) return price.text;

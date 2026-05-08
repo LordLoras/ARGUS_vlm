@@ -79,6 +79,27 @@ def test_extract_tracking_entities_ignores_low_confidence_ocr_domains():
     assert extracted.contact_points.websites == []
 
 
+def test_extract_tracking_entities_ignores_ocr_legal_fragments_as_domains():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=0,
+                time_ms=0,
+                text=(
+                    "D-5%.0K-4.5%6.0R-0.59%.SD-4%.VT-696 "
+                    "thecashallowanceamount:AZ-5.69%.DE-42596.GUAM-49%6.HI-49%6.LA-5% "
+                    "NA-7%.In AK.GA.MO.SC.NH and WASHDC, K.GENERAL terms apply"
+                ),
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.contact_points.websites == []
+
+
 def test_merge_tracking_entities_skips_weaker_suffix_domain():
     base = MarketingEntities()
     base.contact_points.websites.append(
@@ -256,6 +277,7 @@ def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
     assert "20MT66" not in ", ".join(enriched.products)
     assert "Grand Cherokee Limited 4x4" in enriched.products
     assert "2026 Wrangler 4-Door Sport S" in enriched.products
+    assert enriched.prices[0].text == "$4,500"
     assert enriched.prices[0].amount == 4500
     assert any("BONUS CASH ALLOWANCE" in offer.text for offer in enriched.offers)
 

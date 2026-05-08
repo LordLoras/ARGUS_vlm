@@ -80,6 +80,17 @@ def test_rule_risk_labels_merged():
     assert "deceptive_urgency" in result.risk_labels
 
 
+def test_unknown_risk_labels_are_filtered():
+    result = aggregate(
+        "ad_1",
+        _vlm(decision="allow", confidence=0.85, risk_labels=["rate_disclosure"]),
+        [_rule("also_unknown")],
+    )
+
+    assert result.risk_labels == []
+    assert result.decision == "allow"
+
+
 def test_sensitive_category_lowers_threshold():
     # health_wellness is sensitive → threshold = 0.50 (sensitive_review_threshold)
     # confidence=0.60 > 0.50 → allow
@@ -142,6 +153,16 @@ def test_usd_prices_render_as_dollar_amounts():
 
     assert result.marketing_entities.prices[0].text == "$400"
     assert result.marketing_entities.prices[0].currency == "$"
+
+
+def test_large_prices_render_with_grouping():
+    from ad_classifier.vlm.models import VLMPrice
+
+    vlm = _vlm()
+    vlm.marketing_entities.prices = [VLMPrice(amount=4500, currency="USD", time_ms=1000)]
+    result = aggregate("ad_1", vlm, [])
+
+    assert result.marketing_entities.prices[0].text == "$4,500"
 
 
 def test_tracking_fields_mapped():

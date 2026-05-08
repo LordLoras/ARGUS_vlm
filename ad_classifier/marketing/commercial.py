@@ -159,6 +159,7 @@ def merge_commercial_entities(
     ]
 
     for price in extracted.prices:
+        price = _normalize_price_entity(price)
         existing = {_price_key(item) for item in base.prices}
         if _price_key(price) not in existing:
             base.prices.append(price)
@@ -412,7 +413,9 @@ def _currency_symbol(currency: str | None) -> str:
 
 def _format_price(currency: str | None, amount: float) -> str:
     amount_text = (
-        str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}".rstrip("0").rstrip(".")
+        f"{int(amount):,}"
+        if float(amount).is_integer()
+        else f"{amount:,.2f}".rstrip("0").rstrip(".")
     )
     return f"{_currency_symbol(currency)}{amount_text}"
 

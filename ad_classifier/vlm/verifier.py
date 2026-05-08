@@ -7,6 +7,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -53,6 +54,235 @@ def _extract_json(text: str) -> str:
             if depth == 0:
                 return text[start : i + 1]
     return text[start:]
+
+
+_MISSING = object()
+_DOMAIN_PATTERN = re.compile(
+    r"(?:https?://)?(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"(?:\.[a-z]{2,})(?:/[^\s\"'<>)]*)?",
+    re.IGNORECASE,
+)
+_ALLOWED_WEBSITE_TLDS = {
+    "com",
+    "net",
+    "org",
+    "co",
+    "us",
+    "tv",
+    "io",
+    "biz",
+    "info",
+    "edu",
+    "gov",
+}
+
+
+def _parse_vlm_content(raw: str) -> VLMVerificationResult:
+    json_str = _extract_json(raw)
+    try:
+        parsed = json.loads(json_str)
+    except json.JSONDecodeError as exc:
+        return _salvage_vlm_result(json_str, str(exc))
+    return VLMVerificationResult.model_validate(parsed)
+
+
+def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
+    """Recover usable fields when LM Studio emits one malformed nested JSON block."""
+    data: dict[str, object] = {}
+    for key in (
+        "primary_category",
+        "risk_labels",
+        "confidence",
+        "decision",
+        "needs_human_review",
+        "ocr_quality",
+        "evidence",
+        "conflicts",
+        "summary",
+    ):
+        value = _extract_key_value(raw, key)
+        if value is not _MISSING:
+            data[key] = _clean_placeholders(value)
+
+    marketing_start = raw.find('"marketing_entities"')
+    if marketing_start >= 0:
+        marketing: dict[str, object] = {}
+        for key in (
+            "brand",
+            "products",
+            "prices",
+            "offers",
+            "ctas",
+            "social_proof",
+            "disclaimers",
+            "creative_format",
+            "contact_points",
+            "advertiser",
+            "landing_page",
+            "creative_attributes",
+            "campaign_signals",
+        ):
+            value = _extract_key_value(raw, key, start=marketing_start)
+            if value is not _MISSING:
+                marketing[key] = _clean_placeholders(value)
+
+        offer_terms_start = raw.find('"offer_terms"', marketing_start)
+        if offer_terms_start >= 0:
+            offer_terms: dict[str, object] = {}
+            for key in (
+                "promo_codes",
+                "financing",
+                "trial_terms",
+                "guarantees",
+                "scarcity_signals",
+                "urgency_signals",
+            ):
+                value = _extract_key_value(raw, key, start=offer_terms_start)
+                if value is not _MISSING:
+                    offer_terms[key] = _clean_placeholders(value)
+            if offer_terms:
+                marketing["offer_terms"] = offer_terms
+
+        contact_points = marketing.get("contact_points")
+        if isinstance(contact_points, dict):
+            contact_points["websites"] = [
+                website_normalized
+                for website in contact_points.get("websites", [])
+                if isinstance(website, dict)
+                for website_normalized in [_normalize_website_dict(website)]
+                if website_normalized is not None
+            ]
+
+        if marketing:
+            data["marketing_entities"] = marketing
+
+    try:
+        result = VLMVerificationResult.model_validate(data)
+    except ValueError:
+        return VLMVerificationResult.parse_failure(raw, error)
+
+    result.parse_ok = False
+    result.raw_response = raw
+    result.parse_error = f"salvaged malformed JSON: {error}"
+    return result
+
+
+def _extract_key_value(raw: str, key: str, *, start: int = 0):
+    match = re.search(rf'"{re.escape(key)}"\s*:', raw[start:])
+    if not match:
+        return _MISSING
+    value_start = start + match.end()
+    while value_start < len(raw) and raw[value_start].isspace():
+        value_start += 1
+    if value_start >= len(raw):
+        return _MISSING
+
+    first = raw[value_start]
+    if first in "{[":
+        value_text = _balanced_json_value(raw, value_start)
+        if value_text is None:
+            return _MISSING
+        try:
+            return json.loads(value_text)
+        except json.JSONDecodeError:
+            return _MISSING
+
+    try:
+        value, _idx = json.JSONDecoder().raw_decode(raw[value_start:])
+        return value
+    except json.JSONDecodeError:
+        return _MISSING
+
+
+def _balanced_json_value(raw: str, start: int) -> str | None:
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for idx in range(start, len(raw)):
+        ch = raw[idx]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if not stack or ch != stack[-1]:
+                return None
+            stack.pop()
+            if not stack:
+                return raw[start : idx + 1]
+    return None
+
+
+def _clean_placeholders(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lower() in {"null", "none", "n/a"} or stripped == "string":
+            return None
+        return value
+    if isinstance(value, list):
+        cleaned = [_clean_placeholders(item) for item in value]
+        return [item for item in cleaned if item is not None]
+    if isinstance(value, dict):
+        return {key: _clean_placeholders(item) for key, item in value.items()}
+    return value
+
+
+def _normalize_website_dict(website: dict[str, object]) -> dict[str, object] | None:
+    for key in ("url", "display_text", "domain"):
+        candidate = _domain_candidate(website.get(key))
+        if candidate is None:
+            continue
+        normalized = dict(website)
+        normalized["url"] = candidate["url"]
+        normalized["domain"] = candidate["domain"]
+        if not normalized.get("display_text"):
+            normalized["display_text"] = candidate["display_text"]
+        return normalized
+    return None
+
+
+def _domain_candidate(value: object) -> dict[str, str] | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip().strip(".,;:")
+    if text.lower() in {"", "null", "none", "n/a", "string"}:
+        return None
+
+    match = _DOMAIN_PATTERN.search(text)
+    if not match:
+        return None
+    raw = match.group(0).rstrip(".,;:")
+    url = raw if raw.lower().startswith(("http://", "https://")) else f"https://{raw}"
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower().removeprefix("www.")
+    if not domain or "." not in domain:
+        return None
+    tld = domain.rsplit(".", 1)[-1]
+    if tld not in _ALLOWED_WEBSITE_TLDS:
+        return None
+
+    path = parsed.path or ""
+    query = f"?{parsed.query}" if parsed.query else ""
+    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+    return {
+        "url": f"{parsed.scheme}://{domain}{path}{query}{fragment}",
+        "domain": domain,
+        "display_text": raw,
+    }
+
+
+def _looks_like_url_or_domain(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    return _domain_candidate(value) is not None
 
 
 def _encode_image(path: Path) -> str:
@@ -172,9 +402,7 @@ class HTTPVLMVerifier(VLMVerifier):
                 data = resp.json()
                 message = data["choices"][0]["message"]
                 raw = message.get("content") or message.get("reasoning_content") or ""
-                json_str = _extract_json(raw)
-                parsed = json.loads(json_str)
-                return VLMVerificationResult.model_validate(parsed)
+                return _parse_vlm_content(raw)
             except httpx.HTTPStatusError as exc:
                 body = exc.response.text[:1000] if exc.response is not None else ""
                 last_error = (
