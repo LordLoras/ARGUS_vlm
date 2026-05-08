@@ -18,6 +18,7 @@ export function AdDetailDrawer({
   onClose,
   onSave,
   onDelete,
+  onSelectRelated,
   saving,
   initialTab = "Overview"
 }: {
@@ -27,6 +28,7 @@ export function AdDetailDrawer({
   onClose: () => void;
   onSave: (patch: EditPatch) => void;
   onDelete: () => void;
+  onSelectRelated?: (adId: string) => void;
   saving?: boolean;
   initialTab?: Tab;
 }) {
@@ -153,7 +155,7 @@ export function AdDetailDrawer({
             {tab === "Evidence" ? (
               <EvidenceTab classification={detail.classification} frames={frames} onSeek={seekVideo} />
             ) : null}
-            {tab === "Related" ? <RelatedTab related={related} /> : null}
+            {tab === "Related" ? <RelatedTab related={related} onSelectAd={onSelectRelated} /> : null}
             {tab === "Edit" ? <EditTab detail={detail} onSave={onSave} saving={saving} /> : null}
           </div>
         </div>

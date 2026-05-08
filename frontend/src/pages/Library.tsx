@@ -32,17 +32,26 @@ export function Library() {
   const queryClient = useQueryClient();
   const health = useApiHealth();
   const queryAdId = searchParams.get("ad");
-  const initialDrawerTab = searchParams.get("tab") === "edit" ? "Edit" : "Overview";
+  const tabParam = searchParams.get("tab");
+  const initialDrawerTab =
+    tabParam === "edit"
+      ? "Edit"
+      : tabParam === "related"
+        ? "Related"
+        : tabParam === "evidence"
+          ? "Evidence"
+          : "Overview";
 
   useEffect(() => {
     if (queryAdId && queryAdId !== selectedAdId) setSelectedAdIdState(queryAdId);
   }, [queryAdId, selectedAdId]);
 
-  const setSelectedAdId = (adId: string | null) => {
+  const setSelectedAdId = (adId: string | null, tab?: "related" | "edit" | "evidence") => {
     setSelectedAdIdState(adId);
     const next = new URLSearchParams(searchParams);
     if (adId) next.set("ad", adId);
-    next.delete("tab");
+    if (tab) next.set("tab", tab);
+    else next.delete("tab");
     if (!adId) next.delete("ad");
     setSearchParams(next, { replace: true });
   };
@@ -268,6 +277,7 @@ export function Library() {
           onClose={() => setSelectedAdId(null)}
           onSave={(patch) => patchMutation.mutate({ adId: selectedDetail.ad.id, patch })}
           saving={patchMutation.isPending}
+          onSelectRelated={(adId) => setSelectedAdId(adId, "related")}
           onDelete={() => {
             if (
               window.confirm(

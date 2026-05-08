@@ -158,7 +158,13 @@ export type RelatedAd = {
   visual_score?: number | null;
   text_score?: number | null;
   verdict?: string | null;
-  differences?: unknown[];
+  differences?: FieldDifference[];
+};
+
+export type FieldDifference = {
+  field: string;
+  left?: string | string[] | null;
+  right?: string | string[] | null;
 };
 
 export type RelatedAds = {
