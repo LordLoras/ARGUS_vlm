@@ -27,10 +27,23 @@ class PipelineWorker:
     ) -> None:
         self.config = config
         self.config_file = config_file
+        self._db_path_override = db_path
         self.db_path = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
         self._runner = runner
 
+    def reload_config(self) -> None:
+        """Refresh config for the next job so model changes do not require a worker restart."""
+        config, config_file = load_config(self.config_file)
+        self.config = config
+        self.config_file = config_file
+        self.db_path = self._db_path_override or resolve_config_path(
+            config.paths.sqlite_path,
+            config_file,
+        )
+
     def run_once(self) -> bool:
+        if self._runner is None:
+            self.reload_config()
         initialize_database(self.db_path)
         conn = open_database(self.db_path)
         try:

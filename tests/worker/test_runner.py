@@ -75,6 +75,37 @@ def test_worker_run_once_returns_false_when_empty(tmp_path: Path):
     assert worker.run_once() is False
 
 
+def test_worker_reload_config_refreshes_vlm_model(tmp_path: Path):
+    db_path = tmp_path / "worker.db"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "paths": {"sqlite_path": str(db_path)},
+                "vlm": {"endpoint": {"model": "google/gemma-4-26b-a4b"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    config, config_file = load_config(config_path)
+    worker = PipelineWorker(config=config, config_file=config_file, db_path=db_path, runner=None)
+
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "paths": {"sqlite_path": str(db_path)},
+                "vlm": {"endpoint": {"model": "qwen-test-model"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker.reload_config()
+
+    assert worker.config.vlm.endpoint.model == "qwen-test-model"
+    assert worker.db_path == db_path
+
+
 def test_worker_does_not_overwrite_duplicate_ad_status(tmp_path: Path):
     db_path = tmp_path / "worker.db"
     conn = open_database(db_path)

@@ -48,12 +48,28 @@ _JEEP_PRODUCT_PATTERN = re.compile(
     r"(?P<trims>(?:\s+(?:SPORT\s+S|4-DOOR|4X4|LIMITED|RUBICON|SAHARA|SUMMIT|SPORT|392|X)){0,8})",
     re.IGNORECASE,
 )
+_CHRYSLER_PRODUCT_PATTERN = re.compile(
+    r"\b(?P<year>20\d{2})\s+(?:CHRYSLER\s+)?(?P<model>PACIFICA)"
+    r"(?P<trims>(?:\s+(?:LIMITED|PINNACLE|SELECT|TOURING|HYBRID|AWD|FWD)){0,8})",
+    re.IGNORECASE,
+)
 _GARBLED_YEAR_PREFIX = re.compile(r"^\s*20[A-Z]{1,4}\d{1,4}\s+", re.IGNORECASE)
+_GENERIC_VEHICLE_MAKE_KEYS = {
+    "jeep",
+    "chrysler",
+    "dodge",
+    "ram",
+    "fiat",
+    "alfaromeo",
+}
 _MIN_COMMERCIAL_CONFIDENCE = 0.75
 _PRICE_OFFER_TERMS = (
     "bonus cash",
     "cash allowance",
     "cash back",
+    "below msrp",
+    "rebate",
+    "discount",
     "financing",
     "apr",
     "just",
@@ -82,7 +98,8 @@ _DISCLAIMER_TERMS = (
 )
 _DISCLAIMER_START_PATTERN = re.compile(
     r"\b(?:offers?\s+exclude|for\s+well-qualified|not\s+all\s+buyers|"
-    r"msrp\s+excludes|dealer\s+installed|expires|subject\s+to|must\s+be\s+registered)\b",
+    r"msrp\s+excludes|dealer\s+installed|expires|subject\s+to|cannot\s+be\s+combined|"
+    r"see\s+dealer(?:ship)?|must\s+be\s+registered)\b",
     re.IGNORECASE,
 )
 _EXACT_DISCLAIMER_PATTERN = re.compile(
@@ -98,11 +115,21 @@ _DENSITY_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3}
 
 def normalize_ocr_text(text: str) -> str:
     text = text.replace("％", "%")
+    text = re.sub(r"\$(\d{1,3})\.(\d{3})(?!\d)", r"$\1,\2", text)
+    text = re.sub(r"\bDickPoe\b", "Dick Poe", text, flags=re.IGNORECASE)
     text = re.sub(r"\b(20\d{2})(?=JEEP)", r"\1 ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(20\d{2})(?=CHRYSLER)", r"\1 ", text, flags=re.IGNORECASE)
     text = re.sub(r"\bJEEP(?=GRAND|WRANGLER|GLADIATOR)", "JEEP ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bCHRYSLER(?=PACIFICA)", "CHRYSLER ", text, flags=re.IGNORECASE)
     text = re.sub(r"\bGRANDCHEROKEE\b", "GRAND CHEROKEE", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bCHRYSLERPACIFICA\b", "CHRYSLER PACIFICA", text, flags=re.IGNORECASE)
     text = re.sub(r"\bWRANGLER(?=4-DOOR)", "WRANGLER ", text, flags=re.IGNORECASE)
     text = re.sub(r"\bLIMITED(?=4X4|4x4)", "LIMITED ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bPACIFICA(?=\$)", "PACIFICA ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bBELOWMSRP\b", "BELOW MSRP", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bREBAT\b", "REBATE", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bMILITARY&FIRSTRESPONDER\b", "MILITARY & FIRST RESPONDER", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bFIRSTRESPONDER\b", "FIRST RESPONDER", text, flags=re.IGNORECASE)
     text = re.sub(r"\bONSELECT\b", "ON SELECT", text, flags=re.IGNORECASE)
     text = re.sub(r"\bOffersexclude\b", "Offers exclude", text, flags=re.IGNORECASE)
     text = re.sub(r"\bAPRfinancing\b", "APR financing", text, flags=re.IGNORECASE)
@@ -145,6 +172,7 @@ def extract_commercial_entities(evidence_items: Iterable[EvidenceItem]) -> Marke
 
 
 def repair_products(products: list[str], brand_name: str | None) -> list[str]:
+    cleaned_items: list[str] = []
     repaired: list[str] = []
     for product in products:
         cleaned = _clean_entity_text(product)
@@ -165,6 +193,13 @@ def repair_products(products: list[str], brand_name: str | None) -> list[str]:
         cleaned = cleaned.strip(" ,-")
         if len(cleaned) < 2:
             continue
+        cleaned_items.append(cleaned)
+
+    has_specific_vehicle = any(_is_specific_vehicle_product(item) for item in cleaned_items)
+    brand_key = _compact_key(brand_name or "")
+    for cleaned in cleaned_items:
+        if _is_generic_vehicle_make_product(cleaned, brand_key, has_specific_vehicle):
+            continue
         if _compact_key(cleaned) not in {_compact_key(item) for item in repaired}:
             repaired.append(cleaned)
     return repaired
@@ -175,6 +210,7 @@ def merge_commercial_entities(
     extracted: MarketingEntities,
 ) -> MarketingEntities:
     base.products = _merge_products(base.products, extracted.products)
+    base.products = repair_products(base.products, base.brand.name or base.advertiser.brand_name)
     base.prices = [
         _normalize_price_entity(price)
         for price in base.prices
@@ -294,6 +330,14 @@ def _extract_vehicle_products(text: str, entities: MarketingEntities) -> None:
         )
         _append_product(entities, product)
 
+    for match in _CHRYSLER_PRODUCT_PATTERN.finditer(text):
+        product = _format_chrysler_product(
+            match.group("year"),
+            match.group("model"),
+            match.group("trims") or "",
+        )
+        _append_product(entities, product)
+
 
 def _format_jeep_product(year: str, model: str, trims: str) -> str:
     model_key = re.sub(r"\s+", " ", model.strip().upper())
@@ -327,6 +371,27 @@ def _format_jeep_product(year: str, model: str, trims: str) -> str:
             continue
         trim_parts.append(formatted)
         consumed_until = end
+    suffix = f" {' '.join(trim_parts)}" if trim_parts else ""
+    return f"{year} {model_text}{suffix}".strip()
+
+
+def _format_chrysler_product(year: str, model: str, trims: str) -> str:
+    model_key = re.sub(r"\s+", " ", model.strip().upper())
+    model_text = {"PACIFICA": "Chrysler Pacifica"}[model_key]
+    trim_tokens = re.sub(r"\s+", " ", trims.strip().upper())
+    replacements = {
+        "LIMITED": "Limited",
+        "PINNACLE": "Pinnacle",
+        "SELECT": "Select",
+        "TOURING": "Touring",
+        "HYBRID": "Hybrid",
+        "AWD": "AWD",
+        "FWD": "FWD",
+    }
+    trim_parts: list[str] = []
+    for raw, formatted in replacements.items():
+        if re.search(rf"\b{re.escape(raw)}\b", trim_tokens) and formatted not in trim_parts:
+            trim_parts.append(formatted)
     suffix = f" {' '.join(trim_parts)}" if trim_parts else ""
     return f"{year} {model_text}{suffix}".strip()
 
@@ -551,7 +616,14 @@ def _clean_entity_text(text: str) -> str:
 
 def _looks_like_offer_context(text: str) -> bool:
     lower = text.lower()
-    return any(term in lower for term in _PRICE_OFFER_TERMS)
+    for term in _PRICE_OFFER_TERMS:
+        if term == "off":
+            if re.search(r"\boff\b", lower):
+                return True
+            continue
+        if term in lower:
+            return True
+    return False
 
 
 def _is_financing_example(amount: float, context: str) -> bool:
@@ -605,15 +677,28 @@ def _dedupe_offers(offers: list[OfferEntity]) -> list[OfferEntity]:
             merged[key] = offer
             order.append(key)
             continue
-        if _offer_specificity(offer.text) > _offer_specificity(current.text):
+        if _offer_quality(offer, key) > _offer_quality(current, key):
             evidence = offer.evidence or current.evidence
             merged[key] = offer.model_copy(update={"evidence": evidence})
     return [merged[key] for key in order]
 
 
 def _offer_family_key(text: str) -> str:
-    lower = text.lower()
+    lower = _clean_entity_text(text).lower()
     apr = re.search(r"\b(\d+(?:\.\d+)?)\s*%", lower)
+    if "below msrp" in lower:
+        amount = _money_key_before_phrase(lower, "below msrp") or _money_key_from_text(lower)
+        return f"msrp_discount:{amount or ''}"
+    amount = _money_key_from_text(lower)
+    if "rebate" in lower:
+        audience = ""
+        if "military" in lower and "first responder" in lower:
+            audience = "military_first_responder"
+        elif "fca" in lower and ("owner" in lower or "lessee" in lower):
+            audience = "fca_owner_lessee"
+        return f"rebate:{amount or ''}:{audience}"
+    if "bonus cash" in lower or "cash allowance" in lower:
+        return f"cash_allowance:{amount or ''}"
     if "financing" in lower or "apr" in lower:
         return f"financing:{apr.group(1) if apr else ''}"
     if "monthly payment" in lower or "payments for" in lower:
@@ -621,6 +706,35 @@ def _offer_family_key(text: str) -> str:
     if "sales tax" in lower:
         return "sales_tax"
     return _compact_key(text)
+
+
+def _offer_quality(offer: OfferEntity, family_key: str) -> int:
+    text = _clean_entity_text(offer.text)
+    lower = text.lower()
+    if family_key.startswith(("msrp_discount", "rebate", "cash_allowance")):
+        score = 220
+        if _money_key_from_text(lower):
+            score += 30
+        if "below msrp" in lower or "rebate" in lower or "cash allowance" in lower:
+            score += 25
+        if "military" in lower and "first responder" in lower:
+            score += 25
+        if offer.evidence and offer.evidence[0].source == "vlm":
+            score += 100
+        if len(text) <= 80:
+            score += 80
+        score -= len(text) // 3
+        score -= max(0, len(text) - 80)
+        if re.search(r"\bstk\s*#|\bstock\s*#", lower, re.IGNORECASE):
+            score -= 40
+        if "cannot be combined" in lower or "see dealer" in lower or "see dealership" in lower:
+            score -= 80
+        return score
+
+    score = _offer_specificity(text)
+    if offer.evidence and offer.evidence[0].source == "vlm":
+        score += 100
+    return score
 
 
 def _offer_specificity(text: str) -> int:
@@ -633,6 +747,32 @@ def _offer_specificity(text: str) -> int:
     if re.search(r"\b\d+(?:\.\d+)?\s*%", lower):
         score += 10
     return score
+
+
+def _money_key_from_text(text: str) -> str | None:
+    match = re.search(r"\$\s*(\d{1,3}(?:[,.]\d{3})+|\d+)(?:\.\d{2})?", text)
+    if not match:
+        return None
+    return _money_key_from_match(match)
+
+
+def _money_key_before_phrase(text: str, phrase: str) -> str | None:
+    phrase_index = text.find(phrase)
+    if phrase_index < 0:
+        return None
+    matches = list(
+        re.finditer(r"\$\s*(\d{1,3}(?:[,.]\d{3})+|\d+)(?:\.\d{2})?", text[:phrase_index])
+    )
+    if not matches:
+        return None
+    return _money_key_from_match(matches[-1])
+
+
+def _money_key_from_match(match: re.Match[str]) -> str | None:
+    amount = _parse_amount(match.group(1), None)
+    if amount is None:
+        return None
+    return str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}"
 
 
 def _dedupe_disclaimers(disclaimers: list[DisclaimerEntity]) -> list[DisclaimerEntity]:
@@ -719,9 +859,25 @@ def _is_weaker_product_variant(candidate: str, existing: str) -> bool:
     existing_tokens = _product_tokens(existing)
     if not candidate_tokens or not existing_tokens:
         return False
-    if not {"wrangler", "grand", "cherokee", "gladiator"} & candidate_tokens:
+    if not {"wrangler", "grand", "cherokee", "gladiator", "pacifica"} & candidate_tokens:
         return False
     return candidate_tokens < existing_tokens
+
+
+def _is_specific_vehicle_product(value: str) -> bool:
+    tokens = _product_tokens(value)
+    return bool({"wrangler", "grand", "cherokee", "gladiator", "pacifica"} & tokens)
+
+
+def _is_generic_vehicle_make_product(
+    value: str,
+    brand_key: str,
+    has_specific_vehicle: bool,
+) -> bool:
+    key = _compact_key(value)
+    if key not in _GENERIC_VEHICLE_MAKE_KEYS:
+        return False
+    return has_specific_vehicle or (brand_key and key in brand_key)
 
 
 def _product_tokens(value: str) -> set[str]:

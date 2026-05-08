@@ -284,6 +284,25 @@ def test_extract_vehicle_products_ignores_excluded_models():
     assert extracted.products == []
 
 
+def test_extract_chrysler_product_from_fused_ocr():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=18,
+                time_ms=9000,
+                text="2026CHRYSLERPACIFICA $6.000 BELOW MSRP Stk#28906",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.products == ["2026 Chrysler Pacifica"]
+    assert extracted.prices[0].text == "$6,000"
+    assert any("BELOW MSRP" in offer.text.upper() for offer in extracted.offers)
+
+
 def test_exact_disclaimers_ignore_plain_sales_tax_copy():
     extracted = extract_tracking_entities(
         ocr_items=[
@@ -467,6 +486,49 @@ def test_enrich_marketing_entities_skips_weaker_vehicle_product_variants():
     )
 
     assert enriched.products == ["2026 Wrangler 4-Door Sport S"]
+
+
+def test_enrich_marketing_entities_drops_generic_vehicle_make_product():
+    base = MarketingEntities()
+    base.brand.name = "Dick Poe Chrysler Jeep"
+    base.products = ["2026 Chrysler Pacifica", "Jeep"]
+
+    enriched = enrich_marketing_entities(
+        base,
+        ocr_items=[],
+        transcript=WhisperTranscript(),
+    )
+
+    assert enriched.products == ["2026 Chrysler Pacifica"]
+
+
+def test_merge_offers_collapses_repeated_chrysler_end_card_contexts():
+    base = MarketingEntities()
+    base.offers = [
+        OfferEntity(text="$6,000 below MSRP"),
+        OfferEntity(text="$500 Military & First Responder Rebate"),
+    ]
+    extracted = MarketingEntities()
+    repeated_context = (
+        "DickPoe CHRYSLER $500 Jeep REBAT 2026CHRYSLERPACIFICA "
+        "$6.000 BELOW MSRP Stk#28906. Cannot be combined with other offers. "
+        "See dealership for details"
+    )
+    extracted.offers = [
+        OfferEntity(text=repeated_context, evidence=[EvidenceItem(time_ms=1000, source="ocr", text="a")]),
+        OfferEntity(text=repeated_context, evidence=[EvidenceItem(time_ms=1500, source="ocr", text="b")]),
+        OfferEntity(
+            text="$500 Military & First Responder Rebate",
+            evidence=[EvidenceItem(time_ms=2000, source="ocr", text="c")],
+        ),
+    ]
+
+    merged = merge_commercial_entities(base, extracted)
+
+    assert [offer.text for offer in merged.offers] == [
+        "$6,000 below MSRP",
+        "$500 Military & First Responder Rebate",
+    ]
 
 
 def test_extract_disclaimer_density_without_exact_low_confidence_text():
