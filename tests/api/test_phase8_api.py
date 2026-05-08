@@ -9,10 +9,11 @@ import yaml
 from fastapi.testclient import TestClient
 
 from ad_classifier.api.app import create_app
-from ad_classifier.db.connection import open_database
+from ad_classifier.db.connection import load_sqlite_vec, open_database
 from ad_classifier.db.repositories import JobRepository
 from ad_classifier.models.jobs import JobRecord
 from ad_classifier.search.fts import fts_update
+from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 
 @pytest.fixture()
@@ -88,6 +89,93 @@ def test_upload_exact_duplicate_short_circuits(client: TestClient):
     assert payload["state"] == "duplicate"
     assert payload["ad_id"] == first["ad_id"]
     assert payload["job_id"] is None
+
+
+def test_delete_ad_can_cleanup_database_and_local_artifacts(
+    client: TestClient, config_path: Path
+):
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    data_root = Path(data["paths"]["data_root"])
+    ad_id = "ad_delete"
+    upload_path = Path(data["paths"]["uploads"]) / f"{ad_id}.mp4"
+    frame_dir = Path(data["paths"]["frames"]) / ad_id
+    audio_dir = Path(data["paths"]["audio"]) / ad_id
+    whisper_dir = Path(data["paths"]["whisper"]) / ad_id
+    out_dir = Path(data["paths"]["out"]) / ad_id
+
+    for directory in [upload_path.parent, frame_dir, audio_dir, whisper_dir, out_dir]:
+        directory.mkdir(parents=True, exist_ok=True)
+    upload_path.write_bytes(b"video")
+    (frame_dir / "frame.png").write_bytes(b"frame")
+    (audio_dir / "audio.wav").write_bytes(b"audio")
+    (whisper_dir / "whisper.json").write_text("{}", encoding="utf-8")
+    (out_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            "INSERT INTO ads (id, source_path, ingested_at, status) VALUES (?, ?, ?, ?)",
+            (ad_id, str(upload_path), datetime.now(UTC).isoformat(), "completed"),
+        )
+        conn.execute(
+            """
+            INSERT INTO frames (ad_id, frame_index, time_ms, path, kept)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (ad_id, 0, 0, str(frame_dir / "frame.png"), True),
+        )
+        fts_update(conn, ad_id, brand="Jeep")
+        load_sqlite_vec(conn)
+        store = SqliteVecStore(conn, text_dim=8, visual_dim=8)
+        store.ensure_tables()
+        store.upsert_text(ad_id, [0.1] * 8)
+        store.upsert_visual(ad_id, [0.2] * 8)
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.delete(f"/api/ads/{ad_id}", params={"cleanup_artifacts": True})
+
+    assert response.status_code == 200, response.text
+    removed = response.json()["artifacts_removed"]
+    assert str(upload_path.resolve()) in removed
+    assert str(frame_dir.resolve()) in removed
+    assert str(audio_dir.resolve()) in removed
+    assert str(whisper_dir.resolve()) in removed
+    assert str(out_dir.resolve()) in removed
+    assert not upload_path.exists()
+    assert not frame_dir.exists()
+    assert not audio_dir.exists()
+    assert not whisper_dir.exists()
+    assert not out_dir.exists()
+    assert data_root.exists()
+
+    conn = _db(config_path)
+    try:
+        load_sqlite_vec(conn)
+        assert conn.execute("SELECT COUNT(*) FROM ads WHERE id = ?", (ad_id,)).fetchone()[0] == 0
+        assert (
+            conn.execute("SELECT COUNT(*) FROM frames WHERE ad_id = ?", (ad_id,)).fetchone()[0]
+            == 0
+        )
+        assert (
+            conn.execute("SELECT COUNT(*) FROM ads_fts WHERE ad_id = ?", (ad_id,)).fetchone()[0]
+            == 0
+        )
+        assert (
+            conn.execute("SELECT COUNT(*) FROM vec_ads_text WHERE ad_id = ?", (ad_id,)).fetchone()[
+                0
+            ]
+            == 0
+        )
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM vec_ads_visual WHERE ad_id = ?", (ad_id,)
+            ).fetchone()[0]
+            == 0
+        )
+    finally:
+        conn.close()
 
 
 def test_completed_job_sse_emits_done(config_path: Path):

@@ -286,11 +286,13 @@ def delete_ad(
             raise HTTPException(status_code=404, detail="ad not found")
         fts_delete(conn, ad_id)
         load_sqlite_vec(conn)
-        SqliteVecStore(
+        store = SqliteVecStore(
             conn,
             text_dim=config.vector_store.text_dim,
             visual_dim=config.vector_store.visual_dim,
-        ).delete(ad_id)
+        )
+        store.ensure_tables()
+        store.delete(ad_id)
         AdRepository(conn).delete(ad_id)
         conn.commit()
     finally:

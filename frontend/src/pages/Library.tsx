@@ -140,10 +140,13 @@ export function Library() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (adId: string) => api.deleteAd(adId),
-    onSuccess: async () => {
+    mutationFn: (adId: string) => api.deleteAd(adId, true),
+    onSuccess: async (_result, adId) => {
       setSelectedAdId(null);
       await queryClient.invalidateQueries({ queryKey: ["ads"] });
+      await queryClient.removeQueries({ queryKey: ["ad-detail", adId] });
+      await queryClient.removeQueries({ queryKey: ["frames", adId] });
+      await queryClient.removeQueries({ queryKey: ["similar", adId] });
     }
   });
 
@@ -268,7 +271,7 @@ export function Library() {
           onDelete={() => {
             if (
               window.confirm(
-                "Delete this ad record? Cascaded database rows will be removed. Local files are left alone."
+                "Delete this ad and all generated local files? This removes cascaded database rows, FTS/vector indexes, frames, audio, transcript artifacts, manifest output, and the uploaded copy."
               )
             ) {
               deleteMutation.mutate(selectedDetail.ad.id);
