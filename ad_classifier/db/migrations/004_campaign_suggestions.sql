@@ -1,0 +1,1 @@
+ALTER TABLE marketing_entities RENAME COLUMN campaign_signals_json TO campaign_suggestions_json;

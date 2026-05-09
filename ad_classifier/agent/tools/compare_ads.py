@@ -9,6 +9,7 @@ from ad_classifier.db.repositories import AdRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.dedup.similarity import cosine_similarity
+from ad_classifier.dedup.verdict import classify_verdict
 from ad_classifier.models.marketing import MarketingEntities
 from ad_classifier.models.similarity import FieldDifference, SimilarityVerdict
 
@@ -45,27 +46,6 @@ def _diff_field(field: str, left: Any, right: Any) -> FieldDifference | None:
     if not left and not right:
         return None
     return FieldDifference(field=field, left=left, right=right)
-
-
-def _classify_verdict(
-    overall: float,
-    visual: float | None,
-    text: float | None,
-    same_brand: bool,
-    same_products: bool,
-    same_offer: bool,
-) -> SimilarityVerdict:
-    if overall >= 0.95 and same_brand and same_products and same_offer:
-        return "near_duplicate"
-    if same_brand and same_products and not same_offer and overall >= 0.75:
-        return "same_campaign_different_offer"
-    if same_brand and not same_products and overall >= 0.75:
-        return "same_campaign_different_sku"
-    if not same_brand and overall >= 0.75:
-        return "similar_messaging_different_brand"
-    if overall >= 0.55:
-        return "related"
-    return "unrelated"
 
 
 def _round(value: float | None) -> float | None:
@@ -143,6 +123,8 @@ class CompareAdsTool(AgentTool):
         r_offers = _offer_strings(right_marketing)
         l_ctas = _cta_strings(left_marketing)
         r_ctas = _cta_strings(right_marketing)
+        l_sub = left_marketing.subcategory if left_marketing else None
+        r_sub = right_marketing.subcategory if right_marketing else None
 
         classifications = ClassificationRepository(ctx.conn)
         l_class = classifications.get(left_id)
@@ -154,6 +136,7 @@ class CompareAdsTool(AgentTool):
             d
             for d in (
                 _diff_field("brand", l_brand, r_brand),
+                _diff_field("subcategory", l_sub, r_sub),
                 _diff_field("products", l_products, r_products),
                 _diff_field("prices", l_prices, r_prices),
                 _diff_field("offers", l_offers, r_offers),
@@ -166,14 +149,14 @@ class CompareAdsTool(AgentTool):
         same_brand = bool(l_brand) and l_brand == r_brand
         same_products = sorted(l_products) == sorted(r_products) and bool(l_products)
         same_offer = sorted(l_offers) == sorted(r_offers) and bool(l_offers)
+        same_subcategory = bool(l_sub) and bool(r_sub) and l_sub == r_sub
 
-        verdict = _classify_verdict(
+        verdict = classify_verdict(
             overall_score,
-            visual_score,
-            text_score,
             same_brand=same_brand,
             same_products=same_products,
             same_offer=same_offer,
+            same_subcategory=same_subcategory,
         )
 
         return ToolResult(

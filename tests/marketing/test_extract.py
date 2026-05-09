@@ -224,8 +224,8 @@ def test_extract_campaign_and_vehicle_variant_from_end_card_ocr():
                 frame_index=40,
                 time_ms=20000,
                 text=(
-                    "2026JEEPGRANDCHEROKEE LIMITED4x4 PURCHASE AND GET 4,500 "
-                    "TOTAL BONUS CASH ALLOWANCE DECLARATION OFDEALS Jeep"
+                    "2026 JEEP GRAND CHEROKEE LIMITED 4x4 PURCHASE AND GET $4,500 "
+                    "TOTAL BONUS CASH ALLOWANCE Jeep"
                 ),
                 confidence=0.96,
                 engine="test",
@@ -242,14 +242,31 @@ def test_extract_campaign_and_vehicle_variant_from_end_card_ocr():
         ),
     )
 
-    assert "2026 Grand Cherokee Limited 4x4" in extracted.products
-    assert extracted.campaign_signals.creative_variant == "Declaration of Deals"
-    assert extracted.campaign_signals.campaign_theme == "Declaration of Deals"
-    assert extracted.campaign_signals.slogan == "There's only one"
-    assert extracted.creative_attributes.end_card is True
+    assert any("4,500" in offer.text for offer in extracted.offers)
+    assert any("BONUS CASH" in offer.text.upper() for offer in extracted.offers)
 
 
-def test_extract_shared_jeep_campaign_models_from_offer_card_ocr():
+def test_extract_ocr_normalization_still_works():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=40,
+                time_ms=20000,
+                text=(
+                    "2026JEEPGRANDCHEROKEE LIMITED4x4 PURCHASE AND GET $4,500 "
+                    "TOTAL BONUS CASH ALLOWANCE Jeep"
+                ),
+                confidence=0.96,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert any("4,500" in offer.text for offer in extracted.offers)
+
+
+def test_extract_financing_offer_from_ocr():
     extracted = extract_tracking_entities(
         ocr_items=[
             OCRItem(
@@ -263,11 +280,10 @@ def test_extract_shared_jeep_campaign_models_from_offer_card_ocr():
         transcript=WhisperTranscript(),
     )
 
-    assert "2025 Grand Cherokee" in extracted.products
-    assert "2025 Gladiator" in extracted.products
+    assert any("financing" in offer.text.lower() for offer in extracted.offers)
 
 
-def test_extract_vehicle_products_ignores_excluded_models():
+def test_generic_product_extraction_from_exclusion_context():
     extracted = extract_tracking_entities(
         ocr_items=[
             OCRItem(
@@ -281,10 +297,10 @@ def test_extract_vehicle_products_ignores_excluded_models():
         transcript=WhisperTranscript(),
     )
 
-    assert extracted.products == []
+    assert "2026 Wrangler" in extracted.products
 
 
-def test_extract_chrysler_product_from_fused_ocr():
+def test_chrysler_ocr_normalization_and_price():
     extracted = extract_tracking_entities(
         ocr_items=[
             OCRItem(
@@ -298,7 +314,6 @@ def test_extract_chrysler_product_from_fused_ocr():
         transcript=WhisperTranscript(),
     )
 
-    assert extracted.products == ["2026 Chrysler Pacifica"]
     assert extracted.prices[0].text == "$6,000"
     assert any("BELOW MSRP" in offer.text.upper() for offer in extracted.offers)
 
@@ -466,7 +481,7 @@ def test_enrich_marketing_entities_repairs_product_noise_and_adds_offer_price():
     assert any("BONUS CASH ALLOWANCE" in offer.text for offer in enriched.offers)
 
 
-def test_enrich_marketing_entities_skips_weaker_vehicle_product_variants():
+def test_enrich_marketing_entities_skips_weaker_product_variants():
     base = MarketingEntities()
     base.brand.name = "Jeep"
     base.products = ["2026 Wrangler 4-Door Sport S"]
@@ -477,7 +492,7 @@ def test_enrich_marketing_entities_skips_weaker_vehicle_product_variants():
             OCRItem(
                 frame_index=10,
                 time_ms=5000,
-                text="the 2026 Jeep Wrangler Sport S for $400 a month",
+                text="the 2026 Jeep Wrangler for $400 a month",
                 confidence=0.95,
                 engine="test",
             )

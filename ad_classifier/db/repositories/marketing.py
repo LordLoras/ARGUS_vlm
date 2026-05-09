@@ -7,7 +7,7 @@ from ad_classifier.db.repositories.base import row_to_dict
 from ad_classifier.models.marketing import (
     AdvertiserEntity,
     BrandEntity,
-    CampaignSignals,
+    CampaignSuggestion,
     ContactPoints,
     CreativeAttributes,
     CreativeFormat,
@@ -90,11 +90,11 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
         else CreativeAttributes()
     )
 
-    campaign_signals_raw = data.get("campaign_signals_json")
-    campaign_signals = (
-        CampaignSignals.model_validate(json.loads(campaign_signals_raw))
-        if campaign_signals_raw
-        else CampaignSignals()
+    campaign_suggestions_raw = data.get("campaign_suggestions_json")
+    campaign_suggestions = (
+        [CampaignSuggestion.model_validate(s) for s in json.loads(campaign_suggestions_raw)]
+        if campaign_suggestions_raw
+        else []
     )
 
     return MarketingEntities(
@@ -112,7 +112,7 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
         landing_page=landing_page,
         offer_terms=offer_terms,
         creative_attributes=creative_attributes,
-        campaign_signals=campaign_signals,
+        campaign_suggestions=campaign_suggestions,
     )
 
 
@@ -127,7 +127,7 @@ class MarketingEntityRepository:
               ad_id, brand_json, subcategory_json, products_json, prices_json, offers_json,
               ctas_json, social_proof_json, disclaimers_json, creative_format_json,
               contact_points_json, advertiser_json, landing_page_json, offer_terms_json,
-              creative_attributes_json, campaign_signals_json
+              creative_attributes_json, campaign_suggestions_json
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               brand_json = excluded.brand_json,
@@ -144,7 +144,7 @@ class MarketingEntityRepository:
               landing_page_json = excluded.landing_page_json,
               offer_terms_json = excluded.offer_terms_json,
               creative_attributes_json = excluded.creative_attributes_json,
-              campaign_signals_json = excluded.campaign_signals_json
+              campaign_suggestions_json = excluded.campaign_suggestions_json
             """,
             (
                 ad_id,
@@ -162,7 +162,7 @@ class MarketingEntityRepository:
                 json.dumps(entities.landing_page.model_dump()),
                 json.dumps(entities.offer_terms.model_dump()),
                 json.dumps(entities.creative_attributes.model_dump()),
-                json.dumps(entities.campaign_signals.model_dump()),
+                json.dumps([s.model_dump() for s in entities.campaign_suggestions]),
             ),
         )
 

@@ -14,6 +14,7 @@ def test_placeholders_replaced():
     assert "{ALLOWED_CATEGORIES}" not in prompt
     assert "{ALLOWED_RISK_LABELS}" not in prompt
     assert "{SENSITIVE_CATEGORIES}" not in prompt
+    assert "{SUBCATEGORY_HINTS}" not in prompt
 
 
 def test_contains_known_category():

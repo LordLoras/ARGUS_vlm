@@ -184,13 +184,9 @@ class CreativeAttributes(StrictModel):
     disclaimer_density: DisclaimerDensity = "none"
 
 
-class CampaignSignals(StrictModel):
-    slogan: str | None = None
-    recurring_offer: str | None = None
-    product_model: str | None = None
-    sku: str | None = None
-    creative_variant: str | None = None
-    campaign_theme: str | None = None
+class CampaignSuggestion(StrictModel):
+    name: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: list[EvidenceItem] = Field(default_factory=list)
 
 
@@ -209,7 +205,7 @@ class MarketingEntities(StrictModel):
     landing_page: LandingPageEntity = Field(default_factory=LandingPageEntity)
     offer_terms: OfferTerms = Field(default_factory=OfferTerms)
     creative_attributes: CreativeAttributes = Field(default_factory=CreativeAttributes)
-    campaign_signals: CampaignSignals = Field(default_factory=CampaignSignals)
+    campaign_suggestions: list[CampaignSuggestion] = Field(default_factory=list)
 
     @property
     def products_text(self) -> str | None:

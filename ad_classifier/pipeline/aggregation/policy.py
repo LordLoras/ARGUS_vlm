@@ -12,7 +12,7 @@ from ad_classifier.models.marketing import (
     AdvertiserEntity,
     AppStoreLinkEntity,
     BrandEntity,
-    CampaignSignals,
+    CampaignSuggestion,
     ContactPoints,
     CreativeAttributes,
     CreativeFormat,
@@ -354,15 +354,15 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         disclaimer_density=me.creative_attributes.disclaimer_density,
     )
 
-    campaign_signals = CampaignSignals(
-        slogan=me.campaign_signals.slogan,
-        recurring_offer=me.campaign_signals.recurring_offer,
-        product_model=me.campaign_signals.product_model,
-        sku=me.campaign_signals.sku,
-        creative_variant=me.campaign_signals.creative_variant,
-        campaign_theme=me.campaign_signals.campaign_theme,
-        evidence=_entity_evidence(me.campaign_signals.evidence),
-    )
+    campaign_suggestions = [
+        CampaignSuggestion(
+            name=s.name,
+            confidence=s.confidence,
+            evidence=_entity_evidence(s.evidence),
+        )
+        for s in me.campaign_suggestions
+        if s.name
+    ]
 
     return MarketingEntities(
         brand=brand,
@@ -379,7 +379,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         landing_page=landing_page,
         offer_terms=offer_terms,
         creative_attributes=creative_attributes,
-        campaign_signals=campaign_signals,
+        campaign_suggestions=campaign_suggestions,
     )
 
 

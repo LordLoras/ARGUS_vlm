@@ -187,13 +187,9 @@ class VLMCreativeAttributes(_VLMBase):
     disclaimer_density: DisclaimerDensity = "none"
 
 
-class VLMCampaignSignals(_VLMBase):
-    slogan: str | None = None
-    recurring_offer: str | None = None
-    product_model: str | None = None
-    sku: str | None = None
-    creative_variant: str | None = None
-    campaign_theme: str | None = None
+class VLMCampaignSuggestion(_VLMBase):
+    name: str = ""
+    confidence: float = 0.0
     evidence: list[VLMLogoEvidence] = Field(default_factory=list)
 
 
@@ -212,7 +208,7 @@ class VLMMarketingEntities(_VLMBase):
     landing_page: VLMLandingPage = Field(default_factory=VLMLandingPage)
     offer_terms: VLMOfferTerms = Field(default_factory=VLMOfferTerms)
     creative_attributes: VLMCreativeAttributes = Field(default_factory=VLMCreativeAttributes)
-    campaign_signals: VLMCampaignSignals = Field(default_factory=VLMCampaignSignals)
+    campaign_suggestions: list[VLMCampaignSuggestion] = Field(default_factory=list)
 
 
 class VLMOCRError(_VLMBase):

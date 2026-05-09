@@ -156,11 +156,14 @@ function groupRelated(items: RelatedAd[]) {
 
 function isCategoryPeer(item: RelatedAd) {
   if (item.verdict === "similar_messaging_different_brand") return true;
-  return (item.differences ?? []).some((diff) => diff.field === "brand");
+  const diffs = item.differences ?? [];
+  const hasBrandDiff = diffs.some((diff) => diff.field === "brand");
+  const hasSubcategoryMatch = !diffs.some((diff) => diff.field === "subcategory");
+  return hasBrandDiff && hasSubcategoryMatch;
 }
 
 function preferredDifferences(differences: FieldDifference[]) {
-  const order = ["brand", "products", "prices", "offers", "primary_category"];
+  const order = ["brand", "subcategory", "products", "prices", "offers", "primary_category"];
   return [...differences]
     .sort((a, b) => order.indexOf(a.field) - order.indexOf(b.field))
     .slice(0, 4);
@@ -178,8 +181,6 @@ function verdictLabel(verdict?: string | null) {
       return "Category peer";
     case "related":
       return "Related creative";
-    case "unrelated":
-      return "Weak match";
     default:
       return "Related";
   }
@@ -195,6 +196,8 @@ function fieldLabel(field: string) {
   switch (field) {
     case "primary_category":
       return "Category";
+    case "subcategory":
+      return "Subcategory";
     default:
       return field.replace(/_/g, " ");
   }

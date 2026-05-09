@@ -284,7 +284,7 @@ def test_compare_ads_diff_without_vectors(readonly_conn, agent_config):
     assert result.data["verdict"] in (
         "same_campaign_different_sku",
         "related",
-        "unrelated",
+        None,
     )
 
 

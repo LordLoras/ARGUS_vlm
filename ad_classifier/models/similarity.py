@@ -12,7 +12,6 @@ SimilarityVerdict = Literal[
     "same_campaign_different_offer",
     "similar_messaging_different_brand",
     "related",
-    "unrelated",
 ]
 
 

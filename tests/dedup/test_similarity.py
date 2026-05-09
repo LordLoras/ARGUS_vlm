@@ -147,3 +147,88 @@ def test_enrich_related_ads_marks_same_campaign_variant(tmp_path):
     assert match.text_score == 0.8
     assert match.visual_score == 1.0
     assert {diff["field"] for diff in match.differences} >= {"products", "offers"}
+
+
+def test_enrich_related_ads_filters_low_scores(tmp_path):
+    db = tmp_path / "filter.db"
+    conn = open_database(db)
+    apply_migrations(conn)
+    try:
+        load_sqlite_vec(conn)
+    except Exception:
+        pytest.skip("sqlite-vec not available")
+
+    ads = AdRepository(conn)
+    marketing = MarketingEntityRepository(conn)
+    store = SqliteVecStore(conn, text_dim=3, visual_dim=3)
+    store.ensure_tables()
+
+    ads.create(AdRecord(id="ad_x", source_path="x.mp4", status="completed"))
+    ads.create(AdRecord(id="ad_y", source_path="y.mp4", status="completed"))
+    marketing.upsert(
+        "ad_x",
+        MarketingEntities(brand=BrandEntity(name="Nike"), products=["Air Max"]),
+    )
+    marketing.upsert(
+        "ad_y",
+        MarketingEntities(brand=BrandEntity(name="Toyota"), products=["Camry"]),
+    )
+    store.upsert_text("ad_x", [1.0, 0.0, 0.0])
+    store.upsert_text("ad_y", [0.1, 0.9, 0.5])
+    store.upsert_visual("ad_x", [1.0, 0.0, 0.0])
+    store.upsert_visual("ad_y", [0.1, 0.9, 0.5])
+    conn.commit()
+
+    related = enrich_related_ads(
+        store,
+        "ad_x",
+        text_vector=[1.0, 0.0, 0.0],
+        visual_vector=[1.0, 0.0, 0.0],
+        min_score=0.0,
+    )
+
+    low_matches = [r for r in related.semantically_similar if r.overall_score < 0.70]
+    assert len(low_matches) == 0
+
+
+def test_enrich_related_ads_subcategory_peer(tmp_path):
+    db = tmp_path / "peer.db"
+    conn = open_database(db)
+    apply_migrations(conn)
+    try:
+        load_sqlite_vec(conn)
+    except Exception:
+        pytest.skip("sqlite-vec not available")
+
+    ads = AdRepository(conn)
+    marketing = MarketingEntityRepository(conn)
+    store = SqliteVecStore(conn, text_dim=3, visual_dim=3)
+    store.ensure_tables()
+
+    ads.create(AdRecord(id="ad_p1", source_path="p1.mp4", status="completed"))
+    ads.create(AdRecord(id="ad_p2", source_path="p2.mp4", status="completed"))
+    marketing.upsert(
+        "ad_p1",
+        MarketingEntities(brand=BrandEntity(name="Jeep"), subcategory="SUV", products=["Grand Cherokee"]),
+    )
+    marketing.upsert(
+        "ad_p2",
+        MarketingEntities(brand=BrandEntity(name="Ford"), subcategory="SUV", products=["Explorer"]),
+    )
+    store.upsert_text("ad_p1", [1.0, 0.0, 0.0])
+    store.upsert_text("ad_p2", [0.85, 0.5, 0.2])
+    store.upsert_visual("ad_p1", [1.0, 0.0, 0.0])
+    store.upsert_visual("ad_p2", [0.9, 0.3, 0.1])
+    conn.commit()
+
+    related = enrich_related_ads(
+        store,
+        "ad_p1",
+        text_vector=[1.0, 0.0, 0.0],
+        visual_vector=[1.0, 0.0, 0.0],
+        min_score=0.7,
+    )
+
+    match = related.semantically_similar[0]
+    assert match.ad_id == "ad_p2"
+    assert match.verdict == "similar_messaging_different_brand"

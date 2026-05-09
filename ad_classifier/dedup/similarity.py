@@ -6,6 +6,7 @@ from typing import Any
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.models.marketing import MarketingEntities
+from ad_classifier.dedup.verdict import classify_verdict
 from ad_classifier.models.similarity import FieldDifference, SimilarityVerdict
 from ad_classifier.pipeline.aggregation.models import RelatedAds, SimilarAd
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -96,27 +97,6 @@ def _diff_field(field: str, left: Any, right: Any) -> FieldDifference | None:
     return FieldDifference(field=field, left=left, right=right)
 
 
-def _classify_verdict(
-    overall: float,
-    *,
-    same_brand: bool,
-    same_products: bool,
-    same_offer: bool,
-    same_subcategory: bool = False,
-) -> SimilarityVerdict:
-    if overall >= 0.95 and same_brand and same_products and same_offer:
-        return "near_duplicate"
-    if same_brand and same_products and not same_offer and overall >= 0.75:
-        return "same_campaign_different_offer"
-    if same_brand and not same_products and overall >= 0.75:
-        return "same_campaign_different_sku"
-    if not same_brand and overall >= 0.75:
-        return "similar_messaging_different_brand"
-    if overall >= 0.55:
-        return "related"
-    return "unrelated"
-
-
 def _build_differences_and_verdict(
     store: SqliteVecStore,
     ad_id: str,
@@ -157,15 +137,15 @@ def _build_differences_and_verdict(
     same_brand = bool(l_brand) and l_brand == r_brand
     same_products = sorted(l_products) == sorted(r_products) and bool(l_products)
     same_offer = sorted(l_offers) == sorted(r_offers) and bool(l_offers)
-    return (
-        _classify_verdict(
-            overall,
-            same_brand=same_brand,
-            same_products=same_products,
-            same_offer=same_offer,
-        ),
-        differences,
+    same_subcategory = bool(l_sub) and bool(r_sub) and l_sub == r_sub
+    verdict = classify_verdict(
+        overall,
+        same_brand=same_brand,
+        same_products=same_products,
+        same_offer=same_offer,
+        same_subcategory=same_subcategory,
     )
+    return verdict, differences
 
 
 def enrich_related_ads(
@@ -202,6 +182,9 @@ def enrich_related_ads(
         scores = [s for s in (t, v) if s is not None]
         overall = sum(scores) / len(scores) if scores else 0.0
         verdict, differences = _build_differences_and_verdict(store, ad_id, found_id, overall)
+
+        if verdict is None:
+            continue
 
         similar.append(
             SimilarAd(

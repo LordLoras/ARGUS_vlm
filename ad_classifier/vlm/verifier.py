@@ -120,7 +120,7 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
             "advertiser",
             "landing_page",
             "creative_attributes",
-            "campaign_signals",
+            "campaign_suggestions",
         ):
             value = _extract_key_value(raw, key, start=marketing_start)
             if value is not _MISSING:

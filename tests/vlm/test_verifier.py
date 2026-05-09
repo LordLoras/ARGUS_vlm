@@ -185,7 +185,7 @@ def test_vlm_response_format_includes_tracking_fields():
         "landing_page",
         "offer_terms",
         "creative_attributes",
-        "campaign_signals",
+        "campaign_suggestions",
     ):
         assert field in marketing_schema["properties"]
         assert field in marketing_schema["required"]
@@ -299,7 +299,7 @@ def test_parse_vlm_content_salvages_malformed_nested_json():
         '{"time_ms":11000,"text":"Must take retail delivery","reason":"\\", '
         '\\"confidence\\": 0.0}] } BROKEN,'
         '"creative_attributes":{"format":"brand_spot","disclaimer_density":"medium"},'
-        '"campaign_signals":{"campaign_theme":"Declaration of Deals","evidence":[]}},'
+        '"campaign_suggestions":[{"name":"Declaration of Deals","confidence":0.9,"evidence":[]}]},'
         '"summary":"usable summary"}'
     )
 
@@ -315,4 +315,4 @@ def test_parse_vlm_content_salvages_malformed_nested_json():
     assert result.marketing_entities.contact_points.websites[0].url == "https://twincitiesjeep.com"
     assert result.marketing_entities.contact_points.websites[0].domain == "twincitiesjeep.com"
     assert result.marketing_entities.creative_attributes.format == "brand_spot"
-    assert result.marketing_entities.campaign_signals.campaign_theme == "Declaration of Deals"
+    assert result.marketing_entities.campaign_suggestions[0].name == "Declaration of Deals"
