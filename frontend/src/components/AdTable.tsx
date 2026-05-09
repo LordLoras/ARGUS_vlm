@@ -1,13 +1,11 @@
 import { ChevronDownIcon, ChevronRightIcon } from "../lib/icons";
 import { formatDuration, relativeTime } from "../lib/format";
 import { aspectFromDims, deriveSeed } from "../lib/style-helpers";
-import { sensitiveCategories } from "../lib/taxonomy";
 import type { AdDetail, AdRecord } from "../lib/types";
 import { CategoryBadge } from "./shared/CategoryBadge";
 import { ConfidenceBar } from "./shared/ConfidenceBar";
 import { FrameThumbnail } from "./shared/FrameThumbnail";
 import { ObservationTagOverflow, ObservationTagPill } from "./shared/ObservationTagPill";
-import { SensitivePill } from "./shared/SensitivePill";
 
 export function AdTable({
   ads,
@@ -30,7 +28,6 @@ export function AdTable({
             <th style={{ width: 120 }}>Frame</th>
             <th>Brand</th>
             <th>Category</th>
-            <th>Sensitive</th>
             <th className="sortable">
               Confidence <ChevronDownIcon size={9} className="sort-arrow" />
             </th>
@@ -50,7 +47,6 @@ export function AdTable({
             const risks = cls?.risk_labels ?? [];
             const confidence = cls?.confidence ?? ad.brand_confidence ?? null;
             const ar = aspectFromDims(ad.width, ad.height);
-            const isSensitive = sensitiveCategories.has(category ?? "");
             const seed = deriveSeed(ad.id);
             return (
               <tr
@@ -74,9 +70,6 @@ export function AdTable({
                 </td>
                 <td>
                   <CategoryBadge category={category} />
-                </td>
-                <td>
-                  <SensitivePill sensitive={isSensitive} />
                 </td>
                 <td>
                   <ConfidenceBar value={confidence} />

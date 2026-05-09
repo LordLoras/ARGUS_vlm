@@ -102,6 +102,7 @@ def _classify_verdict(
     same_brand: bool,
     same_products: bool,
     same_offer: bool,
+    same_subcategory: bool = False,
 ) -> SimilarityVerdict:
     if overall >= 0.95 and same_brand and same_products and same_offer:
         return "near_duplicate"
@@ -138,10 +139,14 @@ def _build_differences_and_verdict(
     l_category = l_class.primary_category if l_class else None
     r_category = r_class.primary_category if r_class else None
 
+    l_sub = left_marketing.subcategory if left_marketing else None
+    r_sub = right_marketing.subcategory if right_marketing else None
+
     differences = [
         diff.model_dump()
         for diff in (
             _diff_field("brand", l_brand, r_brand),
+            _diff_field("subcategory", l_sub, r_sub),
             _diff_field("products", l_products, r_products),
             _diff_field("prices", l_prices, r_prices),
             _diff_field("offers", l_offers, r_offers),

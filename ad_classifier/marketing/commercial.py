@@ -229,10 +229,14 @@ def merge_commercial_entities(
             base.offers.append(offer)
     base.offers = _dedupe_offers(base.offers)
 
+    base.offers = _fuzzy_dedupe_offers(base.offers)
+
     for cta in extracted.ctas:
         existing = {_compact_key(item.text) for item in base.ctas}
         if _compact_key(cta.text) not in existing:
             base.ctas.append(cta)
+
+    base.ctas = _fuzzy_dedupe_list(base.ctas)
 
     for disclaimer in extracted.disclaimers:
         existing = {_compact_key(item.text) for item in base.disclaimers}
@@ -923,3 +927,66 @@ def _merge_campaign_signals(left: CampaignSignals, right: CampaignSignals) -> Ca
 
 def _max_density(left: str, right: str) -> str:
     return left if _DENSITY_RANK[left] >= _DENSITY_RANK[right] else right
+
+
+def _fuzzy_dedupe_offers(offers: list[OfferEntity]) -> list[OfferEntity]:
+    if len(offers) <= 1:
+        return offers
+    result: list[OfferEntity] = []
+    for offer in offers:
+        key = _compact_key(offer.text)
+        merged = False
+        for i, existing in enumerate(result):
+            existing_key = _compact_key(existing.text)
+            if key == existing_key:
+                merged = True
+                break
+            if _text_similarity_ratio(key, existing_key) >= 0.80:
+                if len(offer.text) > len(existing.text):
+                    result[i] = offer
+                merged = True
+                break
+            fam_existing = _offer_family_key(existing.text)
+            fam_new = _offer_family_key(offer.text)
+            if fam_existing == fam_new and fam_new != _compact_key(offer.text):
+                if _offer_quality(offer, fam_new) > _offer_quality(existing, fam_existing):
+                    result[i] = offer
+                merged = True
+                break
+        if not merged:
+            result.append(offer)
+    return result
+
+
+def _fuzzy_dedupe_list(items: list[CTAEntity | DisclaimerEntity]) -> list[CTAEntity | DisclaimerEntity]:
+    if len(items) <= 1:
+        return items
+    result: list[CTAEntity | DisclaimerEntity] = []
+    for item in items:
+        key = _compact_key(item.text)
+        merged = False
+        for i, existing in enumerate(result):
+            existing_key = _compact_key(existing.text)
+            if key == existing_key:
+                merged = True
+                break
+            if _text_similarity_ratio(key, existing_key) >= 0.80:
+                if len(item.text) > len(existing.text):
+                    result[i] = item
+                merged = True
+                break
+        if not merged:
+            result.append(item)
+    return result
+
+
+def _text_similarity_ratio(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if not shorter:
+        return 0.0
+    shared = sum(1 for c in shorter if c in longer)
+    return shared / max(len(longer), 1)

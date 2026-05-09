@@ -16,14 +16,6 @@ export const categories = [
   "other"
 ];
 
-export const sensitiveCategories = new Set([
-  "health_wellness",
-  "finance_banking",
-  "crypto_investment",
-  "gambling",
-  "political"
-]);
-
 export const riskLabels = [
   "deceptive_urgency",
   "unverified_health_claim",

@@ -2,10 +2,8 @@ import { Link } from "react-router-dom";
 
 import { filePathToDataUrl, formatTimestamp } from "../../lib/format";
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import { sensitiveCategories } from "../../lib/taxonomy";
 import type { AdDetail, FrameRecord, RelatedAds } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
-import { SensitivePill } from "../shared/SensitivePill";
 
 export function ResultPanel({
   detail,
@@ -22,7 +20,6 @@ export function ResultPanel({
 }) {
   const cls = detail.classification;
   const category = detail.ad.primary_category ?? cls?.primary_category ?? "uncategorized";
-  const sensitive = sensitiveCategories.has(category);
   const confidence = cls?.confidence ?? null;
   const risks = cls?.risk_labels ?? [];
   const ent = detail.marketing_entities;
@@ -56,7 +53,6 @@ export function ResultPanel({
               ) : null}
             </div>
           </div>
-          {sensitive ? <SensitivePill sensitive /> : null}
           <div className="result-actions">
             <Link className="btn btn-primary" to={`/library?ad=${detail.ad.id}`}>
               Open full detail

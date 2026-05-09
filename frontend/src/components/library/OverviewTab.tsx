@@ -1,8 +1,6 @@
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import { sensitiveCategories } from "../../lib/taxonomy";
 import type { AdDetail } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
-import { SensitivePill } from "../shared/SensitivePill";
 import { TimestampChip } from "../shared/TimestampChip";
 
 export function OverviewTab({
@@ -15,7 +13,6 @@ export function OverviewTab({
   const cls = detail.classification;
   const ent = detail.marketing_entities;
   const category = detail.ad.primary_category ?? cls?.primary_category ?? "uncategorized";
-  const sensitive = sensitiveCategories.has(category);
   const confidence = cls?.confidence ?? null;
   const risks = cls?.risk_labels ?? [];
   const prices = ent?.prices ?? [];
@@ -25,6 +22,7 @@ export function OverviewTab({
     ? detail.ad.products_text.split(/,\s*/).filter(Boolean)
     : ent?.products ?? [];
   const disclaimers = ent?.disclaimers ?? [];
+  const subcategory = detail.ad.subcategory ?? ent?.subcategory ?? null;
 
   return (
     <>
@@ -33,9 +31,9 @@ export function OverviewTab({
           <span className="cat-primary">{category}</span>
           <span className="cat-conf">{confidence != null ? `confidence ${confidence.toFixed(2)}` : "no confidence"}</span>
         </div>
-        {sensitive ? (
-          <div style={{ marginTop: 10 }}>
-            <SensitivePill sensitive />
+        {subcategory ? (
+          <div style={{ marginTop: 8 }}>
+            <span className="badge badge-violet">{subcategory}</span>
           </div>
         ) : null}
       </Card>

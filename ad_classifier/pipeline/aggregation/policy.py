@@ -43,14 +43,6 @@ from ad_classifier.vlm.models import VLMVerificationResult
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "taxonomy.yaml"
 
 
-def _sensitive_categories() -> set[str]:
-    try:
-        data = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
-        return {c["id"] for c in data.get("categories", []) if c.get("sensitive", False)}
-    except Exception:
-        return set()
-
-
 def _allowed_risk_labels() -> set[str]:
     try:
         data = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
@@ -374,6 +366,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 
     return MarketingEntities(
         brand=brand,
+        subcategory=me.subcategory or None,
         products=list(me.products),
         prices=prices,
         offers=offers,
@@ -400,30 +393,20 @@ def _parse_rating_count(value: str | None) -> int | None:
 def _decide(
     vlm_decision: Decision,
     vlm_confidence: float,
-    primary_category: str,
     rule_risk_labels: list[str],
     config: AggregationConfig,
 ) -> tuple[Decision, bool]:
-    sensitive = _sensitive_categories()
-    is_sensitive = primary_category in sensitive
-
-    threshold = config.sensitive_review_threshold if is_sensitive else config.allow_threshold
-
-    # Strong flag: VLM says flag with high confidence
     if vlm_decision == "flag" and vlm_confidence >= config.flag_threshold:
         return "flag", True
 
-    # Rule engine found risk labels → at minimum review
     if rule_risk_labels:
-        if vlm_decision == "allow" and vlm_confidence >= config.flag_threshold and not is_sensitive:
+        if vlm_decision == "allow" and vlm_confidence >= config.flag_threshold:
             return "review", True
         return "flag" if vlm_decision == "flag" else "review", True
 
-    # VLM says allow with sufficient confidence
-    if vlm_decision == "allow" and vlm_confidence >= threshold:
+    if vlm_decision == "allow" and vlm_confidence >= config.allow_threshold:
         return "allow", False
 
-    # VLM says review or confidence is below threshold
     return "review", True
 
 
@@ -456,7 +439,6 @@ def aggregate(
     decision, needs_review = _decide(
         vlm_result.decision,
         vlm_result.confidence,
-        vlm_result.primary_category,
         rule_risk_labels,
         cfg,
     )

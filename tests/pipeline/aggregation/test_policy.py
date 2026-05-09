@@ -91,10 +91,8 @@ def test_unknown_risk_labels_are_filtered():
     assert result.decision == "allow"
 
 
-def test_sensitive_category_lowers_threshold():
-    # health_wellness is sensitive → threshold = 0.50 (sensitive_review_threshold)
-    # confidence=0.60 > 0.50 → allow
-    cfg = AggregationConfig(sensitive_review_threshold=0.50)
+def test_low_confidence_reviews():
+    cfg = AggregationConfig(allow_threshold=0.50)
     result = aggregate(
         "ad_1",
         _vlm(decision="allow", confidence=0.60, primary_category="health_wellness"),
@@ -104,8 +102,8 @@ def test_sensitive_category_lowers_threshold():
     assert result.decision == "allow"
 
 
-def test_sensitive_category_below_threshold_reviews():
-    cfg = AggregationConfig(sensitive_review_threshold=0.70)
+def test_below_threshold_reviews():
+    cfg = AggregationConfig(allow_threshold=0.70)
     result = aggregate(
         "ad_1",
         _vlm(decision="allow", confidence=0.60, primary_category="health_wellness"),

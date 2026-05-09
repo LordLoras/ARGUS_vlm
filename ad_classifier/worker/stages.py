@@ -209,6 +209,7 @@ def run_pipeline_for_job(
         landing_page_domain=final.marketing_entities.landing_page.domain,
         products_text=final.marketing_entities.products_text,
         primary_category=final.primary_category,
+        subcategory=final.marketing_entities.subcategory,
         decision=final.decision,
     )
     AdRepository(conn).update_status(ad_id, "completed")

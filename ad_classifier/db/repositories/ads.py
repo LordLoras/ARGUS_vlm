@@ -177,6 +177,7 @@ class AdRepository:
         landing_page_domain: str | None = None,
         products_text: str | None,
         primary_category: str | None,
+        subcategory: str | None = None,
         decision: str | None,
     ) -> None:
         self.conn.execute(
@@ -190,6 +191,7 @@ class AdRepository:
                 landing_page_domain = ?,
                 products_text = ?,
                 primary_category = ?,
+                subcategory = ?,
                 decision = ?
             WHERE id = ?
             """,
@@ -202,6 +204,7 @@ class AdRepository:
                 landing_page_domain,
                 products_text,
                 primary_category,
+                subcategory,
                 decision,
                 ad_id,
             ),

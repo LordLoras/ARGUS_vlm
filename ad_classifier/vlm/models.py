@@ -199,6 +199,7 @@ class VLMCampaignSignals(_VLMBase):
 
 class VLMMarketingEntities(_VLMBase):
     brand: VLMBrand = Field(default_factory=VLMBrand)
+    subcategory: str | None = None
     products: list[str] = Field(default_factory=list)
     prices: list[VLMPrice] = Field(default_factory=list)
     offers: list[VLMOffer] = Field(default_factory=list)

@@ -29,6 +29,9 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
     brand_raw = data.get("brand_json")
     brand = BrandEntity.model_validate(json.loads(brand_raw)) if brand_raw else BrandEntity()
 
+    subcategory_raw = data.get("subcategory_json")
+    subcategory = json.loads(subcategory_raw) if subcategory_raw else None
+
     products_raw = data.get("products_json")
     products: list[str] = json.loads(products_raw) if products_raw else []
 
@@ -96,6 +99,7 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
 
     return MarketingEntities(
         brand=brand,
+        subcategory=subcategory,
         products=products,
         prices=prices,
         offers=offers,
@@ -120,13 +124,14 @@ class MarketingEntityRepository:
         self.conn.execute(
             """
             INSERT INTO marketing_entities (
-              ad_id, brand_json, products_json, prices_json, offers_json,
+              ad_id, brand_json, subcategory_json, products_json, prices_json, offers_json,
               ctas_json, social_proof_json, disclaimers_json, creative_format_json,
               contact_points_json, advertiser_json, landing_page_json, offer_terms_json,
               creative_attributes_json, campaign_signals_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               brand_json = excluded.brand_json,
+              subcategory_json = excluded.subcategory_json,
               products_json = excluded.products_json,
               prices_json = excluded.prices_json,
               offers_json = excluded.offers_json,
@@ -144,6 +149,7 @@ class MarketingEntityRepository:
             (
                 ad_id,
                 json.dumps(entities.brand.model_dump()),
+                json.dumps(entities.subcategory) if entities.subcategory else None,
                 json.dumps(entities.products),
                 json.dumps([p.model_dump() for p in entities.prices]),
                 json.dumps([o.model_dump() for o in entities.offers]),

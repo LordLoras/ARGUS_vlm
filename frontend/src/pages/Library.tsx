@@ -12,14 +12,12 @@ import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
 import { DownloadIcon, LibraryIcon, PlusIcon } from "../lib/icons";
-import { sensitiveCategories } from "../lib/taxonomy";
 import type { AdDetail, AdRecord } from "../lib/types";
 
 const emptyFilters: LibraryFilters = {
   q: "",
   category: "",
   brand: "",
-  sensitiveOnly: false,
   hasRiskTags: false,
   risk: ""
 };
@@ -90,9 +88,7 @@ export function Library() {
   const filteredAds = useMemo(() => {
     return ads.filter((ad) => {
       const detail = detailMap[ad.id];
-      const category = ad.primary_category ?? detail?.classification?.primary_category ?? "";
       const riskLabels = detail?.classification?.risk_labels ?? [];
-      if (filters.sensitiveOnly && !sensitiveCategories.has(category)) return false;
       if (filters.hasRiskTags && riskLabels.length === 0) return false;
       if (activeRisks.length && !activeRisks.every((r) => riskLabels.includes(r))) return false;
       return true;
@@ -102,7 +98,6 @@ export function Library() {
   const counts = useMemo(() => {
     const byCategory: Record<string, number> = {};
     const byRisk: Record<string, number> = {};
-    let sensitive = 0;
     let hasRisk = 0;
     ads.forEach((ad) => {
       const detail = detailMap[ad.id];
@@ -110,10 +105,9 @@ export function Library() {
       const risks = detail?.classification?.risk_labels ?? [];
       if (category) byCategory[category] = (byCategory[category] ?? 0) + 1;
       risks.forEach((r) => (byRisk[r] = (byRisk[r] ?? 0) + 1));
-      if (sensitiveCategories.has(category)) sensitive += 1;
       if (risks.length > 0) hasRisk += 1;
     });
-    return { total: ads.length, sensitive, hasRisk, byCategory, byRisk };
+    return { total: ads.length, sensitive: 0, hasRisk, byCategory, byRisk };
   }, [ads, detailMap]);
 
   const selectedDetail = selectedAdId ? detailMap[selectedAdId] : undefined;
@@ -130,7 +124,7 @@ export function Library() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: ({ adId, patch }: { adId: string; patch: { brand_name?: string | null; products_text?: string | null; primary_category?: string | null } }) =>
+    mutationFn: ({ adId, patch }: { adId: string; patch: Record<string, unknown> }) =>
       api.patchAd(adId, patch),
     onSuccess: async (updated) => {
       queryClient.setQueryData<AdDetail>(["ad-detail", updated.id], (current) =>
@@ -182,14 +176,6 @@ export function Library() {
       delta: campaignsCount ? `${campaignsCount} active` : "—",
       sparkValues: sparkSeed(Math.max(campaignsCount, 1), 12),
       sparkColor: "var(--accent-2)"
-    },
-    {
-      label: "Sensitive",
-      value: String(counts.sensitive),
-      delta: totalAds ? `${Math.round((counts.sensitive / totalAds) * 100)}%` : "—",
-      sparkValues: sparkSeed(Math.max(counts.sensitive, 1), 12),
-      sparkColor: "#f59e0b",
-      sensitive: true
     },
     {
       label: "Brands",

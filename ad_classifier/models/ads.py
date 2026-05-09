@@ -31,6 +31,7 @@ class AdRecord(StrictModel):
     landing_page_domain: str | None = None
     products_text: str | None = None
     primary_category: str | None = None
+    subcategory: str | None = None
     decision: str | None = None
     source_hash: str | None = None
     phash_mean: str | None = None

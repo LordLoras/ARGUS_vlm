@@ -15,6 +15,7 @@ export type AdRecord = {
   landing_page_domain?: string | null;
   products_text?: string | null;
   primary_category?: string | null;
+  subcategory?: string | null;
   decision?: string | null;
   source_hash?: string | null;
   phash_mean?: string | null;
@@ -54,6 +55,7 @@ export type MarketingEntities = {
     logo_evidence?: EvidenceItem[];
     tagline?: string | null;
   };
+  subcategory?: string | null;
   products?: string[];
   prices?: Array<{
     text?: string | null;

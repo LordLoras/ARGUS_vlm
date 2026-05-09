@@ -26,10 +26,7 @@ def render_verifier_prompt(
 
     allowed_categories = "\n".join(f"- {c['id']}" for c in categories)
     allowed_risk_labels = "\n".join(f"- {r}" for r in risk_labels)
-    sensitive_categories = "\n".join(
-        f"- {c['id']}" for c in categories if c.get("sensitive", False)
-    )
 
     return template.replace("{ALLOWED_CATEGORIES}", allowed_categories).replace(
         "{ALLOWED_RISK_LABELS}", allowed_risk_labels
-    ).replace("{SENSITIVE_CATEGORIES}", sensitive_categories)
+    )

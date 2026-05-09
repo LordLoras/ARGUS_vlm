@@ -33,7 +33,11 @@ class AdPatch(BaseModel):
     landing_page_domain: str | None = None
     products_text: str | None = None
     primary_category: str | None = None
+    subcategory: str | None = None
     decision: str | None = None
+    tagline: str | None = None
+    offers: list[dict[str, str | None]] | None = None
+    ctas: list[dict[str, str | None]] | None = None
 
 
 @router.post("/ads/upload")
@@ -262,8 +266,34 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                 if patch.primary_category is not None
                 else current.primary_category
             ),
+            subcategory=(
+                patch.subcategory if patch.subcategory is not None else current.subcategory
+            ),
             decision=patch.decision if patch.decision is not None else current.decision,
         )
+
+        marketing_repo = MarketingEntityRepository(conn)
+        marketing = marketing_repo.get(ad_id)
+        if marketing is not None:
+            dirty = False
+            if patch.tagline is not None:
+                marketing.brand.tagline = patch.tagline or None
+                dirty = True
+            if patch.offers is not None:
+                from ad_classifier.models.marketing import OfferEntity
+                marketing.offers = [
+                    OfferEntity(text=o.get("text", "")) for o in patch.offers if o.get("text")
+                ]
+                dirty = True
+            if patch.ctas is not None:
+                from ad_classifier.models.marketing import CTAEntity
+                marketing.ctas = [
+                    CTAEntity(text=c.get("text", "")) for c in patch.ctas if c.get("text")
+                ]
+                dirty = True
+            if dirty:
+                marketing_repo.upsert(ad_id, marketing)
+
         conn.commit()
         updated = repo.get(ad_id)
         return _dump(updated)

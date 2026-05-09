@@ -4,14 +4,12 @@ export type LibraryFilters = {
   q: string;
   category: string;
   brand: string;
-  sensitiveOnly: boolean;
   hasRiskTags: boolean;
   risk: string;
 };
 
 type Counts = {
   total: number;
-  sensitive: number;
   hasRisk: number;
   byCategory: Record<string, number>;
   byRisk: Record<string, number>;
@@ -58,18 +56,10 @@ export function FilterSidebar({
         </div>
         <div
           className="switch-row"
-          onClick={() => onChange({ ...filters, sensitiveOnly: !filters.sensitiveOnly })}
-        >
-          <span className={`switch ${filters.sensitiveOnly ? "on" : ""}`} />
-          <span className="switch-label">Sensitive only</span>
-          <span className="count">{counts.sensitive}</span>
-        </div>
-        <div
-          className="switch-row"
           onClick={() => onChange({ ...filters, hasRiskTags: !filters.hasRiskTags })}
         >
           <span className={`switch ${filters.hasRiskTags ? "on" : ""}`} />
-          <span className="switch-label">Has risk tags</span>
+          <span className="switch-label">Has observation tags</span>
           <span className="count">{counts.hasRisk}</span>
         </div>
       </div>
