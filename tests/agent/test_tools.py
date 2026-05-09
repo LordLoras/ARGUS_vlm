@@ -247,6 +247,28 @@ def test_vector_similarity_requires_store(readonly_conn, agent_config):
     assert "vector store" in (result.error or "")
 
 
+def test_vector_similarity_with_store_factory(writable_conn, agent_config):
+    """Test vector_similarity tool when store factory is provided but no vectors stored."""
+    from ad_classifier.api.factories import vector_store_factory
+    from ad_classifier.config import AppConfig
+
+    config = AppConfig()
+    store_factory = lambda conn: vector_store_factory(config, conn)
+    
+    ctx = ToolContext(
+        conn=writable_conn,
+        config=agent_config,
+        vector_store_factory=store_factory,
+    )
+    
+    # Should fail gracefully because no vectors are stored yet
+    result = VectorSimilarityTool().call(
+        {"ad_id": "ad_jeep_a"}, ctx
+    )
+    assert result.ok is False
+    assert "no text vector" in (result.error or "").lower()
+
+
 def test_compare_ads_diff_without_vectors(readonly_conn, agent_config):
     """compare_ads should still produce a structured diff if vectors are missing."""
     result = CompareAdsTool().call(
