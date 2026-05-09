@@ -91,11 +91,7 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
     )
 
     campaign_suggestions_raw = data.get("campaign_suggestions_json")
-    campaign_suggestions = (
-        [CampaignSuggestion.model_validate(s) for s in json.loads(campaign_suggestions_raw)]
-        if campaign_suggestions_raw
-        else []
-    )
+    campaign_suggestions = _parse_campaign_suggestions(campaign_suggestions_raw)
 
     return MarketingEntities(
         brand=brand,
@@ -176,3 +172,16 @@ class MarketingEntityRepository:
 
     def delete(self, ad_id: str) -> None:
         self.conn.execute("DELETE FROM marketing_entities WHERE ad_id = ?", (ad_id,))
+
+
+def _parse_campaign_suggestions(raw: str | None) -> list[CampaignSuggestion]:
+    if not raw:
+        return []
+    parsed = json.loads(raw)
+    if isinstance(parsed, list):
+        return [
+            CampaignSuggestion.model_validate(s)
+            for s in parsed
+            if isinstance(s, dict) and s.get("name")
+        ]
+    return []
