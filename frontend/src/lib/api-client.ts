@@ -163,6 +163,9 @@ export function streamAgentQuery(
 ) {
   const controller = new AbortController();
   const url = `${API_BASE_URL}/api/agent/sessions/${sessionId}/events?q=${encodeURIComponent(message)}`;
+  
+  let hasCompleted = false;
+  
   void fetchEventSource(url, {
     method: "GET",
     signal: controller.signal,
@@ -173,6 +176,11 @@ export function streamAgentQuery(
       try {
         const payload = JSON.parse(event.data) as Record<string, unknown>;
         onEvent({ type: event.event as AgentStreamEvent["type"], payload } as AgentStreamEvent);
+        
+        // Mark stream as complete when done event received
+        if (event.event === "done") {
+          hasCompleted = true;
+        }
       } catch (err) {
         onEvent({
           type: "error",
@@ -184,15 +192,24 @@ export function streamAgentQuery(
       }
     },
     onerror(error) {
-      onEvent({
-        type: "error",
-        payload: {
-          session_id: sessionId,
-          message: error instanceof Error ? error.message : String(error)
-        }
-      });
-      throw error;
+      // Only report error if we haven't already received a done event
+      if (!hasCompleted) {
+        onEvent({
+          type: "error",
+          payload: {
+            session_id: sessionId,
+            message: error instanceof Error ? error.message : String(error)
+          }
+        });
+        // Ensure we send a done event so the UI knows streaming is complete
+        onEvent({
+          type: "done",
+          payload: { session_id: sessionId }
+        });
+      }
+      // Don't rethrow error - handle it gracefully
     }
   });
+  
   return () => controller.abort();
 }

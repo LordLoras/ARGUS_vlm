@@ -148,6 +148,16 @@ export function Agent() {
       case "error":
         // Both events carry text already delivered via a prior `message`
         // event in this turn — nothing additional to render.
+        // If error, ensure we have content to show
+        if (event.type === "error" && event.payload.message && !streamMessages.some(m => m.role === "assistant")) {
+          setStreamMessages((current) => [
+            ...current,
+            {
+              role: "assistant",
+              content: `Error: ${event.payload.message}`
+            }
+          ]);
+        }
         break;
       case "done":
         setStreaming(false);

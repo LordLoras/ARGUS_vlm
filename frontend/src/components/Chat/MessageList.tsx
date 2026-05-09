@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCallCard, type ToolCard } from "./ToolCallCard";
 
@@ -37,6 +38,19 @@ export function MessageList({
   streaming?: boolean;
   onPrompt: (text: string) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages or tools change
+  useEffect(() => {
+    if (scrollRef.current) {
+      // Use a small delay to ensure the DOM has been updated
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 0);
+    }
+  }, [messages, tools, streaming]);
   if (messages.length === 0 && tools.length === 0) {
     return (
       <div className="chat-empty">
@@ -66,7 +80,7 @@ export function MessageList({
   }
 
   return (
-    <div className="chat-scroll">
+    <div className="chat-scroll" ref={scrollRef}>
       <div className="chat-message-list">
         {messages.map((message, index) => (
           <Bubble
