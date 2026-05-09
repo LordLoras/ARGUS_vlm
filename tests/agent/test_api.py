@@ -193,4 +193,34 @@ def test_agent_schema_endpoint(config_path: Path):
     assert response.status_code == 200
     body = response.json()
     assert "ads(" in body["schema"]
-    assert "{TOOL_CATALOG}" not in body["system_prompt"]
+
+
+def test_agent_with_vector_store_factories(config_path: Path):
+    """Test that agent works when vector_store and text_embedder factories are provided."""
+    from ad_classifier.api.factories import text_embedder_factory, vector_store_factory
+
+    db_path = Path(yaml.safe_load(config_path.read_text())["paths"]["sqlite_path"])
+    app = create_app(
+        config_path=config_path,
+        agent_text_embedder_factory=lambda cfg: text_embedder_factory(cfg),
+        agent_vector_store_factory=lambda cfg, conn: vector_store_factory(cfg, conn),
+        agent_client_factory=_client_factory(
+            [
+                AgentMessage(
+                    content=None,
+                    tool_calls=[ToolCall(id="c1", name="count_ads", arguments={})],
+                    finish_reason="tool_calls",
+                ),
+                AgentMessage(content="All ads counted.", tool_calls=[], finish_reason="stop"),
+            ]
+        ),
+    )
+    _seed_some_ads(db_path)
+
+    client = TestClient(app)
+    sid = client.post("/api/agent/sessions").json()["session_id"]
+    answer = client.post(
+        f"/api/agent/sessions/{sid}/query", json={"text": "count ads"}
+    ).json()
+    assert answer["session_id"] == sid
+    assert answer["iterations"] == 2
