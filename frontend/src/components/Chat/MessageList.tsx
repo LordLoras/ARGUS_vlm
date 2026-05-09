@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCallCard, type ToolCard } from "./ToolCallCard";
 
@@ -31,26 +31,36 @@ export function MessageList({
   messages,
   tools,
   streaming,
-  onPrompt
+  onPrompt,
+  scrollRef: externalScrollRef
 }: {
   messages: RenderedMessage[];
   tools: ToolCard[];
   streaming?: boolean;
   onPrompt: (text: string) => void;
+  scrollRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const internalScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom when messages or tools change
-  useEffect(() => {
-    if (scrollRef.current) {
-      // Use a small delay to ensure the DOM has been updated
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-      }, 0);
+  const scrollEl = externalScrollRef ?? internalScrollRef;
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollEl.current) {
+      scrollEl.current.scrollTop = scrollEl.current.scrollHeight;
     }
-  }, [messages, tools, streaming]);
+  }, [scrollEl]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(scrollToBottom);
+    return () => cancelAnimationFrame(raf);
+  }, [messages, tools, streaming, scrollToBottom]);
+
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollEl.current = el;
+    },
+    [scrollEl]
+  );
   if (messages.length === 0 && tools.length === 0) {
     return (
       <div className="chat-empty">
@@ -80,7 +90,7 @@ export function MessageList({
   }
 
   return (
-    <div className="chat-scroll" ref={scrollRef}>
+    <div className="chat-scroll" ref={setRef}>
       <div className="chat-message-list">
         {messages.map((message, index) => (
           <Bubble

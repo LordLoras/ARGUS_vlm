@@ -38,6 +38,7 @@ export function Agent() {
   const [streaming, setStreaming] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
   const health = useApiHealth();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sessions = useQuery({
     queryKey: ["agent-sessions"],
@@ -145,32 +146,41 @@ export function Agent() {
         );
         break;
       case "final":
-      case "error":
-        // Both events carry text already delivered via a prior `message`
-        // event in this turn — nothing additional to render.
-        // If error, ensure we have content to show
-        if (event.type === "error" && event.payload.message && !streamMessages.some(m => m.role === "assistant")) {
-          setStreamMessages((current) => [
-            ...current,
-            {
-              role: "assistant",
-              content: `Error: ${event.payload.message}`
-            }
-          ]);
-        }
         break;
-      case "done":
+      case "error":
+        setStreamMessages((current) => {
+          if (event.payload.message && !current.some(m => m.role === "assistant")) {
+            return [
+              ...current,
+              {
+                role: "assistant",
+                content: `Error: ${event.payload.message}`
+              }
+            ];
+          }
+          return current;
+        });
+        break;
+      case "done": {
+        const doneSid = (event.payload.session_id as string) || activeId || "";
         setStreaming(false);
         cleanupRef.current = null;
-        // Server has the persisted user + assistant rows; refetch and drop the
-        // local stream copies so we don't double-render.
         void queryClient
-          .invalidateQueries({ queryKey: ["agent-session", activeId] })
+          .invalidateQueries({ queryKey: ["agent-session", doneSid] })
           .then(() => setStreamMessages([]));
         void queryClient.invalidateQueries({ queryKey: ["agent-sessions"] });
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        });
         break;
+      }
     }
   };
+
+  const handleStreamEventRef = useRef(handleStreamEvent);
+  handleStreamEventRef.current = handleStreamEvent;
 
   const submit = async (message: string) => {
     if (!message.trim() || streaming) return;
@@ -195,7 +205,11 @@ export function Agent() {
 
     setStreaming(true);
     setTools([]);
-    cleanupRef.current = streamAgentQuery(sid, message, handleStreamEvent);
+    cleanupRef.current = streamAgentQuery(
+      sid,
+      message,
+      (event) => handleStreamEventRef.current(event)
+    );
   };
 
   const stop = () => {
@@ -254,6 +268,7 @@ export function Agent() {
             tools={tools}
             streaming={streaming}
             onPrompt={submit}
+            scrollRef={scrollRef}
           />
           <ChatInput
             disabled={false}
