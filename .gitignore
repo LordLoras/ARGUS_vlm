@@ -68,3 +68,7 @@ config.yaml
 
 # Generated prompt summaries
 prompts/agent_schema_summary.txt
+
+#samples
+/samples/
+*.mp4
