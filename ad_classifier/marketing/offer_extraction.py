@@ -37,6 +37,14 @@ _MIN_COMMERCIAL_CONFIDENCE = 0.75
 _GENERIC_PRODUCT_PATTERN = re.compile(
     r"\b(?P<year>20\d{2})\s+(?P<name>[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z0-9-]+){0,4})\b"
 )
+_PRODUCT_TERMINATORS = re.compile(
+    r"\b(?:MSRP|Now|Priced|Pricing|Starting|As|For|With|Over|Under|Discount|Save|Sale|Lease|Finance|Offer|Includes?|PN|Stock|VIN|Model|Dlr)\b",
+    re.IGNORECASE,
+)
+_DEALER_SUFFIXES = re.compile(
+    r"\b(?:dealer|dealership|center|centre|group|inc|llc|ltd|corp|motors?|auto|rv|sales?|service)\b",
+    re.IGNORECASE,
+)
 _PRICE_OFFER_TERMS = (
     "bonus cash",
     "cash allowance",
@@ -68,7 +76,7 @@ _DISCLAIMER_TERMS = (
     "see dealer",
     "expires",
 )
-_MAX_OFFER_TEXT_LEN = 120
+_MAX_OFFER_TEXT_LEN = 90
 
 _DISCLAIMER_START_PATTERN = re.compile(
     r"\b(?:offers?\s+exclude|for\s+well-qualified|not\s+all\s+buyers|"
@@ -123,13 +131,26 @@ def _extract_generic_products(text: str, entities: MarketingEntities) -> None:
     for match in _GENERIC_PRODUCT_PATTERN.finditer(text):
         name = match.group("name").strip()
         year = match.group("year")
-        product = f"{year} {name}"
         if len(name) < 3:
             continue
+        trimmed = _PRODUCT_TERMINATORS.split(name)[0].strip()
+        if not trimmed or len(trimmed) < 2:
+            continue
+        if _DEALER_SUFFIXES.search(trimmed):
+            continue
+        product = f"{year} {trimmed}"
         key = _compact_key(product)
         existing = {_compact_key(p) for p in entities.products}
         if key not in existing:
             entities.products.append(product)
+
+
+_NON_PRICE_CONTEXT = re.compile(
+    r"\b(?:dealer\s+document\s+processing|electronic\s+filing|emission\s+testing"
+    r"|discounted\s+over|exclude|excludes?|excluded|fees?\s+and\s+taxes"
+    r"|finance\s+charges?|charge[s]?\s*,)\b",
+    re.IGNORECASE,
+)
 
 
 def _extract_prices(
@@ -145,6 +166,8 @@ def _extract_prices(
             continue
         context = _trim_offer_text(_context_window(text, match.start(), match.end()))
         if _is_financing_example(amount, context):
+            continue
+        if _NON_PRICE_CONTEXT.search(context):
             continue
         price_text = f"{match.group('currency')}{match.group('amount')}{match.group('cents') or ''}"
         key = f"{match.group('currency')}:{amount:.2f}"

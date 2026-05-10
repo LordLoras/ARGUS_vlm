@@ -252,7 +252,6 @@ class VLMConflict(_VLMBase):
 
 class VLMVerificationResult(_VLMBase):
     primary_category: str = "other"
-    risk_labels: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     decision: Decision = "review"
     needs_human_review: bool = True
@@ -261,7 +260,6 @@ class VLMVerificationResult(_VLMBase):
     marketing_entities: VLMMarketingEntities = Field(default_factory=VLMMarketingEntities)
     conflicts: list[VLMConflict] = Field(default_factory=list)
     summary: str = ""
-    # Parsing metadata
     parse_ok: bool = True
     raw_response: str | None = None
     parse_error: str | None = None

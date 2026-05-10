@@ -22,12 +22,7 @@ def render_verifier_prompt(
     taxonomy = _load_taxonomy(taxonomy_path)
 
     categories: list[dict] = taxonomy.get("categories", [])
-    risk_labels: list[str] = taxonomy.get("risk_labels", [])
 
     allowed_categories = "\n".join(f"- {c['id']}" for c in categories)
-    allowed_risk_labels = "\n".join(f"- {r}" for r in risk_labels)
 
-    return (
-        template.replace("{ALLOWED_CATEGORIES}", allowed_categories)
-        .replace("{ALLOWED_RISK_LABELS}", allowed_risk_labels)
-    )
+    return template.replace("{ALLOWED_CATEGORIES}", allowed_categories)

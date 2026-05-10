@@ -22,11 +22,6 @@ def test_contains_known_category():
     assert "gambling" in prompt
 
 
-def test_contains_known_risk_label():
-    prompt = render_verifier_prompt()
-    assert "deceptive_urgency" in prompt
-
-
 def test_sensitive_categories_included():
     prompt = render_verifier_prompt()
     assert "health_wellness" in prompt

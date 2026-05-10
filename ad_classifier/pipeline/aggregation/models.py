@@ -11,8 +11,6 @@ class AggregationConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     allow_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
-    flag_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
-    sensitive_review_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
 
 
 class SimilarAd(BaseModel):

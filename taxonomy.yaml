@@ -16,18 +16,6 @@ categories:
   - id: services
   - id: other
 
-risk_labels:
-  - deceptive_urgency
-  - unverified_health_claim
-  - guaranteed_returns
-  - before_after
-  - targeting_minors
-  - regulated_substance
-  - brand_impersonation
-  - hidden_disclaimer
-  - price_manipulation
-  - false_scarcity
-
 brand_aliases:
   mcdonald's: McDonald's
   mcdonalds: McDonald's

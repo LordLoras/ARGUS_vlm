@@ -8,7 +8,7 @@ from pydantic import Field
 from ad_classifier.models.ads import utc_now
 from ad_classifier.models.common import EvidenceItem, StrictModel
 
-Decision = Literal["allow", "flag", "review"]
+Decision = Literal["allow", "review"]
 OcrQualityLevel = Literal["good", "mixed", "poor"]
 
 

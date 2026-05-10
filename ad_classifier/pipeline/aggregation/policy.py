@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
-import yaml
 
 from ad_classifier.marketing.brand import brand_normalize
 from ad_classifier.models.classification import Decision
@@ -39,16 +36,6 @@ from ad_classifier.pipeline.aggregation.models import (
 )
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
-
-_TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "taxonomy.yaml"
-
-
-def _allowed_risk_labels() -> set[str]:
-    try:
-        data = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
-        return set(data.get("risk_labels", []))
-    except Exception:
-        return set()
 
 
 def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
@@ -416,18 +403,10 @@ def _parse_rating_count(value: str | None) -> int | None:
 def _decide(
     vlm_decision: Decision,
     vlm_confidence: float,
-    rule_risk_labels: list[str],
+    has_rule_triggers: bool,
     config: AggregationConfig,
 ) -> tuple[Decision, bool]:
-    if vlm_decision == "flag" and vlm_confidence >= config.flag_threshold:
-        return "flag", True
-
-    if rule_risk_labels:
-        if vlm_decision == "allow" and vlm_confidence >= config.flag_threshold:
-            return "review", True
-        return "flag" if vlm_decision == "flag" else "review", True
-
-    if vlm_decision == "allow" and vlm_confidence >= config.allow_threshold:
+    if vlm_decision == "allow" and vlm_confidence >= config.allow_threshold and not has_rule_triggers:
         return "allow", False
 
     return "review", True
@@ -446,23 +425,12 @@ def aggregate(
 ) -> FinalAdClassification:
     cfg = config or AggregationConfig()
 
-    allowed_risks = _allowed_risk_labels()
-    rule_risk_labels = [
-        r.risk_label
-        for r in rules_triggered
-        if r.risk_label and (not allowed_risks or r.risk_label in allowed_risks)
-    ]
-
-    combined_risk_labels = [
-        label
-        for label in dict.fromkeys(vlm_result.risk_labels + rule_risk_labels)
-        if not allowed_risks or label in allowed_risks
-    ]
+    has_rules = len(rules_triggered) > 0
 
     decision, needs_review = _decide(
         vlm_result.decision,
         vlm_result.confidence,
-        rule_risk_labels,
+        has_rules,
         cfg,
     )
 
@@ -473,7 +441,7 @@ def aggregate(
     return FinalAdClassification(
         ad_id=ad_id,
         primary_category=vlm_result.primary_category or "other",
-        risk_labels=combined_risk_labels,
+        risk_labels=[],
         confidence=vlm_result.confidence,
         decision=decision,
         needs_human_review=needs_review,

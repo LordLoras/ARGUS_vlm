@@ -91,7 +91,6 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
     data: dict[str, object] = {}
     for key in (
         "primary_category",
-        "risk_labels",
         "confidence",
         "decision",
         "needs_human_review",
@@ -357,7 +356,7 @@ def _build_content(bundle: EvidenceBundle) -> list[dict]:
 
     if bundle.rules_triggered:
         rule_lines = [
-            f"  - rule={r.rule_id} severity={r.severity} label={r.risk_label or r.category or ''} text={r.evidence_text!r}"
+            f"  - rule={r.rule_id} severity={r.severity} category={r.category or ''} text={r.evidence_text!r}"
             for r in bundle.rules_triggered
         ]
         text_parts.append("Rule triggers:\n" + "\n".join(rule_lines))

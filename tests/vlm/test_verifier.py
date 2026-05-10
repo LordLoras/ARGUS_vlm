@@ -69,14 +69,14 @@ def test_mock_verifier_returns_custom_result():
     custom = VLMVerificationResult(
         primary_category="gambling",
         confidence=0.9,
-        decision="flag",
+        decision="review",
         needs_human_review=True,
         summary="high risk gambling ad",
     )
     verifier = MockVLMVerifier(result=custom)
     bundle = _make_bundle()
     result = verifier.verify(bundle)
-    assert result.decision == "flag"
+    assert result.decision == "review"
     assert result.primary_category == "gambling"
 
 
@@ -132,7 +132,6 @@ def test_normalize_chat_endpoint_accepts_base_v1_url():
 def test_http_verifier_happy_path():
     payload = {
         "primary_category": "retail_ecommerce",
-        "risk_labels": [],
         "confidence": 0.85,
         "decision": "allow",
         "needs_human_review": False,
@@ -151,7 +150,6 @@ def test_http_verifier_happy_path():
 def test_http_verifier_requests_structured_output():
     payload = {
         "primary_category": "retail_ecommerce",
-        "risk_labels": [],
         "confidence": 0.85,
         "decision": "allow",
         "needs_human_review": False,
@@ -194,7 +192,6 @@ def test_vlm_response_format_includes_tracking_fields():
 def test_http_verifier_reads_reasoning_content_when_content_empty():
     payload = {
         "primary_category": "other",
-        "risk_labels": [],
         "confidence": 0.7,
         "decision": "allow",
         "needs_human_review": False,
@@ -262,7 +259,6 @@ def test_http_verifier_ignores_unknown_fields():
 def test_http_verifier_uses_generation_settings_from_constructor():
     payload = {
         "primary_category": "other",
-        "risk_labels": [],
         "confidence": 0.8,
         "decision": "allow",
         "needs_human_review": False,
@@ -285,8 +281,7 @@ def test_http_verifier_uses_generation_settings_from_constructor():
 
 def test_parse_vlm_content_salvages_malformed_nested_json():
     raw = (
-        '{"primary_category":"automotive","risk_labels":["rate_disclosure"],'
-        '"confidence":0.95,"decision":"allow","needs_human_review":false,'
+        '{"primary_category":"automotive","confidence":0.95,"decision":"allow","needs_human_review":false,'
         '"evidence":[{"time_ms":11000,"frame_index":22,"source":"ocr",'
         '"text":"0% APR financing","confidence":0.95}],'
         '"marketing_entities":{"brand":{"name":"Jeep","logo_present":true,'

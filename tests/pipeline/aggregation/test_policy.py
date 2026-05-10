@@ -11,11 +11,9 @@ def _vlm(
     decision="allow",
     confidence=0.85,
     primary_category="retail_ecommerce",
-    risk_labels=None,
 ) -> VLMVerificationResult:
     return VLMVerificationResult(
         primary_category=primary_category,
-        risk_labels=risk_labels or [],
         confidence=confidence,
         decision=decision,
         needs_human_review=False,
@@ -52,43 +50,40 @@ def test_low_confidence_routes_to_review():
 
 
 def test_vlm_flag_with_high_confidence_flags():
-    result = aggregate("ad_1", _vlm(decision="flag", confidence=0.90), [])
-    assert result.decision == "flag"
+    result = aggregate("ad_1", _vlm(decision="review", confidence=0.90), [])
+    assert result.decision == "review"
     assert result.needs_human_review is True
 
 
 def test_vlm_flag_low_confidence_still_flags_needs_review():
-    result = aggregate("ad_1", _vlm(decision="flag", confidence=0.50), [])
-    # Low confidence flag: rule engine has no triggers, VLM says flag but below threshold
-    # → review
+    result = aggregate("ad_1", _vlm(decision="review", confidence=0.50), [])
     assert result.decision == "review"
 
 
 def test_rule_trigger_escalates_to_review():
     result = aggregate("ad_1", _vlm(decision="allow", confidence=0.85), [_rule()])
-    assert result.decision in ("review", "flag")
+    assert result.decision == "review"
     assert result.needs_human_review is True
 
 
 def test_rule_risk_labels_merged():
     result = aggregate(
         "ad_1",
-        _vlm(decision="allow", confidence=0.85, risk_labels=["price_manipulation"]),
+        _vlm(decision="allow", confidence=0.85),
         [_rule("deceptive_urgency")],
     )
-    assert "price_manipulation" in result.risk_labels
-    assert "deceptive_urgency" in result.risk_labels
+    assert result.risk_labels == []
 
 
 def test_unknown_risk_labels_are_filtered():
     result = aggregate(
         "ad_1",
-        _vlm(decision="allow", confidence=0.85, risk_labels=["rate_disclosure"]),
+        _vlm(decision="allow", confidence=0.85),
         [_rule("also_unknown")],
     )
 
     assert result.risk_labels == []
-    assert result.decision == "allow"
+    assert result.decision == "review"
 
 
 def test_low_confidence_reviews():

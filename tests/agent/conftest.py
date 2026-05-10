@@ -35,7 +35,6 @@ def _classification(ad_id: str, category: str) -> ClassificationRecord:
     return ClassificationRecord(
         ad_id=ad_id,
         primary_category=category,
-        risk_labels=[],
         confidence=0.9,
         decision="allow",
         needs_human_review=False,
