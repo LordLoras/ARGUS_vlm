@@ -87,19 +87,27 @@ def _entity_evidence(items) -> list[EvidenceItem]:
 
 
 def _rule_evidence(rules: list[RuleTrigger]) -> list[EvidenceItem]:
-    deduped: dict[tuple[str, str], RuleTrigger] = {}
-    items: list[EvidenceItem] = []
+    deduped: dict[str, RuleTrigger] = {}
+    order: list[str] = []
     for rule in rules:
         text = _normalize_rule_evidence_text(rule.evidence_text or rule.rule_id)
-        key = (rule.rule_id, _compact_evidence_key(text))
-        current = deduped.get(key)
-        if current is None or _rule_evidence_score(rule) > _rule_evidence_score(current):
-            deduped[key] = rule.model_copy(update={"evidence_text": text})
+        compact = _compact_evidence_key(text)
+        matched_key = None
+        for existing_key in order:
+            if _fuzzy_evidence_match(compact, existing_key):
+                matched_key = existing_key
+                break
+        if matched_key is None:
+            deduped[compact] = rule.model_copy(update={"evidence_text": text})
+            order.append(compact)
+        else:
+            current = deduped[matched_key]
+            if _rule_evidence_score(rule) > _rule_evidence_score(current):
+                deduped[matched_key] = rule.model_copy(update={"evidence_text": text})
 
-    for r in sorted(
-        deduped.values(),
-        key=lambda rule: (rule.time_ms or 0, rule.frame_index or 0, rule.rule_id),
-    ):
+    items: list[EvidenceItem] = []
+    for key in order:
+        r = deduped[key]
         items.append(
             EvidenceItem(
                 time_ms=r.time_ms or 0,
@@ -110,6 +118,21 @@ def _rule_evidence(rules: list[RuleTrigger]) -> list[EvidenceItem]:
             )
         )
     return items
+
+
+def _fuzzy_evidence_match(a: str, b: str) -> bool:
+    if not a or not b:
+        return a == b
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    shared = sum(1 for c in shorter if c in longer)
+    ratio = shared / max(len(longer), 1)
+    if ratio < 0.6:
+        return False
+    if len(shorter) < 20 and abs(len(a) - len(b)) > max(len(a), len(b)) * 0.5:
+        return False
+    return True
 
 
 def _normalize_rule_evidence_text(text: str) -> str:

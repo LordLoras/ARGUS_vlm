@@ -242,3 +242,67 @@ def test_duplicate_rule_evidence_collapses_adjacent_ocr_variants():
     assert len(rule_evidence) == 1
     assert "equals $16.67" in rule_evidence[0].text
     assert "per $1,000" in rule_evidence[0].text
+
+
+def test_rule_evidence_fuzzy_dedup_collapses_near_identical_garbled_text():
+    rules = [
+        RuleTrigger(
+            rule_id="financial_apr",
+            category="automotive",
+            severity="low",
+            source="ocr",
+            time_ms=12000,
+            frame_index=24,
+            evidence_text="0%APR financirg for36 months equals $27.78 per month per$1,000 financed",
+        ),
+        RuleTrigger(
+            rule_id="financial_apr",
+            category="automotive",
+            severity="low",
+            source="ocr",
+            time_ms=13000,
+            frame_index=26,
+            evidence_text="0% APR financing for 36 months equals$27.78 per month per $1,000 financed",
+        ),
+        RuleTrigger(
+            rule_id="financial_apr",
+            category="automotive",
+            severity="low",
+            source="ocr",
+            time_ms=13500,
+            frame_index=27,
+            evidence_text="0% APR financing for36 months eqals$27.78 permonth per$1,000 fnanced",
+        ),
+        RuleTrigger(
+            rule_id="financial_apr",
+            category="automotive",
+            severity="low",
+            source="ocr",
+            time_ms=16000,
+            frame_index=32,
+            evidence_text=(
+                "purchase Excudes leases. Offer not available in DC. "
+                "Only those PA residents who finance at 0% APR"
+            ),
+        ),
+        RuleTrigger(
+            rule_id="financial_apr",
+            category="automotive",
+            severity="low",
+            source="ocr",
+            time_ms=17000,
+            frame_index=34,
+            evidence_text=(
+                "purchase Excudes leases. Offer not availabie in DC. "
+                "Only those PA residents who finance at 0% APR"
+            ),
+        ),
+    ]
+
+    result = aggregate("ad_dedup", _vlm(), rules)
+    rule_evidence = [item for item in result.evidence if item.source == "rule"]
+
+    assert len(rule_evidence) == 2
+    texts = [e.text for e in rule_evidence]
+    assert any("27.78" in t for t in texts)
+    assert any("purchase" in t.lower() for t in texts)

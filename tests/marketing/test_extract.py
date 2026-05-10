@@ -566,3 +566,46 @@ def test_extract_disclaimer_density_without_exact_low_confidence_text():
 
     assert extracted.creative_attributes.disclaimer_density in {"medium", "high"}
     assert extracted.disclaimers == []
+
+
+def test_offer_text_not_garbled_joined_ocr():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=46,
+                time_ms=23000,
+                text=(
+                    "RILLAMAN AL HIG & A/C 40880-91198 aanovac.ceo "
+                    "Air Conditioning Check PRILLAMAND Just $95! "
+                    "Mechanical. Heating &AC Iowr coufortis owr concen prillamanhvac.com"
+                ),
+                confidence=0.84,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    for offer in extracted.offers:
+        assert len(offer.text) <= 120
+        assert "RILLAMAN" not in offer.text
+        assert "aanovac" not in offer.text
+
+
+def test_price_not_extracted_from_comma_amount():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=40,
+                time_ms=20000,
+                text="LEASE FOR $359 /MO. LEASE 36 MOS./$3,839 DUE AT SIGNING",
+                confidence=0.95,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    amounts = [p.amount for p in extracted.prices]
+    assert 3.0 not in amounts
+    assert any(abs(a - 359.0) < 0.01 for a in amounts)

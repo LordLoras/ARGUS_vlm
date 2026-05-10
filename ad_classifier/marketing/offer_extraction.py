@@ -15,7 +15,7 @@ from ad_classifier.models.marketing import (
 )
 
 _PRICE_PATTERN = re.compile(
-    r"(?<![\w$])(?P<currency>\$)\s*(?P<amount>\d{1,3}(?:[,.]\d{3})+|\d+)(?P<cents>\.\d{2})?(?!\w)",
+    r"(?<![\w$])(?P<currency>\$)\s*(?P<amount>\d{1,3}(?:[,.]\d{3})+|\d+)(?P<cents>\.\d{2})?(?![\w,.])",
     re.IGNORECASE,
 )
 _FINANCING_CONTEXT_PATTERN = re.compile(
@@ -46,8 +46,6 @@ _PRICE_OFFER_TERMS = (
     "discount",
     "financing",
     "apr",
-    "just",
-    "only",
     "starting at",
     "as low as",
     "per month",
@@ -70,6 +68,8 @@ _DISCLAIMER_TERMS = (
     "see dealer",
     "expires",
 )
+_MAX_OFFER_TEXT_LEN = 120
+
 _DISCLAIMER_START_PATTERN = re.compile(
     r"\b(?:offers?\s+exclude|for\s+well-qualified|not\s+all\s+buyers|"
     r"msrp\s+excludes|dealer\s+installed|expires|subject\s+to|cannot\s+be\s+combined|"
@@ -267,13 +267,33 @@ def _append_offer(
     seen_offers: set[str],
 ) -> None:
     offer_text = _clean_entity_text(text)
+    if len(offer_text) > _MAX_OFFER_TEXT_LEN:
+        offer_text = offer_text[:_MAX_OFFER_TEXT_LEN].rsplit(" ", 1)[0].strip(" ,;:-")
     key = _compact_key(offer_text)
     if not key or key in seen_offers:
+        return
+    if _is_garbled_offer(offer_text):
         return
     seen_offers.add(key)
     entities.offers.append(
         OfferEntity(text=offer_text, evidence=[evidence.model_copy(update={"text": offer_text})])
     )
+
+
+def _is_garbled_offer(text: str) -> bool:
+    if len(text) < 4:
+        return True
+    words = text.split()
+    if not words:
+        return True
+    alpha_chars = sum(c.isalpha() for c in text)
+    if alpha_chars == 0:
+        return True
+    lower = text.lower()
+    short_garbled = sum(1 for w in words if len(w) <= 2 and not w.isdigit() and w not in ("$", "%", "&", "-"))
+    if short_garbled / max(len(words), 1) > 0.5 and len(words) > 6:
+        return True
+    return False
 
 
 def _parse_amount(amount: str, cents: str | None) -> float | None:
