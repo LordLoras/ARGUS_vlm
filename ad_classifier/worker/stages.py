@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -15,7 +16,7 @@ from ad_classifier.embeddings.image.base import ImageEmbedder
 from ad_classifier.embeddings.image.siglip2 import SigLIP2ImageEmbedder
 from ad_classifier.embeddings.text.base import TextEmbedder
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
-from ad_classifier.ingest.models import IngestArtifacts, IngestEvent
+from ad_classifier.ingest.models import IngestArtifacts, IngestEvent, WhisperTranscript
 from ad_classifier.ingest.service import IngestService
 from ad_classifier.marketing.extract import enrich_marketing_entities
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
@@ -33,6 +34,9 @@ from ad_classifier.pipeline.rules.loader import load_rules
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.search.fts import fts_update
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
+from ad_classifier.vlm.cleanup import OCRCleanupPass
+from ad_classifier.vlm.correction import SelfCorrectionPass
+from ad_classifier.vlm.validation import validate_vlm_output
 from ad_classifier.vlm.verifier import HTTPVLMVerifier, VLMVerifier
 
 ProgressCallback = Callable[[str, float, str], None]
@@ -107,6 +111,10 @@ def run_pipeline_for_job(
     _replace_rule_triggers(conn, ad_id, rules)
     conn.commit()
 
+    if config.vlm.enable_ocr_cleanup_pass:
+        emit("vlm:cleanup", 0.56, "cleaning OCR text")
+        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript)
+
     emit("vlm", 0.64, "verifying classification")
     bundle = build_evidence_bundle(
         ad_id=ad_id,
@@ -131,6 +139,15 @@ def run_pipeline_for_job(
         enable_thinking=config.vlm.endpoint.enable_thinking,
     )
     vlm_result = vlm.verify(bundle)
+
+    if config.vlm.enable_post_validation:
+        evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
+        vlm_result = validate_vlm_output(vlm_result, evidence_texts)
+
+    if config.vlm.enable_self_correction:
+        emit("vlm:correct", 0.72, "self-correction check")
+        evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
+        vlm_result = _run_self_correction(config, vlm_result, evidence_texts)
 
     emit("embeddings", 0.78, "embedding ad")
     text_embedder = components.text_embedder or SentenceTransformerEmbedder(
@@ -407,3 +424,51 @@ def _ocr_quality(vlm_result) -> OCRQuality:
         ],
         missed_text=[item.text for item in vlm_result.ocr_quality.missed_text],
     )
+
+
+def _run_ocr_cleanup(
+    config: AppConfig,
+    ocr_items: list[OCRItem],
+    transcript: WhisperTranscript,
+) -> list[OCRItem]:
+    api_key = os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    cleanup = OCRCleanupPass(
+        endpoint=config.vlm.endpoint.endpoint,
+        model=config.vlm.endpoint.model,
+        api_key=api_key,
+        timeout_s=60.0,
+        max_tokens=2048,
+        enable_thinking=config.vlm.endpoint.enable_thinking,
+    )
+    return cleanup.run(ocr_items, transcript)
+
+
+def _run_self_correction(
+    config: AppConfig,
+    result: VLMVerificationResult,
+    evidence_texts: list[str],
+) -> VLMVerificationResult:
+    api_key = os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    correction = SelfCorrectionPass(
+        endpoint=config.vlm.endpoint.endpoint,
+        model=config.vlm.endpoint.model,
+        api_key=api_key,
+        timeout_s=30.0,
+        max_tokens=1024,
+        enable_thinking=config.vlm.endpoint.enable_thinking,
+    )
+    return correction.run(result, evidence_texts)
+
+
+def _collect_evidence_texts(
+    ocr_items: list[OCRItem],
+    transcript: WhisperTranscript,
+) -> list[str]:
+    texts: list[str] = []
+    for item in ocr_items:
+        if item.text:
+            texts.append(item.text)
+    for seg in transcript.segments:
+        if seg.text:
+            texts.append(seg.text)
+    return texts

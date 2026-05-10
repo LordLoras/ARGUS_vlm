@@ -179,6 +179,9 @@ class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     max_frames_in_bundle: int = Field(default=12, ge=1)
+    enable_ocr_cleanup_pass: bool = False
+    enable_self_correction: bool = False
+    enable_post_validation: bool = True
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
 

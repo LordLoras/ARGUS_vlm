@@ -299,6 +299,30 @@ def _normalize_chat_endpoint(endpoint: str) -> str:
     return f"{normalized}/v1/chat/completions"
 
 
+def _dedupe_ocr_text(ocr_texts: list[str], threshold: float = 0.65) -> list[bool]:
+    if not ocr_texts:
+        return []
+    compacted = [re.sub(r"[^a-z0-9]", "", t.lower()) for t in ocr_texts]
+    keep: list[bool] = [True] * len(ocr_texts)
+    for i in range(len(compacted)):
+        if not keep[i]:
+            continue
+        for j in range(i + 1, len(compacted)):
+            if not keep[j]:
+                continue
+            if _text_overlap(compacted[i], compacted[j]) >= threshold:
+                keep[j] = False
+    return keep
+
+
+def _text_overlap(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    shared = sum(1 for c in shorter if c in longer)
+    return shared / max(len(longer), 1)
+
+
 def _build_content(bundle: EvidenceBundle) -> list[dict]:
     parts: list[dict] = []
 
@@ -309,11 +333,20 @@ def _build_content(bundle: EvidenceBundle) -> list[dict]:
     if bundle.full_transcript.text:
         text_parts.append(f"Full transcript:\n{bundle.full_transcript.text}")
 
+    all_ocr = []
     for fs in bundle.frame_summaries:
-        seg = f"[Frame {fs.frame_index} @ {fs.time_ms}ms]"
         ocr_text = " ".join(item.text for item in fs.ocr_items if item.text)
-        if ocr_text:
-            seg += f"\nOCR: {ocr_text}"
+        all_ocr.append(ocr_text)
+    keep = _dedupe_ocr_text(all_ocr)
+
+    for idx, fs in enumerate(bundle.frame_summaries):
+        seg = f"[Frame {fs.frame_index} @ {fs.time_ms}ms]"
+        if keep[idx]:
+            ocr_text = all_ocr[idx]
+            if ocr_text:
+                seg += f"\nOCR: {ocr_text}"
+        else:
+            seg += "\nOCR: (repeats above)"
         if fs.paddlevl_output and fs.paddlevl_output.parsed:
             pv_text = fs.paddlevl_output.parsed.get("text", "")
             if pv_text:
