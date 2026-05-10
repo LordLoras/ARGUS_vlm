@@ -64,6 +64,7 @@ vlm:
     retry_delay_s: 2
     temperature: 0.1
     max_tokens: 4096
+    enable_thinking: false      # true = per-request chat_template_kwargs sent to llama.cpp
 
 text_embedder:
   model: sentence-transformers/all-MiniLM-L6-v2

@@ -361,6 +361,7 @@ class HTTPVLMVerifier(VLMVerifier):
         temperature: float,
         max_tokens: int,
         prompt_override: str | None = None,
+        enable_thinking: bool = False,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("VLM endpoint must be provided")
@@ -373,6 +374,7 @@ class HTTPVLMVerifier(VLMVerifier):
         self._retry_delay_s = retry_delay_s
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._enable_thinking = enable_thinking
         self._system_prompt = prompt_override or render_verifier_prompt()
 
         api_key: str | None = None
@@ -384,7 +386,7 @@ class HTTPVLMVerifier(VLMVerifier):
 
     def verify(self, bundle: EvidenceBundle) -> VLMVerificationResult:
         content = _build_content(bundle)
-        payload = {
+        payload: dict = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": self._system_prompt},
@@ -394,8 +396,11 @@ class HTTPVLMVerifier(VLMVerifier):
             "max_tokens": self._max_tokens,
             "response_format": _vlm_response_format(),
         }
+        if self._enable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
 
         last_error: str = "no attempts made"
+        raw = ""
         for attempt in range(self._max_retries + 1):
             if attempt > 0:
                 time.sleep(self._retry_delay_s)

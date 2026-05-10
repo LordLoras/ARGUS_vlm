@@ -172,6 +172,7 @@ class VLMEndpointConfig(BaseModel):
     retry_delay_s: float = Field(default=2.0, ge=0.0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, ge=64)
+    enable_thinking: bool = False
 
 
 class VLMConfig(BaseModel):

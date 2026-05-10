@@ -128,6 +128,7 @@ def run_pipeline_for_job(
         retry_delay_s=config.vlm.endpoint.retry_delay_s,
         temperature=config.vlm.endpoint.temperature,
         max_tokens=config.vlm.endpoint.max_tokens,
+        enable_thinking=config.vlm.endpoint.enable_thinking,
     )
     vlm_result = vlm.verify(bundle)
 
