@@ -58,6 +58,7 @@ vlm:
   enable_ocr_cleanup_pass: true     # text-only VLM pass to clean garbled OCR before classification
   enable_self_correction: true      # lightweight text-only consistency check after VLM output
   enable_post_validation: true      # deterministic validation of prices, offers, brands
+  enable_visual_verify: false       # second VLM pass: verify brand/logo claims against frames
   endpoint:
     endpoint: "http://127.0.0.1:1234/v1"
     model: "google/gemma-4-26b-a4b"

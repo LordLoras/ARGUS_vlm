@@ -37,7 +37,8 @@ from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 from ad_classifier.vlm.cleanup import OCRCleanupPass
 from ad_classifier.vlm.correction import SelfCorrectionPass
 from ad_classifier.vlm.validation import validate_vlm_output
-from ad_classifier.vlm.verifier import HTTPVLMVerifier, VLMVerifier
+from ad_classifier.vlm.verifier import HTTPVLMVerifier, VLMVerifier, PROMPT_VERSION
+from ad_classifier.vlm.visual_verify import VisualVerificationPass
 
 ProgressCallback = Callable[[str, float, str], None]
 
@@ -106,14 +107,16 @@ def run_pipeline_for_job(
         ocr_by_frame=_ocr_by_frame(ocr_items),
     )
 
-    emit("rules", 0.52, "running rules")
+    raw_ocr_items = list(ocr_items)
+
+    if config.vlm.enable_ocr_cleanup_pass:
+        emit("vlm:cleanup", 0.50, "cleaning OCR text")
+        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript)
+
+    emit("rules", 0.55, "running rules")
     rules = RulesEngine(load_rules(config.rules.rules_path)).run(ocr_items, ingest.transcript)
     _replace_rule_triggers(conn, ad_id, rules)
     conn.commit()
-
-    if config.vlm.enable_ocr_cleanup_pass:
-        emit("vlm:cleanup", 0.56, "cleaning OCR text")
-        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript)
 
     emit("vlm", 0.64, "verifying classification")
     bundle = build_evidence_bundle(
@@ -148,6 +151,12 @@ def run_pipeline_for_job(
         emit("vlm:correct", 0.72, "self-correction check")
         evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
         vlm_result = _run_self_correction(config, vlm_result, evidence_texts)
+
+    if getattr(config.vlm, "enable_visual_verify", False):
+        emit("vlm:visual_verify", 0.75, "visual verification")
+        vlm_result = _run_visual_verify(
+            config, vlm_result, preprocess_result.kept_frames
+        )
 
     emit("embeddings", 0.78, "embedding ad")
     text_embedder = components.text_embedder or SentenceTransformerEmbedder(
@@ -190,7 +199,7 @@ def run_pipeline_for_job(
         rules,
         related_ads=related,
         vlm_model=config.vlm.endpoint.model,
-        vlm_prompt_version="verifier-2026.05.07",
+        vlm_prompt_version=PROMPT_VERSION,
         pipeline_version="0.1.0",
     )
     final.marketing_entities = enrich_marketing_entities(
@@ -458,6 +467,25 @@ def _run_self_correction(
         enable_thinking=config.vlm.endpoint.enable_thinking,
     )
     return correction.run(result, evidence_texts)
+
+
+def _run_visual_verify(
+    config: AppConfig,
+    result: VLMVerificationResult,
+    kept_frames: list,
+) -> VLMVerificationResult:
+    import os as _os
+    api_key = _os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    verify = VisualVerificationPass(
+        endpoint=config.vlm.endpoint.endpoint,
+        model=config.vlm.endpoint.model,
+        api_key=api_key,
+        timeout_s=60.0,
+        max_tokens=512,
+        enable_thinking=config.vlm.endpoint.enable_thinking,
+    )
+    frame_paths = [Path(f.path) for f in kept_frames if f.path]
+    return verify.run(result, frame_paths)
 
 
 def _collect_evidence_texts(

@@ -7,7 +7,7 @@ import time
 import httpx
 
 from ad_classifier.vlm.models import VLMVerificationResult
-from ad_classifier.vlm.verifier import _extract_json
+from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
 
 _CORRECTION_PROMPT = """\
 You are an ad-analysis quality checker. You receive an analysis of a TV ad and the raw evidence it was based on.
@@ -17,7 +17,9 @@ Check for these inconsistencies:
 2. Products listed that have no evidence in the raw text
 3. Category that contradicts the products/brand (e.g., category "food_beverage" with car products)
 4. Offers that are clearly garbled OCR artifacts, not real offers
-5. Prices that are obvious OCR fragments (e.g., "$3" from "$3,839")
+5. Prices that are obvious OCR fragments (e.g., "$3" from "$3,839"), monthly payments, or per-unit rates (e.g., "$27.78 per $1,000")
+6. CTAs that are fabricated or not grounded in evidence
+7. Advertiser parent_company inferred from fine print rather than prominently displayed
 
 If you find inconsistencies, return ONLY a JSON object with corrected fields.
 If the analysis looks correct, return: {"corrections": {}}
@@ -25,7 +27,7 @@ If the analysis looks correct, return: {"corrections": {}}
 Output JSON only. No markdown. No explanation.
 
 Example corrections:
-{"corrections": {"primary_category": "automotive", "products": ["Grand Cherokee"]}}
+{"corrections": {"primary_category": "automotive", "products": ["Grand Cherokee"], "offers_to_remove": [0], "prices_to_remove": [1], "parent_company": null}}
 
 If no corrections needed:
 {"corrections": {}}
@@ -43,11 +45,7 @@ class SelfCorrectionPass:
         max_tokens: int = 1024,
         enable_thinking: bool = False,
     ) -> None:
-        self._endpoint = endpoint.rstrip("/")
-        if not self._endpoint.endswith("/chat/completions"):
-            if not self._endpoint.endswith("/v1"):
-                self._endpoint += "/v1"
-            self._endpoint += "/chat/completions"
+        self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout = timeout_s
         self._max_tokens = max_tokens
@@ -64,10 +62,10 @@ class SelfCorrectionPass:
         if not evidence_texts:
             return result
 
-        evidence_blob = "\n".join(evidence_texts)[:2000]
-        analysis = json.dumps(result.model_dump(exclude={"parse_ok", "raw_response", "parse_error"}))[
-            :2000
-        ]
+        evidence_blob = "\n".join(evidence_texts)[:4000]
+        analysis = json.dumps(
+            result.model_dump(exclude={"parse_ok", "raw_response", "parse_error"})
+        )[:3000]
 
         user_text = f"Raw evidence:\n{evidence_blob}\n\nAnalysis:\n{analysis}"
         payload: dict = {
@@ -109,12 +107,29 @@ def _apply_corrections(result: VLMVerificationResult, raw: str) -> VLMVerificati
     if not corrections or not isinstance(corrections, dict):
         return result
 
+    result = result.model_copy(deep=True)
     me = result.marketing_entities
+
     if "primary_category" in corrections and isinstance(corrections["primary_category"], str):
         result.primary_category = corrections["primary_category"]
     if "products" in corrections and isinstance(corrections["products"], list):
         me.products = [str(p) for p in corrections["products"]]
     if "brand_name" in corrections and isinstance(corrections["brand_name"], str):
         me.brand.name = corrections["brand_name"]
+
+    if "prices_to_remove" in corrections and isinstance(corrections["prices_to_remove"], list):
+        indices = set(corrections["prices_to_remove"])
+        me.prices = [p for i, p in enumerate(me.prices) if i not in indices]
+
+    if "offers_to_remove" in corrections and isinstance(corrections["offers_to_remove"], list):
+        indices = set(corrections["offers_to_remove"])
+        me.offers = [o for i, o in enumerate(me.offers) if i not in indices]
+
+    if "ctas_to_remove" in corrections and isinstance(corrections["ctas_to_remove"], list):
+        indices = set(corrections["ctas_to_remove"])
+        me.ctas = [c for i, c in enumerate(me.ctas) if i not in indices]
+
+    if "parent_company" in corrections:
+        me.advertiser.parent_company = corrections["parent_company"]
 
     return result

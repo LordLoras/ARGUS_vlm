@@ -10,11 +10,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+import structlog
 
 from ad_classifier.pipeline.evidence.models import EvidenceBundle
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.prompt import render_verifier_prompt
+from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
 from ad_classifier.vlm.schema import vlm_response_format as _vlm_response_format
+
+PROMPT_VERSION = _get_prompt_version()
 
 
 class VLMVerifier(ABC):
@@ -36,10 +40,26 @@ class MockVLMVerifier(VLMVerifier):
         return self._result
 
 
+_logger = structlog.get_logger(__name__)
+
+
 def _extract_json(text: str) -> str:
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    fenced = re.search(r"```(?:json)?\s*", text, re.DOTALL)
     if fenced:
-        return fenced.group(1)
+        after = text[fenced.end():]
+        close = after.find("```")
+        body = after[:close] if close != -1 else after
+        start = body.find("{")
+        if start != -1:
+            depth = 0
+            for i, ch in enumerate(body[start:], start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return body[start : i + 1]
+        return body.strip()
 
     start = text.find("{")
     if start == -1:
@@ -82,6 +102,7 @@ def _parse_vlm_content(raw: str) -> VLMVerificationResult:
     try:
         parsed = json.loads(json_str)
     except json.JSONDecodeError as exc:
+        _logger.warning("vlm_parse_failure", error=str(exc), raw_preview=raw[:200])
         return _salvage_vlm_result(json_str, str(exc))
     return VLMVerificationResult.model_validate(parsed)
 
@@ -317,9 +338,11 @@ def _dedupe_ocr_text(ocr_texts: list[str], threshold: float = 0.65) -> list[bool
 def _text_overlap(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
-    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
-    shared = sum(1 for c in shorter if c in longer)
-    return shared / max(len(longer), 1)
+    tokens_a = set(a.split())
+    tokens_b = set(b.split())
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
 
 
 def _build_content(bundle: EvidenceBundle) -> list[dict]:

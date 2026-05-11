@@ -44,7 +44,7 @@ def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
         items.append(
             EvidenceItem(
                 time_ms=e.time_ms,
-                frame_index=e.frame_index if e.frame_index != 0 else None,
+                frame_index=e.frame_index,
                 source="vlm",
                 text=e.text,
                 confidence=e.confidence,
@@ -63,7 +63,7 @@ def _entity_evidence(items) -> list[EvidenceItem]:
         evidence.append(
             EvidenceItem(
                 time_ms=item.time_ms,
-                frame_index=item.frame_index if item.frame_index != 0 else None,
+                frame_index=item.frame_index,
                 source="vlm",
                 text=text,
                 confidence=item.confidence,
@@ -171,7 +171,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         logo_evidence=[
             EvidenceItem(
                 time_ms=le.time_ms,
-                frame_index=le.frame_index if le.frame_index != 0 else None,
+                frame_index=le.frame_index,
                 source="vlm",
                 text=le.reason,
             )
@@ -187,7 +187,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
             evidence=[
                 EvidenceItem(
                     time_ms=p.time_ms,
-                    frame_index=p.frame_index if p.frame_index != 0 else None,
+                    frame_index=p.frame_index,
                     source="vlm",
                     text=_format_price(p.currency, p.amount),
                 )
@@ -211,7 +211,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
             evidence=[
                 EvidenceItem(
                     time_ms=c.time_ms,
-                    frame_index=c.frame_index if c.frame_index != 0 else None,
+                    frame_index=c.frame_index,
                     source="vlm",
                     text=c.text,
                 )
@@ -226,7 +226,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
             evidence=[
                 EvidenceItem(
                     time_ms=d.time_ms,
-                    frame_index=d.frame_index if d.frame_index != 0 else None,
+                    frame_index=d.frame_index,
                     source="vlm",
                     text=d.text,
                 )

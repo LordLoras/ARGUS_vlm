@@ -182,6 +182,7 @@ class VLMConfig(BaseModel):
     enable_ocr_cleanup_pass: bool = True
     enable_self_correction: bool = True
     enable_post_validation: bool = True
+    enable_visual_verify: bool = False
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
 

@@ -9,6 +9,15 @@ _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "gemma_ad_verif
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent / "taxonomy.yaml"
 
 
+def get_prompt_version() -> str:
+    first_line = _PROMPT_PATH.read_text(encoding="utf-8").split("\n")[0]
+    for part in first_line.split(":"):
+        part = part.strip()
+        if part.startswith("verifier-"):
+            return part
+    return "unknown"
+
+
 def _load_taxonomy(path: Path = _TAXONOMY_PATH) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 

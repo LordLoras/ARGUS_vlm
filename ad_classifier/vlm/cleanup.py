@@ -9,7 +9,7 @@ import httpx
 
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
-from ad_classifier.vlm.verifier import _extract_json
+from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
 
 _CLEANUP_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "ocr_cleanup.txt"
 
@@ -44,12 +44,7 @@ class OCRCleanupPass:
         max_tokens: int = 2048,
         enable_thinking: bool = False,
     ) -> None:
-        self._endpoint = endpoint.rstrip("/") + "/chat/completions"
-        if not self._endpoint.endswith("/chat/completions"):
-            self._endpoint = endpoint.rstrip("/")
-            if not self._endpoint.endswith("/v1"):
-                self._endpoint += "/v1"
-            self._endpoint += "/chat/completions"
+        self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout = timeout_s
         self._max_tokens = max_tokens
