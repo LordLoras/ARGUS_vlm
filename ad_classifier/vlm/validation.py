@@ -38,6 +38,7 @@ def validate_vlm_output(
         result.confidence = min(result.confidence, 0.3)
 
     me.prices = [p for p in me.prices if _valid_price(p.amount)]
+    me.prices = _filter_non_vehicle_prices(me.prices, evidence_blob)
     me.offers = [o for o in me.offers if _valid_offer(o.value)]
     if me.brand and me.brand.name:
         cleaned = _clean_brand(me.brand.name)
@@ -74,6 +75,29 @@ def _valid_price(amount: float) -> bool:
     if amount is None:
         return False
     return _MIN_PRICE <= amount <= _MAX_PRICE
+
+
+_NON_PRICE_CONTEXT = re.compile(
+    r"(?:cash\s*allowance|bonus\s*cash|per\s*\$[\d,]+|per\s*month|per\s*\$1[, ]*000"
+    r"|down\s*payment|dealer\s*fee|document|filing\s*fee|doc\s*fee"
+    r"|monthly\s*payment|per\s*month|trade.in\s*assist|loyalty\s*cash)",
+    re.IGNORECASE,
+)
+
+
+def _filter_non_vehicle_prices(prices: list, evidence_blob: str) -> list:
+    if not evidence_blob:
+        return prices
+    filtered = []
+    for p in prices:
+        for ev in p.evidence if hasattr(p, "evidence") else []:
+            ctx = (ev.text or "").lower()
+            if _NON_PRICE_CONTEXT.search(ctx):
+                break
+        else:
+            filtered.append(p)
+            continue
+    return filtered
 
 
 def _valid_offer(text: str) -> bool:

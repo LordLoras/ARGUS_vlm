@@ -5,12 +5,45 @@ from pathlib import Path
 
 _GARBLED_YEAR_PREFIX = re.compile(r"^\s*20[A-Z]{1,4}\d{1,4}\s+", re.IGNORECASE)
 _GENERIC_VEHICLE_MAKES_PATH = Path(__file__).with_name("vehicle_makes.txt")
+_MERGED_MODEL_INDICATORS = re.compile(
+    r"(?:AND|OR|MODELS?|SERIES)(?:[A-Z]{3,})", re.IGNORECASE
+)
+_ALL_CAPS_NO_YEAR = re.compile(r"^[A-Z\s\d/()\-]+$")
 
 _VEHICLE_MAKES_CACHE: set[str] | None = None
 
 
 def _compact_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def _normalize_product_case(product: str) -> str:
+    if not product:
+        return product
+    if not _ALL_CAPS_NO_YEAR.match(product):
+        return product
+    has_year_prefix = bool(re.match(r"^\s*20\d{2}\s", product))
+    if not has_year_prefix:
+        return product
+    year_match = re.match(r"^(\s*20\d{2}\s+)(.*)", product)
+    if not year_match:
+        return product
+    year_part = year_match.group(1)
+    rest = year_match.group(2)
+    return year_part + _title_case_rest(rest)
+
+
+def _title_case_rest(s: str) -> str:
+    words = s.split()
+    result = []
+    for word in words:
+        if word.upper() in {"LE", "4x4", "4x2", "AWD", "FWD", "RWD", "PHEV", "EV"}:
+            result.append(word.upper())
+        elif "-" in word:
+            result.append("-".join(p.capitalize() for p in word.split("-")))
+        else:
+            result.append(word.capitalize())
+    return " ".join(result)
 
 
 def repair_products(products: list[str], brand_name: str | None) -> list[str]:
@@ -37,6 +70,9 @@ def repair_products(products: list[str], brand_name: str | None) -> list[str]:
         cleaned = cleaned.strip(" ,-")
         if len(cleaned) < 2:
             continue
+        if _MERGED_MODEL_INDICATORS.search(cleaned):
+            continue
+        cleaned = _normalize_product_case(cleaned)
         cleaned_items.append(cleaned)
 
     has_specific_vehicle = any(_is_specific_vehicle_product(item) for item in cleaned_items)
