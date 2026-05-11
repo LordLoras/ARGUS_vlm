@@ -114,8 +114,14 @@ def _build_differences_and_verdict(
     r_offers = _offer_strings(right_marketing)
 
     classifications = ClassificationRepository(store.conn)
-    l_class = classifications.get(ad_id)
-    r_class = classifications.get(found_id)
+    try:
+        l_class = classifications.get(ad_id)
+    except Exception:
+        l_class = None
+    try:
+        r_class = classifications.get(found_id)
+    except Exception:
+        r_class = None
     l_category = l_class.primary_category if l_class else None
     r_category = r_class.primary_category if r_class else None
 

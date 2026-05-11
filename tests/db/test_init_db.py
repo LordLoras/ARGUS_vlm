@@ -23,7 +23,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
     assert result.db_path == db_path.resolve()
     assert result.journal_mode == "wal"
     assert result.sqlite_vec_version is not None
-    assert result.migrations_applied == ["001_initial", "002_marketing_tracking", "003_subcategory", "004_campaign_suggestions"]
+    assert result.migrations_applied == ["001_initial", "002_marketing_tracking", "003_subcategory", "004_campaign_suggestions", "005_flag_to_review"]
 
     conn = open_database(db_path)
     try:
