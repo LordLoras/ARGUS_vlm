@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
@@ -85,7 +88,8 @@ class OCRCleanupPass:
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
             return _parse_cleaned(raw, ocr_items)
-        except Exception:
+        except Exception as exc:
+            logger.warning("ocr_cleanup_failed: %s", exc)
             return ocr_items
 
 

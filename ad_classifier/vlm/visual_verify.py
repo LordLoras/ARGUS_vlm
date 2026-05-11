@@ -82,7 +82,9 @@ class VisualVerificationPass:
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
             return _apply_visual_corrections(result, raw)
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("visual_verify_failed: %s", exc)
             return result
 
 

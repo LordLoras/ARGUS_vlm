@@ -420,6 +420,16 @@ def _parse_rating_count(value: str | None) -> int | None:
     return int(digits) if digits else None
 
 
+def _risk_labels(vlm_result: VLMVerificationResult, rules: list[RuleTrigger]) -> list[str]:
+    seen: set[str] = set()
+    labels: list[str] = []
+    for rule in rules:
+        if rule.risk_label and rule.risk_label not in seen:
+            labels.append(rule.risk_label)
+            seen.add(rule.risk_label)
+    return labels
+
+
 def aggregate(
     ad_id: str,
     vlm_result: VLMVerificationResult,
@@ -454,10 +464,12 @@ def aggregate(
         "dropped_labels": [],
     }
 
+    risk_labels = _risk_labels(vlm_result, rules_triggered)
+
     return FinalAdClassification(
         ad_id=ad_id,
         primary_category=category,
-        risk_labels=[],
+        risk_labels=risk_labels,
         confidence=vlm_result.confidence,
         sensitive_category=sensitive,
         ocr_quality=ocr_quality,

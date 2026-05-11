@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
@@ -90,7 +93,8 @@ class SelfCorrectionPass:
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
             return _apply_corrections(result, raw)
-        except Exception:
+        except Exception as exc:
+            logger.warning("self_correction_failed: %s", exc)
             return result
 
 

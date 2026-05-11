@@ -103,15 +103,14 @@ _NON_PRICE_CONTEXT = re.compile(
 def _filter_non_vehicle_prices(prices: list, evidence_blob: str) -> list:
     if not evidence_blob:
         return prices
+    evidence_lower = evidence_blob.lower()
     filtered = []
     for p in prices:
-        for ev in p.evidence if hasattr(p, "evidence") else []:
-            ctx = (ev.text or "").lower()
-            if _NON_PRICE_CONTEXT.search(ctx):
-                break
-        else:
-            filtered.append(p)
+        price_text = f"{p.currency or '$'}{p.amount}" if p.amount is not None else ""
+        ctx = price_text.lower() or ""
+        if _NON_PRICE_CONTEXT.search(evidence_lower) and _NON_PRICE_CONTEXT.search(ctx):
             continue
+        filtered.append(p)
     return filtered
 
 
