@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+import yaml
+
+from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
+from ad_classifier.marketing._utils import format_price as _format_price
 from ad_classifier.marketing.brand import brand_normalize
-from ad_classifier.models.classification import Decision
+from ad_classifier.models.classification import Decision, OCRQuality
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
     AdvertiserEntity,
@@ -37,6 +42,24 @@ from ad_classifier.pipeline.aggregation.models import (
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
 
+_TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "taxonomy.yaml"
+
+_SENSITIVE_CATEGORIES: set[str] | None = None
+
+
+def _load_sensitive_categories() -> set[str]:
+    global _SENSITIVE_CATEGORIES
+    if _SENSITIVE_CATEGORIES is not None:
+        return _SENSITIVE_CATEGORIES
+    try:
+        taxonomy = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
+        _SENSITIVE_CATEGORIES = {
+            c["id"] for c in taxonomy.get("categories", []) if c.get("sensitive")
+        }
+    except FileNotFoundError:
+        _SENSITIVE_CATEGORIES = set()
+    return _SENSITIVE_CATEGORIES
+
 
 def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
@@ -54,7 +77,7 @@ def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
     return items
 
 
-def _entity_evidence(items) -> list[EvidenceItem]:
+def _entity_evidence(items: list) -> list[EvidenceItem]:
     evidence: list[EvidenceItem] = []
     for item in items:
         text = item.text or item.reason
@@ -117,21 +140,16 @@ def _fuzzy_evidence_match(a: str, b: str) -> bool:
     ratio = shared / max(len(longer), 1)
     if ratio < 0.6:
         return False
-    if len(shorter) < 20 and abs(len(a) - len(b)) > max(len(a), len(b)) * 0.5:
-        return False
-    return True
+    return not (len(shorter) < 20 and abs(len(a) - len(b)) > max(len(a), len(b)) * 0.5)
 
 
 def _normalize_rule_evidence_text(text: str) -> str:
-    text = text.replace("％", "%")
-    text = re.sub(r"\bONSELECT\b", "ON SELECT", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bOffersexclude\b", "Offers exclude", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bAPRfinancing\b", "APR financing", text, flags=re.IGNORECASE)
+    from ad_classifier.marketing.ocr_normalize import normalize_ocr_text
+
+    text = normalize_ocr_text(text)
     text = re.sub(r"(?<=[a-zA-Z])(?=\$)", " ", text)
     text = re.sub(r"(?<=\d)(?=\$)", " ", text)
-    text = re.sub(r"(?<=[a-z])\.(?=[A-Z0-9])", ". ", text)
-    text = re.sub(r"(?<=\d)\.(?=[A-Z])", ". ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def _compact_evidence_key(text: str) -> str:
@@ -142,22 +160,6 @@ def _rule_evidence_score(rule: RuleTrigger) -> int:
     text = _normalize_rule_evidence_text(rule.evidence_text or rule.rule_id)
     return len(text) + text.count(" ") * 2 + text.count(". ") * 3
 
-
-def _currency_symbol(currency: str | None) -> str:
-    normalized = (currency or "$").strip().upper()
-    if normalized in {"USD", "US$", "$"}:
-        return "$"
-    return currency or "$"
-
-
-def _format_amount(amount: float) -> str:
-    if float(amount).is_integer():
-        return f"{int(amount):,}"
-    return f"{amount:,.2f}".rstrip("0").rstrip(".")
-
-
-def _format_price(currency: str | None, amount: float) -> str:
-    return f"{_currency_symbol(currency)}{_format_amount(amount)}"
 
 
 def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
@@ -422,6 +424,9 @@ def aggregate(
     vlm_model: str = "",
     vlm_prompt_version: str = "",
     pipeline_version: str = "",
+    sensitive_categories: set[str] | None = None,
+    selected_frames: list[dict] | None = None,
+    dropped_frames: list[dict] | None = None,
 ) -> FinalAdClassification:
     cfg = config or AggregationConfig()
 
@@ -438,16 +443,36 @@ def aggregate(
 
     marketing_entities = _map_marketing_entities(vlm_result)
 
+    category = vlm_result.primary_category or "other"
+    sensitive = category in (sensitive_categories or _load_sensitive_categories())
+
+    ocr_q = vlm_result.ocr_quality
+    ocr_quality = OCRQuality(
+        overall=ocr_q.overall,
+        possible_errors=[e.reason or e.raw_ocr for e in ocr_q.possible_errors],
+        missed_text=[e.text for e in ocr_q.missed_text],
+    ) if ocr_q.overall != "good" or ocr_q.possible_errors or ocr_q.missed_text else None
+
+    debug = {
+        "selected_frames": selected_frames or [],
+        "dropped_frames": dropped_frames or [],
+        "rules_triggered": [{"rule_id": r.rule_id, "severity": r.severity, "time_ms": r.time_ms} for r in rules_triggered],
+        "dropped_labels": [],
+    }
+
     return FinalAdClassification(
         ad_id=ad_id,
-        primary_category=vlm_result.primary_category or "other",
+        primary_category=category,
         risk_labels=[],
         confidence=vlm_result.confidence,
+        sensitive_category=sensitive,
         decision=decision,
         needs_human_review=needs_review,
+        ocr_quality=ocr_quality,
         evidence=evidence,
         marketing_entities=marketing_entities,
         related_ads=related_ads or RelatedAds(),
+        debug=debug,
         vlm_model=vlm_model,
         vlm_prompt_version=vlm_prompt_version,
         pipeline_version=pipeline_version,

@@ -18,7 +18,7 @@ CRITICAL RULES:
 - Offers: the deal being promoted (e.g., "0% APR for 36 months", "$74,998 sale price"). Keep offers concise — one sentence max. Do NOT dump entire OCR paragraphs into offer text.
 - Advertiser: "advertiser_name" is the entity paying for the ad (e.g., the dealership). "brand_name" is the product brand (e.g., Jeep). "parent_company" should ONLY be filled if explicitly stated on screen or in the transcript — never inferred.
 - If OCR is garbled, correct obvious errors but flag them in ocr_quality.
-- subcategory: 1-3 word free-form label for the niche (e.g., "RV dealership", "SUV lease", "fast casual"). If unclear, leave null.
+- subcategory: The specific product type, service type, or vehicle type the ad is about (1-3 words). This is the THING being sold — not the offer, not the brand. Examples: "SUV", "sedan", "pickup truck", "smartphone", "laptop", "gaming console", "smartwatch", "TV", "headphones", "burger", "pizza", "soft drink", "coffee", "fast food", "streaming service", "fitness app", "CRM software", "cloud storage", "phone plan", "internet plan", "hotel booking", "airline", "cruise", "pain reliever", "telehealth", "dental plan", "college", "online course", "savings account", "credit card", "mortgage", "home insurance". If the product type is unclear from the ad (e.g., a general brand-awareness ad), use the broader category or leave null.
 - decision: "allow" if confidence is high and data is clear. "review" if anything is ambiguous.
 - Return JSON only. No markdown.
 

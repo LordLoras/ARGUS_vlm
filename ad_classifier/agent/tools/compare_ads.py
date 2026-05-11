@@ -11,7 +11,7 @@ from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.dedup.similarity import cosine_similarity
 from ad_classifier.dedup.verdict import classify_verdict
 from ad_classifier.models.marketing import MarketingEntities
-from ad_classifier.models.similarity import FieldDifference, SimilarityVerdict
+from ad_classifier.models.similarity import FieldDifference
 
 
 def _brand_strings(entities: MarketingEntities | None) -> tuple[str | None, list[str]]:

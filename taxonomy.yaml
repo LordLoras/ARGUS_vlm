@@ -1,20 +1,121 @@
 categories:
-  - id: retail_ecommerce
-  - id: food_beverage
-  - id: health_wellness
+  # --- Retail & Commerce ---
+  - id: retail
+    sensitive: false
+    description: Brick-and-mortar retail stores, department stores, outlet malls, warehouse clubs, local shops
+  - id: ecommerce
+    sensitive: false
+    description: Online-only retailers, DTC brands, marketplace platforms (Amazon, Shopify sellers)
+
+  # --- Consumer Goods ---
+  - id: cpg_food_beverage
+    sensitive: false
+    description: Packaged foods, beverages, snacks, ingredients, meal kits, restaurants, fast food, bars
+  - id: cpg_household
+    sensitive: false
+    description: Cleaning products, paper goods, laundry, home supplies, batteries, light bulbs
   - id: beauty_personal_care
-  - id: finance_banking
-  - id: crypto_investment
+    sensitive: false
+    description: Cosmetics, skincare, fragrance, haircare, deodorant, oral care, shaving
+
+  # --- Health & Wellness ---
+  - id: healthcare_pharma
+    sensitive: true
+    description: Prescription drugs, OTC medicine, hospitals, clinics, medical devices, health insurance, telehealth
+  - id: fitness_nutrition
+    sensitive: false
+    description: Gyms, workout programs, supplements, weight loss programs, diet plans, sports nutrition
+
+  # --- Financial Services ---
+  - id: banking_lending
+    sensitive: true
+    description: Banks, credit unions, mortgages, personal loans, credit cards, student loans
+  - id: investing_wealth
+    sensitive: true
+    description: Brokerages, retirement planning, wealth management, robo-advisors, stock trading apps
+  - id: crypto_blockchain
+    sensitive: true
+    description: Cryptocurrency exchanges, NFTs, blockchain platforms, token offerings, crypto lending
+  - id: insurance
+    sensitive: false
+    description: Auto, home, life, health, pet, travel insurance; insurance comparison sites
+
+  # --- Regulated / High-Risk ---
   - id: gambling
-  - id: mobile_apps_games
-  - id: streaming_entertainment
-  - id: automotive
-  - id: travel_hospitality
-  - id: education
-  - id: real_estate
+    sensitive: true
+    description: Sports betting, casinos, online gambling, poker, lottery, fantasy sports
   - id: political
-  - id: services
+    sensitive: true
+    description: Political campaigns, PACs, advocacy, ballot measures, issue advertising
+
+  # --- Technology ---
+  - id: software_saas
+    sensitive: false
+    description: B2B/B2C software, SaaS platforms, productivity tools, CRM, ERP, cloud services
+  - id: consumer_electronics
+    sensitive: false
+    description: Smartphones, laptops, wearables, smart home, TVs, audio, gaming hardware
+  - id: telecommunications
+    sensitive: false
+    description: Mobile carriers, internet service providers, cable/satellite TV, phone plans
+
+  # --- Media & Entertainment ---
+  - id: entertainment_media
+    sensitive: false
+    description: Streaming services, movies, TV shows, music, podcasts, publishing, news, sports leagues
+  - id: gaming
+    sensitive: false
+    description: Video games, mobile games, gaming platforms, esports, gaming accessories
+  - id: mobile_apps
+    sensitive: false
+    description: Non-gaming mobile apps — social, dating, utility, productivity, health tracking
+
+  # --- Automotive ---
+  - id: automotive
+    sensitive: false
+    description: New/used vehicles, dealerships, auto parts, tires, service, car insurance (general brand ads)
+
+  # --- Travel & Hospitality ---
+  - id: travel_hospitality
+    sensitive: false
+    description: Airlines, hotels, resorts, cruises, rental cars, travel booking, tourism boards
+
+  # --- Home & Life ---
+  - id: home_improvement
+    sensitive: false
+    description: Renovation, furniture, appliances, gardening, pest control, roofing, HVAC, moving
+  - id: pets_animals
+    sensitive: false
+    description: Pet food, pet supplies, veterinary services, adoption, pet insurance, pet accessories
+  - id: education
+    sensitive: false
+    description: Colleges, online courses, tutoring, test prep, vocational training, certifications
+  - id: real_estate
+    sensitive: true
+    description: Home sales, rentals, property management, real estate agents, development
+
+  # --- Business & Professional ---
+  - id: business_services
+    sensitive: false
+    description: Consulting, staffing, shipping, logistics, printing, security, waste management, B2B services
+  - id: legal
+    sensitive: true
+    description: Law firms, attorneys, class actions, personal injury, estate planning, legal aid
+
+  # --- Other Major Verticals ---
+  - id: employment_jobs
+    sensitive: false
+    description: Job boards, recruiting agencies, career coaching, resume services, gig platforms
+  - id: nonprofit_government
+    sensitive: false
+    description: Charities, NGOs, public service announcements, government agencies, military recruitment
+  - id: agriculture
+    sensitive: false
+    description: Farming, ranching, equipment, feed, seed, crop protection, veterinary (livestock)
+
   - id: other
+    sensitive: false
+    description: Ads that do not fit any category above
 
 brand_aliases:
   mcdonald's: McDonald's

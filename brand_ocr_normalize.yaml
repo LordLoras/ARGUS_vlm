@@ -1,0 +1,27 @@
+# Brand-specific OCR normalization rules.
+# These are dataset-specific corrections for known brand name OCR errors.
+# Each rule is a regex replacement applied in order.
+rules:
+  # Dealership names
+  - pattern: "\bDickPoe\b"
+    replacement: "Dick Poe"
+
+  # Stellantis / Jeep brand corrections
+  - pattern: "\b(20\\d{2})(?=JEEP)"
+    replacement: "\\1 "
+  - pattern: "\b(20\\d{2})(?=CHRYSLER)"
+    replacement: "\\1 "
+  - pattern: "\bJEEP(?=GRAND|WRANGLER|GLADIATOR)"
+    replacement: "JEEP "
+  - pattern: "\bCHRYSLER(?=PACIFICA)"
+    replacement: "CHRYSLER "
+  - pattern: "\bGRANDCHEROKEE\b"
+    replacement: "GRAND CHEROKEE"
+  - pattern: "\bCHRYSLERPACIFICA\b"
+    replacement: "CHRYSLER PACIFICA"
+  - pattern: "\bWRANGLER(?=4-DOOR)"
+    replacement: "WRANGLER "
+  - pattern: "\bLIMITED(?=4X4|4x4)"
+    replacement: "LIMITED "
+  - pattern: "\bPACIFICA(?=\\$)"
+    replacement: "PACIFICA "

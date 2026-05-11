@@ -43,7 +43,7 @@ def bench_vectors(
     vectors = [[random.gauss(0, 1) for _ in range(text_dim)] for _ in range(n)]
 
     t0 = time.perf_counter()
-    for ad_id, vec in zip(ids, vectors):
+    for ad_id, vec in zip(ids, vectors, strict=False):
         store.upsert_text(ad_id, vec)
     conn.commit()
     insert_ms = (time.perf_counter() - t0) * 1000

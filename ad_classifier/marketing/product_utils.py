@@ -47,7 +47,7 @@ def _title_case_rest(s: str) -> str:
 
 
 def repair_products(products: list[str], brand_name: str | None) -> list[str]:
-    from ad_classifier.marketing.offer_extraction import _clean_entity_text
+    from ad_classifier.marketing._utils import _clean_entity_text
 
     cleaned_items: list[str] = []
     repaired: list[str] = []

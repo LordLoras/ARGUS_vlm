@@ -3,8 +3,10 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from ad_classifier.marketing._utils import _clean_entity_text
+from ad_classifier.marketing._utils import compact_key as _compact_key
+from ad_classifier.marketing._utils import max_density as _max_density
 from ad_classifier.marketing.ocr_normalize import normalize_ocr_text
-from ad_classifier.marketing.product_utils import _compact_key
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
     CTAEntity,
@@ -15,7 +17,7 @@ from ad_classifier.models.marketing import (
 )
 
 _PRICE_PATTERN = re.compile(
-    r"(?<![\w$])(?P<currency>\$)\s*(?P<amount>\d{1,3}(?:[,.]\d{3})+|\d+)(?P<cents>\.\d{2})?(?![\w,.])",
+    r"(?<![\w$€£¥])(?P<currency>[$€£¥])\s*(?P<amount>\d{1,3}(?:[,.]\d{3})+|\d+)(?P<cents>\.\d{2})?(?![\w,.])",
     re.IGNORECASE,
 )
 _FINANCING_CONTEXT_PATTERN = re.compile(
@@ -36,6 +38,15 @@ _CTA_PATTERN = re.compile(
 _MIN_COMMERCIAL_CONFIDENCE = 0.75
 _GENERIC_PRODUCT_PATTERN = re.compile(
     r"\b(?P<year>20\d{2})\s+(?P<name>[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z0-9-]+){0,4})\b"
+)
+_NON_PRODUCT_PATTERN = re.compile(
+    r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December"
+    r"|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+    r"|Street|Drive|Avenue|Road|Boulevard|Lane|Way|Court|Place|Suite"
+    r"|St|Dr|Ave|Rd|Blvd|Ln|Ct|Pl|Sq"
+    r"|Terms|Conditions|Disclaimer|Offers?|Expires|Valid|Minimum|Maximum|Limit"
+    r"|Model|Stock|VIN|PN|MSRP|Miles|MPG|MPGe|HP|kW|kWh)\b",
+    re.IGNORECASE,
 )
 _PRODUCT_TERMINATORS = re.compile(
     r"\b(?:MSRP|Now|Priced|Pricing|Starting|As|For|With|Over|Under|Discount|Save|Sale|Lease|Finance|Offer|Includes?|PN|Stock|VIN|Model|Dlr)\b",
@@ -92,12 +103,6 @@ _EXACT_DISCLAIMER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_DENSITY_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3}
-
-
-def _max_density(left: str, right: str) -> str:
-    return left if _DENSITY_RANK[left] >= _DENSITY_RANK[right] else right
-
 
 def extract_commercial_entities(evidence_items: Iterable[EvidenceItem]) -> MarketingEntities:
     entities = MarketingEntities()
@@ -137,6 +142,8 @@ def _extract_generic_products(text: str, entities: MarketingEntities) -> None:
         if not trimmed or len(trimmed) < 2:
             continue
         if _DEALER_SUFFIXES.search(trimmed):
+            continue
+        if _NON_PRODUCT_PATTERN.search(trimmed):
             continue
         product = f"{year} {trimmed}"
         key = _compact_key(product)
@@ -312,11 +319,8 @@ def _is_garbled_offer(text: str) -> bool:
     alpha_chars = sum(c.isalpha() for c in text)
     if alpha_chars == 0:
         return True
-    lower = text.lower()
     short_garbled = sum(1 for w in words if len(w) <= 2 and not w.isdigit() and w not in ("$", "%", "&", "-"))
-    if short_garbled / max(len(words), 1) > 0.5 and len(words) > 6:
-        return True
-    return False
+    return short_garbled / max(len(words), 1) > 0.5 and len(words) > 6
 
 
 def _parse_amount(amount: str, cents: str | None) -> float | None:
@@ -347,11 +351,6 @@ def _trim_offer_text(text: str) -> str:
         text = text[: match.start()]
     return _clean_entity_text(text)
 
-
-def _clean_entity_text(text: str) -> str:
-    text = normalize_ocr_text(text)
-    text = re.sub(r"\s+([!?.,;:])", r"\1", text)
-    return text.strip(" ,;:-")
 
 
 def _looks_like_offer_context(text: str) -> bool:

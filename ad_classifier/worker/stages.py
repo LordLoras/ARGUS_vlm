@@ -36,8 +36,9 @@ from ad_classifier.search.fts import fts_update
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 from ad_classifier.vlm.cleanup import OCRCleanupPass
 from ad_classifier.vlm.correction import SelfCorrectionPass
+from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.validation import validate_vlm_output
-from ad_classifier.vlm.verifier import HTTPVLMVerifier, VLMVerifier, PROMPT_VERSION
+from ad_classifier.vlm.verifier import PROMPT_VERSION, HTTPVLMVerifier, VLMVerifier
 from ad_classifier.vlm.visual_verify import VisualVerificationPass
 
 ProgressCallback = Callable[[str, float, str], None]
@@ -108,6 +109,17 @@ def run_pipeline_for_job(
     )
 
     raw_ocr_items = list(ocr_items)
+
+    if config.vlm.enable_ocr_cleanup_pass and raw_ocr_items:
+        raw_ocr_path = config.paths.out / ad_id / "raw_ocr_items.json"
+        raw_ocr_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_ocr_path.write_text(
+            json.dumps(
+                [item.model_dump() for item in raw_ocr_items],
+                default=str,
+            ),
+            encoding="utf-8",
+        )
 
     if config.vlm.enable_ocr_cleanup_pass:
         emit("vlm:cleanup", 0.50, "cleaning OCR text")
@@ -193,6 +205,25 @@ def run_pipeline_for_job(
         k=5,
         min_score=0.7,
     )
+    selected_debug = [
+        {
+            "frame_index": f.frame_index,
+            "time_ms": f.time_ms,
+            "path": str(f.path) if f.path else None,
+            "kept": f.kept,
+        }
+        for f in preprocess_result.frames
+        if f.kept
+    ]
+    dropped_debug = [
+        {
+            "frame_index": f.frame_index,
+            "time_ms": f.time_ms,
+            "drop_reason": f.drop_reason,
+        }
+        for f in preprocess_result.frames
+        if not f.kept and f.drop_reason
+    ]
     final = aggregate(
         ad_id,
         vlm_result,
@@ -201,6 +232,8 @@ def run_pipeline_for_job(
         vlm_model=config.vlm.endpoint.model,
         vlm_prompt_version=PROMPT_VERSION,
         pipeline_version="0.1.0",
+        selected_frames=selected_debug,
+        dropped_frames=dropped_debug,
     )
     final.marketing_entities = enrich_marketing_entities(
         final.marketing_entities,
@@ -213,9 +246,10 @@ def run_pipeline_for_job(
             primary_category=final.primary_category,
             risk_labels=final.risk_labels,
             confidence=final.confidence,
+            sensitive_category=final.sensitive_category,
             decision=final.decision,
             needs_human_review=final.needs_human_review,
-            ocr_quality=_ocr_quality(vlm_result),
+            ocr_quality=final.ocr_quality or _ocr_quality(vlm_result),
             vlm_raw=vlm_result.model_dump(),
             evidence=final.evidence,
             vlm_model=final.vlm_model,

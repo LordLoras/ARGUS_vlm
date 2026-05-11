@@ -81,7 +81,7 @@ _FOOD_TERMS = (
 )
 
 _HEALTH_TERMS = (
-    "health_wellness",
+    "healthcare_pharma",
     "health",
     "medical",
     "doctor",
@@ -98,7 +98,7 @@ _HEALTH_TERMS = (
 )
 
 _FINANCE_TERMS = (
-    "finance_banking",
+    "banking_lending",
     "finance",
     "financial",
     "bank",
@@ -113,7 +113,7 @@ _FINANCE_TERMS = (
 )
 
 _RETAIL_TERMS = (
-    "retail_ecommerce",
+    "retail",
     "retail",
     "ecommerce",
     "e-commerce",
@@ -166,7 +166,7 @@ _REAL_ESTATE_TERMS = (
 )
 
 _ENTERTAINMENT_TERMS = (
-    "streaming_entertainment",
+    "entertainment_media",
     "streaming",
     "entertainment",
     "movie",
@@ -179,7 +179,7 @@ _ENTERTAINMENT_TERMS = (
 )
 
 _APPS_GAMES_TERMS = (
-    "mobile_apps_games",
+    "mobile_apps",
     "app",
     "apps",
     "game",

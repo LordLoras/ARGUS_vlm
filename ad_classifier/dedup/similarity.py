@@ -5,8 +5,8 @@ from typing import Any
 
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
-from ad_classifier.models.marketing import MarketingEntities
 from ad_classifier.dedup.verdict import classify_verdict
+from ad_classifier.models.marketing import MarketingEntities
 from ad_classifier.models.similarity import FieldDifference, SimilarityVerdict
 from ad_classifier.pipeline.aggregation.models import RelatedAds, SimilarAd
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore

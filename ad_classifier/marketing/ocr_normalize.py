@@ -1,21 +1,39 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+import yaml
+
+_BRAND_RULES_PATH = Path(__file__).parent.parent.parent / "brand_ocr_normalize.yaml"
+
+_BRAND_RULES: list[tuple[re.Pattern[str], str]] | None = None
+
+
+def _load_brand_rules() -> list[tuple[re.Pattern[str], str]]:
+    global _BRAND_RULES
+    if _BRAND_RULES is not None:
+        return _BRAND_RULES
+    _BRAND_RULES = []
+    try:
+        data = yaml.safe_load(_BRAND_RULES_PATH.read_text(encoding="utf-8")) or {}
+        for entry in data.get("rules", []):
+            pattern_str = entry.get("pattern")
+            replacement = entry.get("replacement", "")
+            if pattern_str:
+                _BRAND_RULES.append((re.compile(pattern_str, re.IGNORECASE), replacement))
+    except FileNotFoundError:
+        pass
+    return _BRAND_RULES
 
 
 def normalize_ocr_text(text: str) -> str:
     text = text.replace("％", "%")
     text = re.sub(r"\$(\d{1,3})\.(\d{3})(?!\d)", r"$\1,\2", text)
-    text = re.sub(r"\bDickPoe\b", "Dick Poe", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(20\d{2})(?=JEEP)", r"\1 ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(20\d{2})(?=CHRYSLER)", r"\1 ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bJEEP(?=GRAND|WRANGLER|GLADIATOR)", "JEEP ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bCHRYSLER(?=PACIFICA)", "CHRYSLER ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bGRANDCHEROKEE\b", "GRAND CHEROKEE", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bCHRYSLERPACIFICA\b", "CHRYSLER PACIFICA", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bWRANGLER(?=4-DOOR)", "WRANGLER ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bLIMITED(?=4X4|4x4)", "LIMITED ", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bPACIFICA(?=\$)", "PACIFICA ", text, flags=re.IGNORECASE)
+
+    for pattern, replacement in _load_brand_rules():
+        text = pattern.sub(replacement, text)
+
     text = re.sub(r"\bBELOWMSRP\b", "BELOW MSRP", text, flags=re.IGNORECASE)
     text = re.sub(r"\bREBAT\b", "REBATE", text, flags=re.IGNORECASE)
     text = re.sub(r"\bMILITARY&FIRSTRESPONDER\b", "MILITARY & FIRST RESPONDER", text, flags=re.IGNORECASE)

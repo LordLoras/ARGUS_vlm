@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from ad_classifier.vlm.models import VLMVerificationResult
+from ad_classifier.vlm.models import VLMConflict, VLMVerificationResult
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
 
 _VISUAL_VERIFY_PROMPT = """\
@@ -129,14 +129,33 @@ def _apply_visual_corrections(result: VLMVerificationResult, raw: str) -> VLMVer
 
     result = result.model_copy(deep=True)
     me = result.marketing_entities
+    notes = parsed.get("notes", "")
 
     if verified.get("brand_visible") is False and me.brand and me.brand.name:
-        me.brand.name = None
+        result.conflicts.append(
+            VLMConflict(
+                description=f"Visual verify: brand_visible=False but VLM extracted brand={me.brand.name!r}",
+                sources=["vlm_verifier", "visual_verify"],
+                resolution=notes or "Visual verify disagrees on brand visibility (preserving VLM extraction with low confidence)",
+            )
+        )
 
-    if verified.get("logo_present") is False and me.brand:
-        me.brand.logo_present = False
+    if verified.get("logo_present") is False and me.brand and me.brand.logo_present:
+        result.conflicts.append(
+            VLMConflict(
+                description="Visual verify: logo_present=False but VLM reported logo as visible",
+                sources=["vlm_verifier", "visual_verify"],
+                resolution=notes or "Visual verify disagrees on logo presence",
+            )
+        )
 
-    if verified.get("products_visible") is False:
-        me.products = []
+    if verified.get("products_visible") is False and me.products:
+        result.conflicts.append(
+            VLMConflict(
+                description=f"Visual verify: products_visible=False but VLM extracted products={me.products!r}",
+                sources=["vlm_verifier", "visual_verify"],
+                resolution=notes or "Visual verify disagrees on product visibility (preserving VLM extraction)",
+            )
+        )
 
     return result

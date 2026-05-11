@@ -23,6 +23,7 @@ class ClassificationRecord(StrictModel):
     primary_category: str | None = None
     risk_labels: list[str] = Field(default_factory=list)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    sensitive_category: bool = False
     decision: Decision
     needs_human_review: bool
     ocr_quality: OCRQuality | None = None

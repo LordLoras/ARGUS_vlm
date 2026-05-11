@@ -14,8 +14,8 @@ import structlog
 
 from ad_classifier.pipeline.evidence.models import EvidenceBundle
 from ad_classifier.vlm.models import VLMVerificationResult
-from ad_classifier.vlm.prompt import render_verifier_prompt
 from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
+from ad_classifier.vlm.prompt import render_verifier_prompt
 from ad_classifier.vlm.schema import vlm_response_format as _vlm_response_format
 
 PROMPT_VERSION = _get_prompt_version()
@@ -83,17 +83,12 @@ _DOMAIN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _ALLOWED_WEBSITE_TLDS = {
-    "com",
-    "net",
-    "org",
-    "co",
-    "us",
-    "tv",
-    "io",
-    "biz",
-    "info",
-    "edu",
-    "gov",
+    "com", "net", "org", "co", "us",
+    "tv", "io", "biz", "info", "edu", "gov",
+    "app", "dev", "ai", "cloud", "me", "pro",
+    "live", "today", "store", "blog", "shop",
+    "online", "site", "tech", "xyz", "club",
+    "media", "news", "world", "social",
 }
 
 

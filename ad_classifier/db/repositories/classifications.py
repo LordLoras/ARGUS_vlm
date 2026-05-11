@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 from ad_classifier.db.repositories.base import db_value, row_to_dict
-from ad_classifier.models.classification import ClassificationRecord, Decision, OCRQuality
+from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 
 
 def _to_record(row: sqlite3.Row) -> ClassificationRecord:

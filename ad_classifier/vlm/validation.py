@@ -5,9 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from ad_classifier.models.common import EvidenceItem
 from ad_classifier.vlm.models import (
-    VLMMarketingEntities,
     VLMVerificationResult,
 )
 
@@ -126,9 +124,7 @@ def _valid_offer(text: str) -> bool:
     if not words:
         return False
     alpha = sum(c.isalpha() for c in text)
-    if alpha == 0:
-        return False
-    return True
+    return alpha != 0
 
 
 def _clean_brand(name: str) -> str:

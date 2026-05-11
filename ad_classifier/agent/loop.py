@@ -285,53 +285,76 @@ def _serialize_tool_result(call: ToolCall, result: ToolResult) -> dict[str, Any]
 
 
 def _fallback_answer_from_tool_results(results: list[ToolResult]) -> str:
-    latest = results[-1]
-    if latest.name == "count_ads" and latest.ok and isinstance(latest.data, dict):
-        count = latest.data.get("count")
-        filters = latest.data.get("filters") or {}
-        filter_text = ", ".join(f"{key}={value}" for key, value in filters.items())
-        suffix = f" matching {filter_text}" if filter_text else ""
-        return f"I found {count} ads{suffix}."
+    latest = results[-1] if results else None
+    if latest is None:
+        return "No tool results were produced."
 
-    if latest.name == "list_ads" and latest.ok and isinstance(latest.data, list):
-        rows = latest.data
-        if not rows:
-            return "I could not find matching ads."
-        lines = [f"I found {len(rows)} matching ads:"]
-        for row in rows[:10]:
-            ad_id = row.get("ad_id") or row.get("id") or "unknown"
-            brand = row.get("brand") or "unknown brand"
-            products = row.get("products") or row.get("products_text") or "products not stored"
-            lines.append(f"- `{ad_id}` ({brand}): {products}")
-        if latest.truncated:
-            lines.append("- Results were truncated; narrow the filter or ask for the next page.")
-        return "\n".join(lines)
+    if not latest.ok:
+        return f"The `{latest.name}` tool returned an error: {latest.error or 'unknown error'}"
 
-    if latest.name == "get_ad" and latest.ok and isinstance(latest.data, dict):
+    if latest.data is None:
+        return f"The `{latest.name}` tool returned no data."
+
+    truncated = latest.truncated
+
+    if isinstance(latest.data, dict):
         ad = latest.data.get("ad") or {}
         marketing = latest.data.get("marketing_entities") or {}
-        products = marketing.get("products") or ad.get("products_text") or []
-        if isinstance(products, list):
-            product_text = ", ".join(products) if products else "products not stored"
-        else:
-            product_text = str(products)
-        return f"`{ad.get('id', 'ad')}` is a {ad.get('brand_name') or 'brand'} ad. Products: {product_text}."
+        if ad:
+            brand = ad.get("brand_name") or marketing.get("brand", {}).get("name", "unknown brand")
+            products = marketing.get("products") or ad.get("products_text") or "products not stored"
+            if isinstance(products, list):
+                products = ", ".join(products) if products else "products not stored"
+            return f"`{ad.get('id', 'ad')}`: {brand} — {products}"
+        keys = list(latest.data.keys())
+        summary = f"The `{latest.name}` tool returned a result with fields: {', '.join(keys[:5])}"
+        if len(keys) > 5:
+            summary += f" and {len(keys) - 5} more"
+        return summary
 
-    return "I ran the requested database tool, but the model returned an empty answer."
+    if isinstance(latest.data, list):
+        count = len(latest.data)
+        if count == 0:
+            return f"The `{latest.name}` tool found no matching results."
+        lines = [f"The `{latest.name}` tool returned {count} result{'s' if count != 1 else ''}:"]
+        for item in latest.data[:10]:
+            if isinstance(item, dict):
+                ad_id = item.get("ad_id") or item.get("id") or "unknown"
+                brand = item.get("brand") or item.get("brand_name") or "unknown brand"
+                products = item.get("products") or item.get("products_text") or ""
+                if isinstance(products, list):
+                    products = ", ".join(products) if products else ""
+                if products:
+                    lines.append(f"- `{ad_id}` ({brand}): {products}")
+                else:
+                    parts = [f"{k}={v}" for k, v in list(item.items())[:3]]
+                    lines.append(f"- `{ad_id}` | {' | '.join(parts)}")
+            else:
+                lines.append(f"- {item}")
+        if truncated:
+            lines.append("- Results were truncated; try a more specific query.")
+        return "\n".join(lines)
+
+    return f"The `{latest.name}` tool returned: {latest.data}"
 
 
 def _build_history(conn: sqlite3.Connection, session_id: str) -> list[dict[str, Any]]:
-    """Replay prior turns so the agent has multi-turn context.
-
-    We omit prior tool_calls/tool_results for simplicity: the agent only sees
-    user/assistant text from earlier turns. Tool outputs are still preserved
-    in the DB for auditing via list_messages.
-    """
+    """Replay prior turns including tool calls and results for multi-turn context."""
     rows = AgentMessageRepository(conn).list_for_session(session_id)
     out: list[dict[str, Any]] = []
     for record in rows:
         if record.role in ("user", "assistant") and record.content:
             out.append({"role": record.role, "content": record.content})
+        elif record.role == "tool" and record.tool_name and record.tool_result_json:
+            try:
+                result_data = json.loads(record.tool_result_json)
+            except (json.JSONDecodeError, TypeError):
+                result_data = record.tool_result_json
+            out.append({
+                "role": "tool",
+                "tool_call_id": record.tool_name,
+                "content": json.dumps(result_data, default=str),
+            })
     return out
 
 

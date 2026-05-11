@@ -5,12 +5,11 @@ from collections.abc import Iterable
 from urllib.parse import parse_qsl, urlparse
 
 from ad_classifier.ingest.models import WhisperTranscript
-from ad_classifier.marketing.commercial import (
-    extract_commercial_entities,
-    merge_commercial_entities,
-    normalize_ocr_text,
-    repair_products,
-)
+from ad_classifier.marketing._utils import merge_strings as _merge_strings
+from ad_classifier.marketing.commercial import merge_commercial_entities
+from ad_classifier.marketing.ocr_normalize import normalize_ocr_text
+from ad_classifier.marketing.offer_extraction import extract_commercial_entities
+from ad_classifier.marketing.product_utils import repair_products
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
     ContactPoints,
@@ -64,17 +63,12 @@ _SOCIAL_DOMAINS = {
     "snapchat": "snapchat",
 }
 _ALLOWED_OCR_TLDS = {
-    "com",
-    "net",
-    "org",
-    "co",
-    "us",
-    "tv",
-    "io",
-    "biz",
-    "info",
-    "edu",
-    "gov",
+    "com", "net", "org", "co", "us",
+    "tv", "io", "biz", "info", "edu", "gov",
+    "app", "dev", "ai", "cloud", "me", "pro",
+    "live", "today", "store", "blog", "shop",
+    "online", "site", "tech", "xyz", "club",
+    "media", "news", "world", "social",
 }
 _SCARCITY_TERMS = ("while supplies last", "limited quantities", "limited supply", "only left")
 _URGENCY_TERMS = ("limited time", "today only", "ends soon", "call today", "now", "hurry")
@@ -381,13 +375,6 @@ def _landing_page_from_websites(websites: list[WebsiteEntity]) -> LandingPageEnt
         evidence=list(first.evidence),
     )
 
-
-def _merge_strings(left: list[str], right: list[str]) -> list[str]:
-    merged = list(left)
-    for item in right:
-        if item and item not in merged:
-            merged.append(item)
-    return merged
 
 
 def _is_reliable_tracking_evidence(evidence: EvidenceItem) -> bool:

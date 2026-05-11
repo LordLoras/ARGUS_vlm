@@ -1,26 +1,25 @@
 from __future__ import annotations
 
-from ad_classifier.marketing.ocr_normalize import normalize_ocr_text
+from ad_classifier.marketing._utils import (
+    compact_key as _compact_key,
+)
+from ad_classifier.marketing._utils import (
+    max_density as _max_density,
+)
 from ad_classifier.marketing.offer_extraction import (
     _dedupe_disclaimers,
     _dedupe_offers,
     _fuzzy_dedupe_list,
     _fuzzy_dedupe_offers,
-    extract_commercial_entities,
 )
-from ad_classifier.marketing.price_parsing import _normalize_price_entity, _price_key
+from ad_classifier.marketing.price_parsing import _normalize_price_entity
 from ad_classifier.marketing.product_utils import (
-    _compact_key,
-    _merge_products,
     repair_products,
 )
 from ad_classifier.models.marketing import (
-    CampaignSuggestion,
     FinancingTerms,
     MarketingEntities,
 )
-
-_DENSITY_RANK = {"none": 0, "low": 1, "medium": 2, "high": 3}
 
 
 def merge_commercial_entities(
@@ -97,9 +96,6 @@ def merge_commercial_entities(
     return base
 
 
-def _max_density(left: str, right: str) -> str:
-    return left if _DENSITY_RANK[left] >= _DENSITY_RANK[right] else right
-
 
 def _is_strict_upgrade(candidate: str, existing: str) -> bool:
     if not candidate or not existing:
@@ -127,9 +123,4 @@ def _merge_financing(left: FinancingTerms, right: FinancingTerms) -> FinancingTe
     return left
 
 
-def _merge_strings(left: list[str], right: list[str]) -> list[str]:
-    merged = list(left)
-    for item in right:
-        if item and item not in merged:
-            merged.append(item)
-    return merged
+
