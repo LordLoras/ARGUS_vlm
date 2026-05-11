@@ -12,6 +12,18 @@ import { useJobEvents } from "../hooks/useJobEvents";
 import { api } from "../lib/api-client";
 import { CloseIcon, UploadIcon } from "../lib/icons";
 
+const STAGE_LABELS: Record<string, string> = {
+  upload: "Uploading file",
+  ingest: "Extracting frames & audio",
+  whisper: "Transcribing with Whisper",
+  preprocess: "Filtering frames (blur, dedup)",
+  dedup: "Checking for duplicates",
+  ocr: "Running OCR",
+  embed: "Generating embeddings",
+  vlm: "VLM classification",
+  finalize: "Persisting results",
+};
+
 export function Upload() {
   const [file, setFile] = useState<File | null>(null);
   const [adId, setAdId] = useState<string | null>(null);
@@ -23,6 +35,7 @@ export function Upload() {
   const job = useJobEvents(jobId);
   const health = useApiHealth();
   const lastSig = useRef<string>("");
+  const lastStage = useRef<string>("");
 
   const uploadMutation = useMutation({
     mutationFn: (selected: File) => api.uploadAd(selected),
@@ -31,16 +44,17 @@ export function Upload() {
       setJobId(result.job_id ?? null);
       setStartedAt(Date.now());
       setFinishedAt(null);
-      setLogLines([
-        timestampedLog("info", `accepted ${result.ad_id}`),
-        ...(result.duplicate_of
-          ? [timestampedLog("warn", `duplicate of ${result.duplicate_of} — skipping pipeline`)]
-          : [])
-      ]);
+      const lines: LogLine[] = [
+        timestampedLog("ok", `accepted — ${result.ad_id}`),
+      ];
+      if (result.duplicate_of) {
+        lines.push(timestampedLog("warn", `exact duplicate of ${result.duplicate_of} — skipping pipeline`));
+      }
+      setLogLines(lines);
     },
     onError: (err) => {
-      setLogLines((lines) => [...lines, timestampedLog("warn", `upload failed: ${(err as Error).message}`)]);
-    }
+      setLogLines((prev) => [...prev, timestampedLog("warn", `upload failed: ${(err as Error).message}`)]);
+    },
   });
 
   useEffect(() => {
@@ -54,9 +68,21 @@ export function Upload() {
     const sig = `${job.state}|${job.progress ?? ""}|${job.message ?? ""}`;
     if (sig === lastSig.current) return;
     lastSig.current = sig;
+
     const level: LogLine["level"] = job.state === "failed" ? "warn" : job.state === "completed" ? "ok" : "info";
-    const msg = job.message ?? job.state ?? "(no message)";
-    setLogLines((lines) => [...lines, timestampedLog(level, `${job.state}: ${msg}`)]);
+    const msg = job.message || job.state || "(no message)";
+    const stageKey = job.message || "";
+
+    // Emit a stage header when the stage changes
+    if (stageKey && stageKey !== lastStage.current && STAGE_LABELS[stageKey]) {
+      lastStage.current = stageKey;
+      setLogLines((prev) => [
+        ...prev,
+        { ts: "", level: "info", message: `── ${STAGE_LABELS[stageKey]} ──` },
+      ]);
+    }
+
+    setLogLines((prev) => [...prev, timestampedLog(level, `${job.state}: ${msg}`)]);
   }, [job]);
 
   const isDuplicateOrSkipped = Boolean(adId && jobId === null);
@@ -70,20 +96,13 @@ export function Upload() {
   const detailQuery = useQuery({
     queryKey: ["upload-detail", adId],
     queryFn: () => api.getAd(adId ?? ""),
-    enabled: Boolean(isDone && adId)
-  });
-  const framesQuery = useQuery({
-    queryKey: ["upload-frames", adId],
-    queryFn: () => api.getFrames(adId ?? ""),
-    enabled: Boolean(isDone && adId)
-  });
-  const relatedQuery = useQuery({
-    queryKey: ["upload-related", adId],
-    queryFn: () => api.getSimilar(adId ?? ""),
-    enabled: Boolean(isDone && adId)
+    enabled: Boolean(isDone && adId),
   });
 
-  const sizeText = useMemo(() => (file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : ""), [file]);
+  const sizeText = useMemo(
+    () => (file ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : ""),
+    [file]
+  );
   const elapsed = startedAt ? (finishedAt ?? now) - startedAt : 0;
 
   const reset = () => {
@@ -93,12 +112,17 @@ export function Upload() {
     setLogLines([]);
     setStartedAt(null);
     setFinishedAt(null);
+    setNow(Date.now());
+    lastStage.current = "";
     uploadMutation.reset();
   };
 
   const cancel = () => {
     if (jobId) void api.cancelJob(jobId);
   };
+
+  const uploading = uploadMutation.isPending;
+  const processing = adId && !isDone;
 
   return (
     <>
@@ -108,98 +132,88 @@ export function Upload() {
       <div className="page">
         <div className="page-head">
           <div>
-            <h1 className="page-title">Upload</h1>
-            <p className="page-sub">Drop a clip and watch the local pipeline classify it.</p>
+            <h1 className="page-title">Upload ad</h1>
+            <p className="page-sub">
+              Drop a TV / promo / ad clip and the local pipeline extracts frames,
+              transcript, OCR, entities, and classification — all on-device.
+            </p>
           </div>
         </div>
 
-        <div className="upload-stage">
-          {!adId && !uploadMutation.isPending ? (
-            <>
-              <Dropzone
-                onFile={(f) => {
-                  setFile(f);
-                  uploadMutation.mutate(f);
-                }}
-              />
-              {file ? (
-                <div className="upload-card">
-                  <div className="upload-card-head">
-                    <span className="step-num">2</span>
-                    <span>Confirm and start</span>
-                  </div>
-                  <div
-                    style={{
-                      padding: 16,
-                      display: "flex",
-                      gap: 12,
-                      alignItems: "center"
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600 }}>{file.name}</div>
-                      <div className="mono" style={{ fontSize: 11, color: "var(--fg-mute)" }}>
-                        {file.type || "video"} · {sizeText}
+        <div className="upload-layout">
+          {/* ── left: input area ── */}
+          <div className="upload-main">
+            {!adId && !uploading ? (
+              <>
+                <Dropzone
+                  onFile={(f) => {
+                    setFile(f);
+                    uploadMutation.mutate(f);
+                  }}
+                />
+
+                {file && !uploading && (
+                  <div className="upload-confirm">
+                    <div className="upload-confirm-info">
+                      <UploadIcon size={14} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="upload-confirm-name">{file.name}</div>
+                        <div className="upload-confirm-meta">
+                          {file.type || "video"} · {sizeText}
+                        </div>
                       </div>
+                      <button className="btn btn-icon" onClick={() => setFile(null)} title="Remove">
+                        <CloseIcon size={12} />
+                      </button>
                     </div>
-                    <button className="btn btn-icon" onClick={() => setFile(null)} title="Clear">
-                      <CloseIcon size={12} />
-                    </button>
                     <button
-                      className="btn btn-primary"
-                      disabled={uploadMutation.isPending}
+                      className="btn btn-primary upload-confirm-btn"
+                      disabled={uploading}
                       onClick={() => uploadMutation.mutate(file)}
                     >
                       <UploadIcon size={12} />
-                      <span>Start classification</span>
+                      <span>Classify this ad</span>
                     </button>
                   </div>
-                </div>
-              ) : null}
-              {uploadMutation.isError ? (
-                <div className="upload-card" style={{ borderColor: "var(--rose)", color: "var(--rose)" }}>
-                  <div style={{ padding: 14 }}>{(uploadMutation.error as Error).message}</div>
-                </div>
-              ) : null}
-            </>
-          ) : null}
+                )}
 
-          {(uploadMutation.isPending || (adId && !isDone)) && adId ? (
-            <PipelineProgress
-              filename={file?.name ?? "uploaded clip"}
-              adId={adId}
-              jobId={jobId}
-              job={job}
-              elapsedMs={elapsed}
-              logLines={logLines}
-              onCancel={cancel}
-            />
-          ) : null}
+                {uploadMutation.isError && (
+                  <div className="upload-error">
+                    {(uploadMutation.error as Error).message}
+                  </div>
+                )}
+              </>
+            ) : null}
 
-          {uploadMutation.isPending && !adId ? (
-            <div className="upload-card">
-              <div className="pipeline-head">
-                <span className="filename">{file?.name ?? "uploading…"}</span>
-                <span className="ad-id">queued</span>
+            {uploading && !adId ? (
+              <div className="upload-queued">
+                <span className="upload-queued-dot" />
+                <span>Uploading and queuing for processing…</span>
               </div>
-              <div className="progress-bar">
-                <span style={{ width: "8%" }} />
-              </div>
-            </div>
-          ) : null}
+            ) : null}
 
+            {processing && adId && (
+              <PipelineProgress
+                filename={file?.name ?? "clip"}
+                adId={adId}
+                jobId={jobId}
+                job={job}
+                elapsedMs={elapsed}
+                logLines={logLines}
+                onCancel={cancel}
+              />
+            )}
+          </div>
+
+          {/* ── right: result ── */}
           {isDone && detailQuery.data ? (
-            <ResultPanel
-              detail={detailQuery.data}
-              frames={framesQuery.data?.items ?? []}
-              related={relatedQuery.data}
-              elapsedMs={elapsed}
-              onReset={reset}
-            />
-          ) : null}
-
-          {isDone && detailQuery.isLoading ? (
-            <div className="obs-empty" style={{ padding: 24 }}>Loading result…</div>
+            <div className="upload-side">
+              <ResultPanel
+                detail={detailQuery.data}
+                elapsedMs={elapsed}
+                onReset={reset}
+              />
+            </div>
           ) : null}
         </div>
       </div>
@@ -213,6 +227,6 @@ function timestampedLog(level: LogLine["level"], message: string): LogLine {
   return {
     ts: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
     level,
-    message
+    message,
   };
 }
