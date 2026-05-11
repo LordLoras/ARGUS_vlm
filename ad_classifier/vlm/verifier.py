@@ -453,6 +453,8 @@ class HTTPVLMVerifier(VLMVerifier):
         }
         if self._enable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": True}
+        else:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
 
         last_error: str = "no attempts made"
         raw = ""
