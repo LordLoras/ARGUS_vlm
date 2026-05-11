@@ -9,8 +9,8 @@ def test_example_config_uses_current_vlm_schema_and_model():
     config, source = load_config(Path("config.example.yaml"))
 
     assert source.name == "config.example.yaml"
-    assert config.vlm.endpoint.model == "argus/vlm"
+    assert config.vlm.endpoint.model == "Qwen3.6-27B-Q4_K_M"
     assert config.vlm.endpoint.endpoint == "http://127.0.0.1:1234/v1"
     assert config.vlm.endpoint.timeout_s >= 240
     assert config.vlm.endpoint.temperature == 0.1
-    assert config.vlm.endpoint.max_tokens == 4096
+    assert config.vlm.endpoint.max_tokens == 8192

@@ -15,14 +15,14 @@ ingest:
   audio_sample_rate: 16000
 
 whisper:
-  backend: whisper_cpp          # whisper_cpp | faster-whisper | mock
-  model: tiny.en                # whisper.cpp: tiny.en/base.en/etc.; faster-whisper: tiny/base/small/medium/large-v3
-  compute_type: int8            # faster-whisper only
-  language: null                # null = auto-detect
+  backend: whisper_cpp            # whisper_cpp | faster-whisper | mock
+  model: large-v3-turbo           # whisper.cpp: tiny.en/base.en/small.en/medium.en/large-v3/large-v3-turbo; faster-whisper: tiny/base/small/medium/large-v3
+  compute_type: int8              # faster-whisper only
+  language: null                  # null = auto-detect
   whisper_cpp:
-    # Windows AMD path: build whisper.cpp with GGML_VULKAN=ON and point command to whisper-cli.exe.
+    # Windows path: download a ggml model from https://huggingface.co/ggerganov/whisper.cpp
     command: ./tools/whisper.cpp/whisper-cli.exe
-    model_path: ./models/whisper/ggml-tiny.en.bin
+    model_path: ./models/whisper/ggml-large-v3-turbo.bin
     use_gpu: true
     device: 0
     threads: 8
@@ -50,25 +50,25 @@ paddlevl:
     short_fragment_max_len: 3
 
 rules:
-  rules_path: null              # null = built-in ad_classifier/pipeline/rules/default_rules.yaml
+  rules_path: null                # null = built-in ad_classifier/pipeline/rules/default_rules.yaml
   alignment_window_ms: 1500
 
 vlm:
   max_frames_in_bundle: 12
-  enable_ocr_cleanup_pass: true     # text-only VLM pass to clean garbled OCR before classification
-  enable_self_correction: true      # lightweight text-only consistency check after VLM output
-  enable_post_validation: true      # deterministic validation of prices, offers, brands
-  enable_visual_verify: false       # second VLM pass: verify brand/logo claims against frames
+  enable_ocr_cleanup_pass: true       # text-only VLM pass to clean garbled OCR before classification
+  enable_self_correction: true        # lightweight text-only consistency check after VLM output
+  enable_post_validation: true        # deterministic validation of prices, offers, brands
+  enable_visual_verify: false         # second VLM pass: verify brand/logo claims against frames
   endpoint:
     endpoint: "http://127.0.0.1:1234/v1"
-    model: "argus/vlm"
-    api_key_env: null           # LM Studio typically does not require an API key
-    timeout_s: 240
+    model: "Qwen3.6-27B-Q4_K_M"      # vision-capable model for multimodal VLM analysis
+    api_key_env: null                 # set to env var name if LM Studio uses auth
+    timeout_s: 600
     max_retries: 2
     retry_delay_s: 2
     temperature: 0.1
-    max_tokens: 4096
-    enable_thinking: false      # true = per-request chat_template_kwargs sent to llama.cpp
+    max_tokens: 8192
+    enable_thinking: false
 
 text_embedder:
   model: sentence-transformers/all-MiniLM-L6-v2
@@ -92,7 +92,7 @@ campaigns:
     lookback_days: 90
     min_cluster_size: 3
     min_mean_similarity: 0.75
-    clusterer: hdbscan          # hdbscan | agglomerative
+    clusterer: hdbscan            # hdbscan | agglomerative
     name_template: "{brand} {month} {year}"
 
 api:
@@ -101,7 +101,7 @@ api:
   cors_origins:
     - http://localhost:5173
   upload:
-    max_bytes: 209715200        # 200 MB
+    max_bytes: 209715200          # 200 MB
     allowed_mime:
       - video/mp4
       - video/quicktime
@@ -112,10 +112,12 @@ worker:
   concurrency: 1
 
 agent:
+  # Shares the same model as the VLM verifier for simplicity.
+  # See vlm.endpoint for the model name.
   endpoint:
     endpoint: "http://127.0.0.1:1234/v1"
-    model: "argus/vlm"
-    api_key_env: null
+    model: "Qwen3.6-27B-Q4_K_M"  # same model as VLM; swap to a text-only model for lower latency
+    api_key_env: null             # set to env var name if LM Studio uses auth
     timeout_s: 120
     max_retries: 2
     retry_delay_s: 2
