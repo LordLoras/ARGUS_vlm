@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ChatInput } from "../components/Chat/ChatInput";
-import { ContextRail } from "../components/Chat/ContextRail";
-import { MessageList } from "../components/Chat/MessageList";
-import { SessionList } from "../components/Chat/SessionList";
 import type { ToolCard } from "../components/Chat/ToolCallCard";
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { api, streamAgentQuery } from "../lib/api-client";
-import { CopyIcon } from "../lib/icons";
+import { CopyIcon, SearchIcon, LayersIcon, FilmIcon, FlowIcon } from "../lib/icons";
 import type { AgentMessage, AgentSession, AgentStreamEvent } from "../lib/types";
+
+import { ChatInput } from "../components/Chat/ChatInput";
+import { ContextRail } from "../components/Chat/ContextRail";
+import { MessageList } from "../components/Chat/MessageList";
+import { SessionList } from "../components/Chat/SessionList";
 
 type RenderedMessage = { role: "user" | "assistant"; content: string };
 
@@ -251,25 +252,88 @@ export function Agent() {
         />
 
         <section className="chat-main">
-          <div className="chat-header">
-            <span className="session-title">{sessionLabel(activeSession)}</span>
-            <span className="session-id">
-              {activeSession?.id ?? "no session"} · gemma · {tools.length} tool calls
-            </span>
-            {streaming ? (
-              <span className="stream-state">
-                <span className="dot" />
-                streaming…
-              </span>
-            ) : null}
-          </div>
-          <MessageList
-            messages={messages}
-            tools={tools}
-            streaming={streaming}
-            onPrompt={submit}
-            scrollRef={scrollRef}
-          />
+          {activeId ? (
+            <>
+              <div className="chat-header">
+                <span className="session-title">{sessionLabel(activeSession)}</span>
+                <span className="session-id">
+                  {activeSession?.id ?? "no session"} · ARGUS · {tools.length} tool calls
+                </span>
+                {streaming ? (
+                  <span className="stream-state">
+                    <span className="dot" />
+                    streaming…
+                  </span>
+                ) : null}
+              </div>
+              <MessageList
+                messages={messages}
+                tools={tools}
+                streaming={streaming}
+                onPrompt={submit}
+                scrollRef={scrollRef}
+              />
+            </>
+          ) : (
+            <div className="agent-landing">
+              <div className="agent-landing-glow" />
+              <div className="agent-landing-content">
+                <div className="agent-landing-badge">ARGUS v0.1</div>
+                <h1 className="agent-landing-title">
+                  Ad Retrieval, <span className="grdt">Graphing</span> &amp; Understanding System
+                </h1>
+                <p className="agent-landing-sub">
+                  Natural-language query engine for your ad library. Ask questions, compare
+                  campaigns, and discover patterns across brands, categories, and time.
+                </p>
+                <div className="agent-landing-cards">
+                  <div className="agent-card">
+                    <SearchIcon size={16} />
+                    <span>Search &amp; filter by brand, category, product type, or free text</span>
+                  </div>
+                  <div className="agent-card">
+                    <LayersIcon size={16} />
+                    <span>Compare ads side-by-side across multiple dimensions</span>
+                  </div>
+                  <div className="agent-card">
+                    <FilmIcon size={16} />
+                    <span>Discover similar creatives by visual &amp; semantic similarity</span>
+                  </div>
+                  <div className="agent-card">
+                    <FlowIcon size={16} />
+                    <span>Aggregate and count — "how many SUV ads this month?"</span>
+                  </div>
+                </div>
+                <div className="agent-landing-prompt">
+                  <span className="agent-landing-prompt-icon">⟶</span>
+                  <button
+                    className="agent-landing-prompt-btn"
+                    onClick={() => {
+                      submit("Show me all ads grouped by category");
+                    }}
+                  >
+                    Show me all ads grouped by category
+                  </button>
+                  <button
+                    className="agent-landing-prompt-btn"
+                    onClick={() => {
+                      submit("Compare the two most recent automotive ads");
+                    }}
+                  >
+                    Compare the two most recent automotive ads
+                  </button>
+                  <button
+                    className="agent-landing-prompt-btn"
+                    onClick={() => {
+                      submit("How many SUV ads do I have?");
+                    }}
+                  >
+                    How many SUV ads do I have?
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <ChatInput
             disabled={false}
             streaming={streaming}

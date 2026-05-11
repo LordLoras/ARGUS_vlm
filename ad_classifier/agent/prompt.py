@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ad_classifier.agent.catalog import ToolCatalog
 
-DEFAULT_PROMPT_FILENAME = "gemma_agent_system.txt"
+DEFAULT_PROMPT_FILENAME = "argus_agent_system.txt"
 
 
 def _load_template(prompt_path: Path | None = None) -> str:

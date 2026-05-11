@@ -7,7 +7,7 @@ from pydantic import Field
 
 from ad_classifier.models.common import StrictModel
 
-AdStatus = Literal["new", "processing", "completed", "failed", "duplicate", "review"]
+AdStatus = Literal["new", "processing", "completed", "failed", "duplicate"]
 
 
 def utc_now() -> datetime:

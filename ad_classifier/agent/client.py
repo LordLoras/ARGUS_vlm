@@ -90,7 +90,7 @@ class HTTPAgentClient(AgentClient):
         self,
         *,
         endpoint: str = "http://127.0.0.1:1234/v1",
-        model: str = "google/gemma-4-26b-a4b",
+        model: str = "argus/vlm",
         api_key_env: str | None = None,
         timeout_s: float = 120.0,
         max_retries: int = 2,

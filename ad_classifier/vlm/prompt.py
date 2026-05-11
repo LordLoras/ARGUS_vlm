@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "gemma_ad_verifier.txt"
+_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "argus_ad_verifier.txt"
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent / "taxonomy.yaml"
 
 

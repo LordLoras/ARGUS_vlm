@@ -36,7 +36,7 @@ def _classification(ad_id: str, category: str) -> ClassificationRecord:
         ad_id=ad_id,
         primary_category=category,
         confidence=0.9,
-        vlm_model="google/gemma-4-26b-a4b",
+        vlm_model="argus/vlm",
         vlm_prompt_version="v1",
         embedder_text_model="all-MiniLM-L6-v2",
         embedder_visual_model="siglip2-base",

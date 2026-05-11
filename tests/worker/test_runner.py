@@ -82,7 +82,7 @@ def test_worker_reload_config_refreshes_vlm_model(tmp_path: Path):
         yaml.safe_dump(
             {
                 "paths": {"sqlite_path": str(db_path)},
-                "vlm": {"endpoint": {"model": "google/gemma-4-26b-a4b"}},
+                "vlm": {"endpoint": {"model": "argus/vlm"}},
             }
         ),
         encoding="utf-8",

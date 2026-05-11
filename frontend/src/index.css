@@ -1461,6 +1461,7 @@ button.ts-link:hover {
 }
 
 .chat-main {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1674,6 +1675,123 @@ button.ts-link:hover {
 .viz-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 
 /* Chat input */
+/* ── Agent landing page ── */
+.agent-landing {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 40px;
+}
+.agent-landing-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.agent-landing-content {
+  position: relative;
+  max-width: 640px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+.agent-landing-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  padding: 4px 16px;
+}
+.agent-landing-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--fg);
+}
+.agent-landing-title .grdt {
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.agent-landing-sub {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-mute);
+  margin: 0;
+  max-width: 480px;
+}
+.agent-landing-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.agent-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-mute);
+  text-align: left;
+}
+.agent-card svg {
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.agent-landing-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+.agent-landing-prompt-icon {
+  font-size: 11px;
+  color: var(--fg-quiet);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+.agent-landing-prompt-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.agent-landing-prompt-btn:hover {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+/* ── end agent landing ── */
+
 .chat-input-wrap {
   border-top: 1px solid var(--border);
   padding: 12px 32px 14px;

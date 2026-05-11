@@ -27,7 +27,7 @@ export function ChatInput({
     <div className="chat-input-wrap">
       <div className="chat-input-inner">
         <div className="chat-input-meta">
-          <span>gemma-3-12b · ctx 8k · temp 0.2</span>
+          <span>ARGUS · tool-calling agent</span>
           <span className="tools-active">
             {ACTIVE_TOOLS.map((tool) => (
               <span key={tool} className="tool-chip">
