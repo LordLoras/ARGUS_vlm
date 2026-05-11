@@ -8,7 +8,7 @@ import yaml
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
 from ad_classifier.marketing._utils import format_price as _format_price
 from ad_classifier.marketing.brand import brand_normalize
-from ad_classifier.models.classification import Decision, OCRQuality
+from ad_classifier.models.classification import OCRQuality
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import (
     AdvertiserEntity,
@@ -35,7 +35,6 @@ from ad_classifier.models.marketing import (
     WebsiteEntity,
 )
 from ad_classifier.pipeline.aggregation.models import (
-    AggregationConfig,
     FinalAdClassification,
     RelatedAds,
 )
@@ -402,24 +401,11 @@ def _parse_rating_count(value: str | None) -> int | None:
     return int(digits) if digits else None
 
 
-def _decide(
-    vlm_decision: Decision,
-    vlm_confidence: float,
-    has_rule_triggers: bool,
-    config: AggregationConfig,
-) -> tuple[Decision, bool]:
-    if vlm_decision == "allow" and vlm_confidence >= config.allow_threshold and not has_rule_triggers:
-        return "allow", False
-
-    return "review", True
-
-
 def aggregate(
     ad_id: str,
     vlm_result: VLMVerificationResult,
     rules_triggered: list[RuleTrigger],
     *,
-    config: AggregationConfig | None = None,
     related_ads: RelatedAds | None = None,
     vlm_model: str = "",
     vlm_prompt_version: str = "",
@@ -428,17 +414,6 @@ def aggregate(
     selected_frames: list[dict] | None = None,
     dropped_frames: list[dict] | None = None,
 ) -> FinalAdClassification:
-    cfg = config or AggregationConfig()
-
-    has_rules = len(rules_triggered) > 0
-
-    decision, needs_review = _decide(
-        vlm_result.decision,
-        vlm_result.confidence,
-        has_rules,
-        cfg,
-    )
-
     evidence = _map_vlm_evidence(vlm_result) + _rule_evidence(rules_triggered)
 
     marketing_entities = _map_marketing_entities(vlm_result)
@@ -466,8 +441,6 @@ def aggregate(
         risk_labels=[],
         confidence=vlm_result.confidence,
         sensitive_category=sensitive,
-        decision=decision,
-        needs_human_review=needs_review,
         ocr_quality=ocr_quality,
         evidence=evidence,
         marketing_entities=marketing_entities,

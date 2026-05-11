@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from ad_classifier.models.classification import Decision, OCRQuality
+from ad_classifier.models.classification import OCRQuality
 from ad_classifier.models.common import EvidenceItem, StrictModel
 from ad_classifier.models.marketing import MarketingEntities
 
 
 class AggregationConfig(StrictModel):
-    allow_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+    pass
 
 
 class SimilarAd(StrictModel):
@@ -32,8 +32,6 @@ class FinalAdClassification(StrictModel):
     risk_labels: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     sensitive_category: bool = False
-    decision: Decision
-    needs_human_review: bool
     ocr_quality: OCRQuality | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     marketing_entities: MarketingEntities = Field(default_factory=MarketingEntities)

@@ -247,8 +247,6 @@ def run_pipeline_for_job(
             risk_labels=final.risk_labels,
             confidence=final.confidence,
             sensitive_category=final.sensitive_category,
-            decision=final.decision,
-            needs_human_review=final.needs_human_review,
             ocr_quality=final.ocr_quality or _ocr_quality(vlm_result),
             vlm_raw=vlm_result.model_dump(),
             evidence=final.evidence,
@@ -271,7 +269,6 @@ def run_pipeline_for_job(
         products_text=final.marketing_entities.products_text,
         primary_category=final.primary_category,
         subcategory=final.marketing_entities.subcategory,
-        decision=final.decision,
     )
     AdRepository(conn).update_status(ad_id, "completed")
     fts_update(

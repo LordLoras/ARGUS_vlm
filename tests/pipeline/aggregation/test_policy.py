@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ad_classifier.pipeline.aggregation.models import AggregationConfig
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
@@ -10,7 +9,7 @@ def _vlm(
     *,
     decision="allow",
     confidence=0.85,
-    primary_category="retail_ecommerce",
+    primary_category="retail",
 ) -> VLMVerificationResult:
     return VLMVerificationResult(
         primary_category=primary_category,
@@ -33,79 +32,8 @@ def _rule(risk_label: str = "deceptive_urgency") -> RuleTrigger:
 
 
 # ---------------------------------------------------------------------------
-# Decision logic
+# Marketing entity mapping
 # ---------------------------------------------------------------------------
-
-
-def test_clean_ad_allows():
-    result = aggregate("ad_1", _vlm(decision="allow", confidence=0.85), [])
-    assert result.decision == "allow"
-    assert result.needs_human_review is False
-
-
-def test_low_confidence_routes_to_review():
-    result = aggregate("ad_1", _vlm(decision="allow", confidence=0.50), [])
-    assert result.decision == "review"
-    assert result.needs_human_review is True
-
-
-def test_vlm_flag_with_high_confidence_flags():
-    result = aggregate("ad_1", _vlm(decision="review", confidence=0.90), [])
-    assert result.decision == "review"
-    assert result.needs_human_review is True
-
-
-def test_vlm_flag_low_confidence_still_flags_needs_review():
-    result = aggregate("ad_1", _vlm(decision="review", confidence=0.50), [])
-    assert result.decision == "review"
-
-
-def test_rule_trigger_escalates_to_review():
-    result = aggregate("ad_1", _vlm(decision="allow", confidence=0.85), [_rule()])
-    assert result.decision == "review"
-    assert result.needs_human_review is True
-
-
-def test_rule_risk_labels_merged():
-    result = aggregate(
-        "ad_1",
-        _vlm(decision="allow", confidence=0.85),
-        [_rule("deceptive_urgency")],
-    )
-    assert result.risk_labels == []
-
-
-def test_unknown_risk_labels_are_filtered():
-    result = aggregate(
-        "ad_1",
-        _vlm(decision="allow", confidence=0.85),
-        [_rule("also_unknown")],
-    )
-
-    assert result.risk_labels == []
-    assert result.decision == "review"
-
-
-def test_low_confidence_reviews():
-    cfg = AggregationConfig(allow_threshold=0.50)
-    result = aggregate(
-        "ad_1",
-        _vlm(decision="allow", confidence=0.60, primary_category="health_wellness"),
-        [],
-        config=cfg,
-    )
-    assert result.decision == "allow"
-
-
-def test_below_threshold_reviews():
-    cfg = AggregationConfig(allow_threshold=0.70)
-    result = aggregate(
-        "ad_1",
-        _vlm(decision="allow", confidence=0.60, primary_category="health_wellness"),
-        [],
-        config=cfg,
-    )
-    assert result.decision == "review"
 
 
 # ---------------------------------------------------------------------------

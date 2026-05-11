@@ -36,8 +36,6 @@ def _classification(ad_id: str, category: str) -> ClassificationRecord:
         ad_id=ad_id,
         primary_category=category,
         confidence=0.9,
-        decision="allow",
-        needs_human_review=False,
         vlm_model="google/gemma-4-26b-a4b",
         vlm_prompt_version="v1",
         embedder_text_model="all-MiniLM-L6-v2",
@@ -69,7 +67,6 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         landing_page_domain=None,
         products_text="Wrangler",
         primary_category="automotive",
-        decision="allow",
     )
     classifications.upsert(_classification("ad_jeep_a", "automotive"))
     marketing.upsert(
@@ -101,7 +98,6 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         landing_page_domain=None,
         products_text="Grand Cherokee",
         primary_category="automotive",
-        decision="allow",
     )
     classifications.upsert(_classification("ad_jeep_b", "automotive"))
     marketing.upsert(
@@ -133,7 +129,6 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         landing_page_domain=None,
         products_text="Large Pepperoni",
         primary_category="food_beverage",
-        decision="allow",
     )
     classifications.upsert(_classification("ad_pizza_a", "food_beverage"))
     marketing.upsert(

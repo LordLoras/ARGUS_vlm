@@ -10,11 +10,11 @@ from ad_classifier.db.repositories import AdRepository
 class ListAdsTool(AgentTool):
     name = "list_ads"
     description = (
-        "List ads filtered by brand, primary_category, status, or a free-text "
-        "substring (matches id, brand, advertiser, products, category, website, "
-        "phone, landing page domain; expands common shorthand such as HVAC or "
-        "services). Returns products_text so product/model questions can usually "
-        "be answered without get_ad. For counts, prefer count_ads."
+        "List ads filtered by brand, advertiser, primary_category, subcategory, "
+        "status, or a free-text substring (matches id, brand, advertiser, products, "
+        "category, website, phone, landing page domain; expands common shorthand "
+        "such as HVAC or services). Returns products_text so product/model questions "
+        "can usually be answered without get_ad. For counts, prefer count_ads."
     )
 
     def parameters(self) -> dict[str, Any]:
@@ -22,7 +22,9 @@ class ListAdsTool(AgentTool):
             "type": "object",
             "properties": {
                 "brand": {"type": "string", "description": "Exact brand_name match."},
-                "category": {"type": "string", "description": "Primary category/topic."},
+                "advertiser": {"type": "string", "description": "Exact advertiser_name match (e.g. dealer, store, or business placing the ad)."},
+                "category": {"type": "string", "description": "Primary industry category."},
+                "subcategory": {"type": "string", "description": "Product type or niche (e.g. SUV, smartphone, pizza, credit card)."},
                 "status": {
                     "type": "string",
                     "enum": [
@@ -31,7 +33,6 @@ class ListAdsTool(AgentTool):
                         "completed",
                         "failed",
                         "duplicate",
-                        "review",
                     ],
                 },
                 "q": {"type": "string", "description": "Free-text topic filter."},
@@ -46,7 +47,9 @@ class ListAdsTool(AgentTool):
         offset = max(int(args.get("offset", 0)), 0)
         ads = AdRepository(ctx.conn).list(
             brand=args.get("brand"),
+            advertiser=args.get("advertiser"),
             category=args.get("category"),
+            subcategory=args.get("subcategory"),
             status=args.get("status"),
             q=args.get("q"),
             limit=limit + 1,
@@ -63,6 +66,7 @@ class ListAdsTool(AgentTool):
                     "brand": ad.brand_name,
                     "advertiser": ad.advertiser_name,
                     "primary_category": ad.primary_category,
+                    "subcategory": ad.subcategory,
                     "status": ad.status,
                     "duration_ms": ad.duration_ms,
                     "products": ad.products_text,

@@ -64,7 +64,6 @@ def _seed_some_ads(db_path: Path) -> None:
             landing_page_domain=None,
             products_text="Thing",
             primary_category="other",
-            decision="allow",
         )
         conn.commit()
     finally:

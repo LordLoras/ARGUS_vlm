@@ -59,7 +59,9 @@ class AdRepository:
         self,
         *,
         brand: str | None = None,
+        advertiser: str | None = None,
         category: str | None = None,
+        subcategory: str | None = None,
         status: str | None = None,
         q: str | None = None,
         limit: int = 50,
@@ -70,6 +72,9 @@ class AdRepository:
         if brand:
             clauses.append("LOWER(brand_name) = LOWER(?)")
             params.append(brand)
+        if advertiser:
+            clauses.append("LOWER(advertiser_name) = LOWER(?)")
+            params.append(advertiser)
         if category:
             if has_alias_expansion(category):
                 loose_clause, loose_params = build_loose_like_clause(category)
@@ -79,6 +84,9 @@ class AdRepository:
             else:
                 clauses.append("primary_category = ?")
                 params.append(category)
+        if subcategory:
+            clauses.append("LOWER(subcategory) = LOWER(?)")
+            params.append(subcategory)
         if status:
             clauses.append("status = ?")
             params.append(status)
@@ -178,7 +186,6 @@ class AdRepository:
         products_text: str | None,
         primary_category: str | None,
         subcategory: str | None = None,
-        decision: str | None,
     ) -> None:
         self.conn.execute(
             """
@@ -191,8 +198,7 @@ class AdRepository:
                 landing_page_domain = ?,
                 products_text = ?,
                 primary_category = ?,
-                subcategory = ?,
-                decision = ?
+                subcategory = ?
             WHERE id = ?
             """,
             (
@@ -205,7 +211,6 @@ class AdRepository:
                 products_text,
                 primary_category,
                 subcategory,
-                decision,
                 ad_id,
             ),
         )

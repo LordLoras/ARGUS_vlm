@@ -22,8 +22,9 @@ def _to_record(row: sqlite3.Row) -> ClassificationRecord:
     else:
         data["ocr_quality"] = None
 
-    # Drop raw JSON columns — not in model
-    for key in ("risk_labels_json", "evidence_json", "vlm_raw_json", "ocr_quality_json"):
+    # Drop raw JSON columns + removed fields — not in model
+    for key in ("risk_labels_json", "evidence_json", "vlm_raw_json", "ocr_quality_json",
+                "decision", "needs_human_review"):
         data.pop(key, None)
 
     return ClassificationRecord.model_validate(data)
@@ -37,17 +38,15 @@ class ClassificationRepository:
         self.conn.execute(
             """
             INSERT INTO classifications (
-              ad_id, primary_category, risk_labels_json, confidence, decision,
-              needs_human_review, ocr_quality_json, vlm_raw_json, evidence_json,
+              ad_id, primary_category, risk_labels_json, confidence,
+              ocr_quality_json, vlm_raw_json, evidence_json,
               vlm_model, vlm_prompt_version, embedder_text_model, embedder_visual_model,
               pipeline_version, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               primary_category = excluded.primary_category,
               risk_labels_json = excluded.risk_labels_json,
               confidence = excluded.confidence,
-              decision = excluded.decision,
-              needs_human_review = excluded.needs_human_review,
               ocr_quality_json = excluded.ocr_quality_json,
               vlm_raw_json = excluded.vlm_raw_json,
               evidence_json = excluded.evidence_json,
@@ -63,8 +62,6 @@ class ClassificationRepository:
                 record.primary_category,
                 json.dumps(record.risk_labels),
                 record.confidence,
-                record.decision,
-                db_value(record.needs_human_review),
                 json.dumps(record.ocr_quality.model_dump() if record.ocr_quality else None),
                 json.dumps(record.vlm_raw),
                 json.dumps([e.model_dump() for e in record.evidence]),

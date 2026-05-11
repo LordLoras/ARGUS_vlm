@@ -27,11 +27,9 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
 def _record(ad_id: str = "ad_test") -> ClassificationRecord:
     return ClassificationRecord(
         ad_id=ad_id,
-        primary_category="retail_ecommerce",
+        primary_category="retail",
         risk_labels=[],
         confidence=0.88,
-        decision="review",
-        needs_human_review=True,
         vlm_model="google/gemma-4-26b-a4b",
         vlm_prompt_version="verifier-2026.05.01",
         embedder_text_model="all-MiniLM-L6-v2",
@@ -48,10 +46,8 @@ def test_upsert_and_get(conn):
     result = repo.get("ad_test")
     assert result is not None
     assert result.ad_id == "ad_test"
-    assert result.primary_category == "retail_ecommerce"
+    assert result.primary_category == "retail"
     assert result.risk_labels == []
-    assert result.decision == "review"
-    assert result.needs_human_review is True
 
 
 def test_upsert_overwrites(conn):
@@ -61,13 +57,11 @@ def test_upsert_overwrites(conn):
 
     updated = _record()
     updated.primary_category = "gambling"
-    updated.decision = "allow"
     repo.upsert(updated)
     conn.commit()
 
     result = repo.get("ad_test")
     assert result.primary_category == "gambling"
-    assert result.decision == "allow"
 
 
 def test_get_nonexistent_returns_none(conn):
