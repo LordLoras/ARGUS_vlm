@@ -205,6 +205,25 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         )
         for o in me.offers
     ]
+    if me.offer_terms.financing.monthly_payment is not None:
+        fin = me.offer_terms.financing
+        text_parts = [f"{_format_price(fin.currency, fin.monthly_payment)}/mo"]
+        if fin.duration_months:
+            text_parts.append(f"{fin.duration_months}-mo")
+        if fin.apr:
+            text_parts.append(f"{fin.apr}% APR")
+        offers.append(OfferEntity(
+            text=" ".join(text_parts),
+            evidence=[
+                EvidenceItem(
+                    time_ms=e.time_ms,
+                    frame_index=e.frame_index,
+                    source="vlm",
+                    text=fin.text or " ".join(text_parts),
+                )
+                for e in (fin.evidence or [])
+            ],
+        ))
 
     ctas = [
         CTAEntity(
