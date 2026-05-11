@@ -13,7 +13,7 @@ CRITICAL RULES:
 - Only extract information that is VISIBLE in the frames or AUDIBLE in the transcript.
 - If you cannot see or hear it, do NOT output it. No guessing, no inference from brand knowledge.
 - Products: only actual product names shown or spoken (e.g., "2026 Thor Scope"). NOT dealer names, NOT part numbers, NOT "MSRP", NOT "Now Priced".
-- Brand: the company/brand being advertised. NOT the dealership/store unless the ad is for the dealership itself.
+- Brand: the consumer-facing brand being advertised (e.g., "Jeep", not "Stellantis"). NOT the parent company, NOT the dealership/store unless the ad is for the dealership itself.
 - Prices: only actual prices shown for products. NOT dealer fees, NOT document charges, NOT filing fees, NOT discount amounts.
 - Offers: the deal being promoted (e.g., "0% APR for 36 months", "$74,998 sale price"). Keep offers concise — one sentence max.
 - Do NOT dump entire OCR paragraphs into offer text.

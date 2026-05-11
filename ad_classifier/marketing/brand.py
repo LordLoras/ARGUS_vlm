@@ -38,6 +38,19 @@ def _normalize_key(name: str) -> str:
 def brand_normalize(name: str | None, *, aliases_path: Path | None = None) -> str | None:
     if not name:
         return None
-    key = _normalize_key(name)
+    cleaned = _SYMBOL_RE.sub("", name)
+    cleaned = _WS_RE.sub(" ", cleaned).strip()
+    if not cleaned:
+        return None
+    key = cleaned.lower()
     aliases = _load_aliases(str(aliases_path) if aliases_path else str(_TAXONOMY_PATH))
-    return aliases.get(key, name.strip())
+    if key in aliases:
+        return aliases[key]
+    return _title_case(cleaned)
+
+
+def _title_case(s: str) -> str:
+    return " ".join(
+        word if word != word.lower() else word.capitalize()
+        for word in s.split()
+    )

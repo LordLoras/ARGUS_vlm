@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import shutil
 import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
+import structlog
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
@@ -22,6 +24,7 @@ from ad_classifier.search.fts import fts_delete
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 router = APIRouter(tags=["ads"])
+logger = structlog.get_logger(__name__)
 
 
 class AdPatch(BaseModel):
@@ -151,7 +154,11 @@ def get_ad(ad_id: str, request: Request) -> dict[str, Any]:
         if ad is None:
             raise HTTPException(status_code=404, detail="ad not found")
         classification = ClassificationRepository(conn).get(ad_id)
-        marketing = MarketingEntityRepository(conn).get(ad_id)
+        try:
+            marketing = MarketingEntityRepository(conn).get(ad_id)
+        except (json.JSONDecodeError, Exception) as exc:
+            logger.warning("malformed_marketing_entities", ad_id=ad_id, error=str(exc))
+            marketing = None
         campaigns = AdCampaignRepository(conn).list_for_ad(ad_id)
         return {
             "ad": _dump(ad),

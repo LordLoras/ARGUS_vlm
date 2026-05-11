@@ -68,7 +68,7 @@ class AdRepository:
         clauses: list[str] = []
         params: list[object] = []
         if brand:
-            clauses.append("brand_name = ?")
+            clauses.append("LOWER(brand_name) = LOWER(?)")
             params.append(brand)
         if category:
             if has_alias_expansion(category):

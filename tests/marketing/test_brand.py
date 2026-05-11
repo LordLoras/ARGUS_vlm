@@ -29,4 +29,4 @@ def test_unknown_brand_returns_stripped():
 
 def test_whitespace_collapse():
     result = brand_normalize("  Some   Brand  ")
-    assert result == "Some   Brand".strip()
+    assert result == "Some Brand"
