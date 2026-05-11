@@ -6,6 +6,7 @@ import { CloseIcon, PlusIcon } from "../../lib/icons";
 
 export type EditPatch = {
   brand_name?: string | null;
+  advertiser_name?: string | null;
   products_text?: string | null;
   primary_category?: string | null;
   subcategory?: string | null;
@@ -26,6 +27,7 @@ export function EditTab({
   const ent = detail.marketing_entities;
 
   const [brand, setBrand] = useState(detail.ad.brand_name ?? "");
+  const [advertiser, setAdvertiser] = useState(detail.ad.advertiser_name ?? "");
   const [products, setProducts] = useState(detail.ad.products_text ?? "");
   const [category, setCategory] = useState(
     detail.ad.primary_category ?? detail.classification?.primary_category ?? "other"
@@ -43,6 +45,7 @@ export function EditTab({
 
   useEffect(() => {
     setBrand(detail.ad.brand_name ?? "");
+    setAdvertiser(detail.ad.advertiser_name ?? "");
     setProducts(detail.ad.products_text ?? "");
     setCategory(detail.ad.primary_category ?? detail.classification?.primary_category ?? "other");
     setSubcategory(detail.ad.subcategory ?? ent?.subcategory ?? "");
@@ -54,6 +57,7 @@ export function EditTab({
   }, [
     detail.ad.id,
     detail.ad.brand_name,
+    detail.ad.advertiser_name,
     detail.ad.products_text,
     detail.ad.primary_category,
     detail.ad.subcategory,
@@ -72,6 +76,14 @@ export function EditTab({
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
             placeholder="brand"
+          />
+        </Field>
+        <Field label="Advertiser">
+          <input
+            className="input"
+            value={advertiser}
+            onChange={(e) => setAdvertiser(e.target.value)}
+            placeholder="advertiser (dealer, store, business)"
           />
         </Field>
         <Field label="Tagline">
@@ -223,6 +235,7 @@ export function EditTab({
             onClick={() =>
               onSave({
                 brand_name: brand || null,
+                advertiser_name: advertiser || null,
                 products_text: products || null,
                 primary_category: category,
                 subcategory: subcategory || null,

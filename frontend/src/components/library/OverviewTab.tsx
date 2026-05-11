@@ -49,6 +49,8 @@ export function OverviewTab({
               </span>
             ) : null}
           </dd>
+          <dt>Advertiser</dt>
+          <dd>{detail.ad.advertiser_name || "—"}</dd>
           <dt>Tagline</dt>
           <dd>{ent?.brand?.tagline || "—"}</dd>
           <dt>Products</dt>

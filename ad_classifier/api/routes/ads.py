@@ -37,7 +37,6 @@ class AdPatch(BaseModel):
     products_text: str | None = None
     primary_category: str | None = None
     subcategory: str | None = None
-    decision: str | None = None
     tagline: str | None = None
     offers: list[dict[str, str | None]] | None = None
     ctas: list[dict[str, str | None]] | None = None
@@ -276,7 +275,6 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             subcategory=(
                 patch.subcategory if patch.subcategory is not None else current.subcategory
             ),
-            decision=patch.decision if patch.decision is not None else current.decision,
         )
 
         marketing_repo = MarketingEntityRepository(conn)
