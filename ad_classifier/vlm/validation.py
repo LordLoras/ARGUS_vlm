@@ -68,7 +68,24 @@ def _product_in_evidence(product: str, evidence_blob: str) -> bool:
     tokens = [t for t in product_lower.split() if len(t) > 2 and not t.isdigit()]
     if not tokens:
         return True
-    return any(t in evidence_blob for t in tokens)
+    real_words = [t for t in tokens if len(t) >= 4 and not _is_garbled_token(t)]
+    real_words += [t for t in tokens if t in _KNOWN_SHORT_WORDS]
+    if not real_words:
+        return False
+    return any(t in evidence_blob for t in real_words)
+
+
+def _is_garbled_token(token: str) -> bool:
+    if len(token) < 3:
+        return True
+    vowels = sum(1 for c in token if c in "aeiou")
+    return vowels == 0 and len(token) <= 5
+
+
+_KNOWN_SHORT_WORDS = frozenset({
+    "rv", "suv", "mpg", "apr", "msrp", "lev", "sel", "eco",
+    "sed", "rtl", "lte", "pro", "max", "ltz", "gts", "4x4",
+})
 
 
 def _valid_price(amount: float) -> bool:
