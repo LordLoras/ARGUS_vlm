@@ -28,39 +28,48 @@ def merge_commercial_entities(
     extracted: MarketingEntities,
 ) -> MarketingEntities:
     brand_name = base.brand.name or base.advertiser.brand_name
-    extracted_products = repair_products(extracted.products, brand_name)
-    base.products = _merge_products(base.products, extracted_products)
-    base.products = repair_products(base.products, brand_name)
+
+    vlm_has_products = bool(base.products)
+    if vlm_has_products:
+        base.products = repair_products(base.products, brand_name)
+    else:
+        extracted_products = repair_products(extracted.products, brand_name)
+        base.products = extracted_products
+
     base.prices = [
         _normalize_price_entity(price)
         for price in base.prices
         if price.text.strip() or (price.amount is not None and price.amount > 0)
     ]
 
-    for price in extracted.prices:
-        price = _normalize_price_entity(price)
-        existing = {_price_key(item) for item in base.prices}
-        if _price_key(price) not in existing:
+    if not base.prices:
+        for price in extracted.prices:
+            price = _normalize_price_entity(price)
             base.prices.append(price)
 
-    for offer in extracted.offers:
-        existing = {_compact_key(item.text) for item in base.offers}
-        if _compact_key(offer.text) not in existing:
+    if not base.offers:
+        for offer in extracted.offers:
             base.offers.append(offer)
+    else:
+        upgraded = []
+        for existing in base.offers:
+            best = existing
+            for candidate in extracted.offers:
+                if _is_strict_upgrade(candidate.text, existing.text):
+                    best = candidate
+                    break
+            upgraded.append(best)
+        base.offers = upgraded
     base.offers = _dedupe_offers(base.offers)
-
     base.offers = _fuzzy_dedupe_offers(base.offers)
 
-    for cta in extracted.ctas:
-        existing = {_compact_key(item.text) for item in base.ctas}
-        if _compact_key(cta.text) not in existing:
+    if not base.ctas:
+        for cta in extracted.ctas:
             base.ctas.append(cta)
-
     base.ctas = _fuzzy_dedupe_list(base.ctas)
 
-    for disclaimer in extracted.disclaimers:
-        existing = {_compact_key(item.text) for item in base.disclaimers}
-        if _compact_key(disclaimer.text) not in existing:
+    if not base.disclaimers:
+        for disclaimer in extracted.disclaimers:
             base.disclaimers.append(disclaimer)
     base.disclaimers = _dedupe_disclaimers(base.disclaimers)
 
@@ -90,6 +99,16 @@ def merge_commercial_entities(
 
 def _max_density(left: str, right: str) -> str:
     return left if _DENSITY_RANK[left] >= _DENSITY_RANK[right] else right
+
+
+def _is_strict_upgrade(candidate: str, existing: str) -> bool:
+    if not candidate or not existing:
+        return False
+    if len(candidate) <= len(existing):
+        return False
+    existing_words = set(existing.lower().split())
+    candidate_words = set(candidate.lower().split())
+    return existing_words.issubset(candidate_words)
 
 
 def _merge_financing(left: FinancingTerms, right: FinancingTerms) -> FinancingTerms:

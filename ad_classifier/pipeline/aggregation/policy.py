@@ -304,7 +304,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
     )
 
     advertiser = AdvertiserEntity(
-        advertiser_name=me.advertiser.advertiser_name,
+        advertiser_name=brand_normalize(me.advertiser.advertiser_name) or me.advertiser.advertiser_name,
         brand_name=brand_normalize(me.advertiser.brand_name),
         parent_company=me.advertiser.parent_company,
         service_area=list(me.advertiser.service_area),
