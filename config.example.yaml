@@ -15,8 +15,15 @@ ingest:
   audio_sample_rate: 16000
 
 whisper:
-  backend: whisper_cpp            # whisper_cpp | faster-whisper | mock
-  model: large-v3-turbo           # whisper.cpp: tiny.en/base.en/small.en/medium.en/large-v3/large-v3-turbo; faster-whisper: tiny/base/small/medium/large-v3
+  # ── Backend ──
+  #   whisper_cpp   (default) — uses whisper-cli.exe, best GPU support on AMD via Vulkan
+  #   faster-whisper          — Python native, uses CTranslate2, good for CPU or NVIDIA CUDA
+  #   mock                    — returns empty transcript (for testing without a model)
+  backend: whisper_cpp
+  # ── Model ──
+  #   tiny.en       (39 MB, fastest, worst accuracy — "Jeep" heard as "cheap")
+  #   large-v3-turbo (~1.6 GB q5_0 or 3.1 GB full, best accuracy, recommended)
+  model: large-v3-turbo
   compute_type: int8              # faster-whisper only
   language: null                  # null = auto-detect
   whisper_cpp:
@@ -31,7 +38,7 @@ whisper:
 dedup:
   skip_on_exact: true
   skip_on_near_duplicate: false
-  phash_distance_threshold: 4
+  phash_distance_threshold: 8
 
 ocr:
   device: cpu
