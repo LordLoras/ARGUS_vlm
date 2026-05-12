@@ -203,18 +203,15 @@ export function Upload() {
                 onCancel={cancel}
               />
             )}
-          </div>
 
-          {/* ── right: result ── */}
-          {isDone && detailQuery.data ? (
-            <div className="upload-side">
+            {isDone && detailQuery.data ? (
               <ResultPanel
                 detail={detailQuery.data}
                 elapsedMs={elapsed}
                 onReset={reset}
               />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
     </>
