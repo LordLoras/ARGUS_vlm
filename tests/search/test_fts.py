@@ -61,3 +61,32 @@ def test_fts_search_expanded_does_not_match_car_inside_healthcare(tmp_path):
     results = fts_search_expanded(conn, "car", limit=10)
 
     assert [ad_id for ad_id, _score in results] == ["ad_jeep"]
+
+
+def test_fts_search_expanded_drops_low_scoring_ocr_noise(tmp_path):
+    conn = open_database(tmp_path / "fts.db")
+    apply_migrations(conn)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at) VALUES (?, ?, ?)",
+        ("ad_dose", "/tmp/dose.mp4", "2026-01-01T00:00:00"),
+    )
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at) VALUES (?, ?, ?)",
+        ("ad_jeep", "/tmp/jeep.mp4", "2026-01-01T00:00:00"),
+    )
+    fts_update(
+        conn,
+        "ad_dose",
+        brand="Dose",
+        ocr_text="Dose Dose Dose daily cholesterol support",
+    )
+    fts_update(
+        conn,
+        "ad_jeep",
+        brand="Jeep",
+        ocr_text="Professional driver on closed course. Do not attempt water fording.",
+    )
+
+    results = fts_search_expanded(conn, "dose", limit=10)
+
+    assert [ad_id for ad_id, _score in results] == ["ad_dose"]

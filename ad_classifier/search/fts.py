@@ -40,6 +40,7 @@ def fts_search_expanded(
     query: str,
     *,
     limit: int = 20,
+    min_score_ratio: float = 0.40,
 ) -> list[tuple[str, float]]:
     """Search FTS with business-topic aliases while preserving first-hit order."""
     if not query.strip():
@@ -78,6 +79,12 @@ def fts_search_expanded(
             else:
                 best_score, first_order = seen[ad_id]
                 seen[ad_id] = (max(best_score, score), first_order)
+
+    if seen and min_score_ratio > 0:
+        best_score = max(score for score, _order in seen.values())
+        if best_score > 0:
+            min_score = best_score * min_score_ratio
+            seen = {ad_id: value for ad_id, value in seen.items() if value[0] >= min_score}
 
     ranked = sorted(seen.items(), key=lambda item: item[1][1])
     return [(ad_id, score) for ad_id, (score, _order) in ranked[:limit]]
@@ -120,7 +127,15 @@ def fts_update(
           (ad_id, brand, products, primary_category, transcript_text, ocr_text, marketing_entities_text)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (ad_id, brand, products, primary_category, transcript_text, ocr_text, marketing_entities_text),
+        (
+            ad_id,
+            brand,
+            products,
+            primary_category,
+            transcript_text,
+            ocr_text,
+            marketing_entities_text,
+        ),
     )
 
 
