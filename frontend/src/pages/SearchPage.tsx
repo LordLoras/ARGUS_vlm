@@ -14,11 +14,20 @@ import { EditIcon, LibraryIcon, SearchIcon } from "../lib/icons";
 import type { SearchHit } from "../lib/types";
 
 const MODES = [
-  { key: "hybrid", label: "hybrid" },
-  { key: "visual_hybrid", label: "visual + OCR" },
-  { key: "keyword", label: "keyword" },
-  { key: "text", label: "text vector" },
-  { key: "visual", label: "visual" }
+  { key: "hybrid", label: "Hybrid" },
+  { key: "visual_hybrid", label: "Visual + OCR" },
+  { key: "keyword", label: "Keyword" },
+  { key: "text", label: "Text vector" },
+  { key: "visual", label: "Visual" }
+] as const;
+
+const STATUS_OPTIONS = [
+  { value: "", label: "Any status" },
+  { value: "completed", label: "Completed" },
+  { value: "processing", label: "Processing" },
+  { value: "failed", label: "Failed" },
+  { value: "duplicate", label: "Duplicate" },
+  { value: "new", label: "New" }
 ] as const;
 
 export function SearchPage() {
@@ -66,69 +75,102 @@ export function SearchPage() {
           </div>
         </div>
 
-        <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
-          <div className="search-controls">
-            <input
-              className="input search-query"
-              placeholder={
-                mode === "visual" || mode === "visual_hybrid"
-                  ? "red car, product shot, outdoor scene..."
-                  : "financing, health claim, brand..."
+        <div className="search-panel">
+          <div className="search-primary-row">
+            <label className="search-field search-field-query">
+              <span className="search-label">Query</span>
+              <input
+                className="input search-query"
+                placeholder={
+                  mode === "visual" || mode === "visual_hybrid"
+                    ? "red car, product shot, outdoor scene..."
+                    : "financing, health claim, brand..."
+                }
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </label>
+            <label className="search-field search-field-seed">
+              <span className="search-label">Seed ad</span>
+              <input
+                className="input search-seed"
+                placeholder="ad_..."
+                value={adId}
+                onChange={(e) => setAdId(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-primary search-submit"
+              disabled={!canSubmit}
+              onClick={() =>
+                setSubmitted({
+                  q,
+                  ad_id: adId,
+                  brand,
+                  category,
+                  status,
+                  mode,
+                  rerank: true
+                })
               }
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <input
-              className="input search-seed"
-              placeholder="seed ad id (optional)"
-              value={adId}
-              onChange={(e) => setAdId(e.target.value)}
-            />
-            <input
-              className="input search-seed"
-              placeholder="brand filter"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-            />
-            <input
-              className="input search-seed"
-              placeholder="category filter"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-            <input
-              className="input search-seed"
-              placeholder="status filter"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            />
-            <div className="search-modes">
+            >
+              <SearchIcon size={13} />
+              <span>Search</span>
+            </button>
+          </div>
+
+          <div className="search-secondary-row">
+            <div className="search-mode-group" aria-label="Search mode">
               {MODES.map((m) => (
                 <button
                   key={m.key}
-                  className={`btn btn-sm ${mode === m.key ? "btn-primary" : ""}`}
+                  className={`search-mode ${mode === m.key ? "is-active" : ""}`}
                   onClick={() => setMode(m.key)}
+                  type="button"
                 >
                   {m.label}
                 </button>
               ))}
             </div>
-            <button
-              className="btn btn-primary"
-              disabled={!canSubmit}
-              onClick={() => setSubmitted({
-                q,
-                ad_id: adId,
-                brand,
-                category,
-                status,
-                mode,
-                rerank: true
-              })}
-            >
-              <SearchIcon size={11} />
-              <span>Search</span>
-            </button>
+
+            <div className="search-filter-grid">
+              <label className="search-field">
+                <span className="search-label">Brand</span>
+                <input
+                  className="input search-filter"
+                  placeholder="Any brand"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                />
+              </label>
+              <label className="search-field">
+                <span className="search-label">Category</span>
+                <input
+                  className="input search-filter"
+                  placeholder="Any category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              </label>
+              <label className="search-field">
+                <span className="search-label">Status</span>
+                <select
+                  className="input search-filter"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  title="Pipeline state: completed, processing, failed, duplicate, or new."
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value || "any"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="search-status-note">
+                Status is the pipeline state. Use Completed for finished ads.
+              </div>
+            </div>
           </div>
         </div>
 
