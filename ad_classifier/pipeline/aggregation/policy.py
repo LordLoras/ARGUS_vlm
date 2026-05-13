@@ -204,14 +204,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
     offers = [
         OfferEntity(
             text=o.value or o.type,
-            evidence=[
-                EvidenceItem(
-                    time_ms=o.time_ms,
-                    frame_index=o.frame_index,
-                    source="vlm",
-                    text=o.value or o.type,
-                )
-            ] if o.time_ms is not None else [],
+            evidence=[],
         )
         for o in me.offers
     ]
