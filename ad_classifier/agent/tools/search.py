@@ -10,6 +10,7 @@ from ad_classifier.search.hybrid import hybrid_search
 from ad_classifier.search.results import (
     cosine_similarity,
     filter_by_min_score,
+    filter_by_query_intent,
     group_frame_hits,
 )
 from ad_classifier.search.rrf import rrf_fuse
@@ -79,14 +80,19 @@ class HybridSearchTool(AgentTool):
                 hits = fts_search_expanded(ctx.conn, query, limit=k)
             except Exception as exc:
                 return ToolResult(name=self.name, ok=False, error=str(exc))
-            return ToolResult(
-                name=self.name,
-                ok=True,
-                data=[
+            data = filter_by_query_intent(
+                ctx.conn,
+                [
                     {"ad_id": ad_id, "fts_score": score, "source": "keyword"}
                     for ad_id, score in hits
                 ],
-                row_count=len(hits),
+                query,
+            )
+            return ToolResult(
+                name=self.name,
+                ok=True,
+                data=data,
+                row_count=len(data),
             )
 
         try:
@@ -103,16 +109,11 @@ class HybridSearchTool(AgentTool):
                         }
                         for ad_id, distance in store.search_visual(query_vector, k=k * 4)
                     ]
-                visual_min_score = (
-                    ctx.search_config.visual_hybrid_min_score
-                    if fts_results
-                    else ctx.search_config.visual_min_score
-                )
                 visual_hits = filter_by_min_score(
                     store,
                     visual_hits,
                     query_vector,
-                    min_score=visual_min_score,
+                    min_score=ctx.search_config.visual_hybrid_min_score,
                     modality="visual",
                 )
                 fused = rrf_fuse(
@@ -129,6 +130,7 @@ class HybridSearchTool(AgentTool):
                     item["modality"] = modality
                     item["source"] = "keyword+visual" if ad_id in visual_by_ad else "keyword"
                     data.append(item)
+                data = filter_by_query_intent(ctx.conn, data, query)
                 return ToolResult(
                     name=self.name,
                     ok=True,
@@ -168,6 +170,7 @@ class HybridSearchTool(AgentTool):
         if filtered_count:
             for item in data:
                 item["filtered_count"] = filtered_count
+        data = filter_by_query_intent(ctx.conn, data, query)
 
         return ToolResult(
             name=self.name,

@@ -6,6 +6,35 @@ from typing import Any
 
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
+_INTENT_CATEGORY_TERMS: dict[str, set[str]] = {
+    "automotive": {
+        "auto",
+        "automotive",
+        "car",
+        "cars",
+        "suv",
+        "suvs",
+        "truck",
+        "trucks",
+        "vehicle",
+        "vehicles",
+        "wrangler",
+        "cherokee",
+        "gladiator",
+    },
+    "healthcare_pharma": {
+        "cardiologist",
+        "cholesterol",
+        "doctor",
+        "health",
+        "medical",
+        "supplement",
+    },
+    "legal": {"attorney", "attorneys", "injury", "law", "lawyer", "legal"},
+    "entertainment_media": {"hockey", "show", "tv", "weekly"},
+    "political": {"candidate", "campaign", "governor", "political"},
+}
+
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=False))
@@ -85,14 +114,40 @@ def filter_hits(
     return [hit for hit in hits if hit["ad_id"] in allowed][:k]
 
 
+def filter_by_query_intent(
+    conn, hits: list[dict[str, Any]], query: str | None
+) -> list[dict[str, Any]]:
+    if not hits or not query:
+        return hits
+    tokens = set(re.findall(r"[a-z0-9]+", query.casefold()))
+    categories = {
+        category
+        for category, category_tokens in _INTENT_CATEGORY_TERMS.items()
+        if tokens & category_tokens
+    }
+    if not categories:
+        return hits
+
+    ad_ids = [hit["ad_id"] for hit in hits]
+    id_placeholders = ", ".join("?" for _ in ad_ids)
+    category_placeholders = ", ".join("?" for _ in categories)
+    rows = conn.execute(
+        f"""
+        SELECT id
+        FROM ads
+        WHERE id IN ({id_placeholders})
+          AND primary_category IN ({category_placeholders})
+        """,
+        [*ad_ids, *categories],
+    ).fetchall()
+    allowed = {row["id"] for row in rows}
+    return [hit for hit in hits if hit["ad_id"] in allowed]
+
+
 def rerank_hits(conn, hits: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     if not hits:
         return []
-    tokens = {
-        token.casefold()
-        for token in re.findall(r"[a-z0-9]+", query)
-        if len(token) >= 3
-    }
+    tokens = {token.casefold() for token in re.findall(r"[a-z0-9]+", query) if len(token) >= 3}
     if not tokens:
         return hits
 
@@ -138,16 +193,54 @@ def _ad_text_by_id(conn, ad_ids: list[str]) -> dict[str, str]:
     placeholders = ", ".join("?" for _ in ad_ids)
     rows = conn.execute(
         f"""
-        SELECT id, brand_name, advertiser_name, products_text, primary_category
-        FROM ads
-        WHERE id IN ({placeholders})
+        SELECT
+          a.id,
+          a.brand_name,
+          a.advertiser_name,
+          a.products_text,
+          a.primary_category,
+          a.subcategory,
+          a.website_domain,
+          a.phone_number,
+          a.landing_page_domain,
+          ft.transcript_text AS fts_transcript_text,
+          ft.ocr_text AS fts_ocr_text,
+          ft.marketing_entities_text AS fts_marketing_entities_text,
+          (
+            SELECT group_concat(t.text, ' ')
+            FROM transcript_segments t
+            WHERE t.ad_id = a.id
+          ) AS transcript_text,
+          (
+            SELECT group_concat(o.text, ' ')
+            FROM frames f
+            JOIN ocr_items o ON o.frame_id = f.id
+            WHERE f.ad_id = a.id
+          ) AS ocr_text
+        FROM ads a
+        LEFT JOIN ads_fts ft ON ft.ad_id = a.id
+        WHERE a.id IN ({placeholders})
         """,
         ad_ids,
     ).fetchall()
     return {
         row["id"]: " ".join(
             str(row[key] or "")
-            for key in ("brand_name", "advertiser_name", "products_text", "primary_category")
+            for key in (
+                "brand_name",
+                "advertiser_name",
+                "products_text",
+                "primary_category",
+                "subcategory",
+                "website_domain",
+                "phone_number",
+                "landing_page_domain",
+                "fts_transcript_text",
+                "fts_ocr_text",
+                "fts_marketing_entities_text",
+                "transcript_text",
+                "ocr_text",
+            )
         ).casefold()
         for row in rows
     }
@@ -176,10 +269,7 @@ def _frame_text_by_key(conn, hits: list[dict[str, Any]]) -> dict[tuple[str, int]
         """,
         params,
     ).fetchall()
-    return {
-        (row["ad_id"], int(row["frame_index"])): (row["text"] or "").casefold()
-        for row in rows
-    }
+    return {(row["ad_id"], int(row["frame_index"])): (row["text"] or "").casefold() for row in rows}
 
 
 def _token_matches_evidence(token: str, haystack_tokens: set[str]) -> bool:
@@ -246,9 +336,8 @@ def filter_by_min_score(
                         best_frame_sim = frame_sim
 
         best_sim = ad_sim
-        if best_frame_sim is not None:
-            if best_sim is None or best_frame_sim > best_sim:
-                best_sim = best_frame_sim
+        if best_frame_sim is not None and (best_sim is None or best_frame_sim > best_sim):
+            best_sim = best_frame_sim
 
         if best_sim is not None and best_sim >= min_score:
             hit = {**hit, "score": round(best_sim, 4)}

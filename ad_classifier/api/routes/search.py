@@ -14,6 +14,7 @@ from ad_classifier.search.hybrid import hybrid_search
 from ad_classifier.search.results import (
     cosine_similarity,
     filter_by_min_score,
+    filter_by_query_intent,
     filter_hits,
     group_frame_hits,
     rerank_hits,
@@ -65,6 +66,7 @@ def search_ads(
                 {"ad_id": ad_id, "score": score, "source": "keyword"}
                 for ad_id, score in fts_search_expanded(conn, q, limit=k * 8)
             ]
+            hits = filter_by_query_intent(conn, hits, q)
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
             return {"mode": mode, "items": _hydrate_hits(conn, hits)}
 
@@ -73,6 +75,7 @@ def search_ads(
                 {"ad_id": ad_id, "score": score, "source": "keyword"}
                 for ad_id, score in fts_search_expanded(conn, q, limit=k * 8)
             ]
+            keyword_hits = filter_by_query_intent(conn, keyword_hits, q)
             if keyword_hits:
                 if rerank:
                     keyword_hits = rerank_hits(conn, keyword_hits, q)
@@ -198,16 +201,11 @@ def search_ads(
                     for found_id, distance in store.search_visual(vector, k=k * 8)
                 ]
             total_before = len(visual_hits)
-            visual_min_score = (
-                config.search.visual_hybrid_min_score
-                if fts_results
-                else config.search.visual_min_score
-            )
             visual_hits = filter_by_min_score(
                 store,
                 visual_hits,
                 vector,
-                min_score=visual_min_score,
+                min_score=config.search.visual_hybrid_min_score,
                 modality="visual",
             )
             filtered_count = total_before - len(visual_hits)
@@ -232,6 +230,7 @@ def search_ads(
                 hits.append(hit)
             if rerank:
                 hits = rerank_hits(conn, hits, q)
+            hits = filter_by_query_intent(conn, hits, q)
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
             return {
                 "mode": mode,
@@ -278,6 +277,7 @@ def search_ads(
                     item["score"] = round(sim, 4)
                 filtered.append(item)
             items = filtered
+        items = filter_by_query_intent(conn, items, q)
         items = filter_hits(conn, items, brand=brand, category=category, status=status, k=k)
         return {
             "mode": mode,

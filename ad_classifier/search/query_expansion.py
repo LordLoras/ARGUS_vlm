@@ -301,7 +301,7 @@ def expand_query_terms(query: str | None) -> list[str]:
     tokens = set(re.findall(r"[a-z0-9]+", lowered))
 
     for trigger, expansions in _ALIASES.items():
-        if trigger in tokens or trigger in lowered:
+        if _should_expand_alias(trigger, lowered, tokens):
             terms.extend(expansions)
 
     seen: set[str] = set()
@@ -317,6 +317,12 @@ def expand_query_terms(query: str | None) -> list[str]:
 def has_alias_expansion(query: str | None) -> bool:
     terms = expand_query_terms(query)
     return len(terms) > 1
+
+
+def _should_expand_alias(trigger: str, lowered_query: str, tokens: set[str]) -> bool:
+    if " " in trigger:
+        return trigger in lowered_query
+    return len(tokens) == 1 and trigger in tokens
 
 
 def build_loose_like_clause(

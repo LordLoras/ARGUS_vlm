@@ -90,3 +90,42 @@ def test_fts_search_expanded_drops_low_scoring_ocr_noise(tmp_path):
     results = fts_search_expanded(conn, "dose", limit=10)
 
     assert [ad_id for ad_id, _score in results] == ["ad_dose"]
+
+
+def test_fts_search_expanded_does_not_expand_car_inside_cardiologist(tmp_path):
+    conn = open_database(tmp_path / "fts.db")
+    apply_migrations(conn)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at, primary_category) VALUES (?, ?, ?, ?)",
+        ("ad_auto", "/tmp/auto.mp4", "2026-01-01T00:00:00", "automotive"),
+    )
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at, primary_category) VALUES (?, ?, ?, ?)",
+        ("ad_health", "/tmp/health.mp4", "2026-01-01T00:00:00", "healthcare_pharma"),
+    )
+    fts_update(conn, "ad_auto", brand="Jeep", primary_category="automotive")
+    fts_update(
+        conn,
+        "ad_health",
+        brand="Dose",
+        primary_category="healthcare_pharma",
+        transcript_text="A cardiologist explains cholesterol support.",
+    )
+
+    results = fts_search_expanded(conn, "cardiologist", limit=10)
+
+    assert [ad_id for ad_id, _score in results] == ["ad_health"]
+
+
+def test_fts_search_expanded_does_not_broaden_modified_car_query(tmp_path):
+    conn = open_database(tmp_path / "fts.db")
+    apply_migrations(conn)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at, primary_category) VALUES (?, ?, ?, ?)",
+        ("ad_auto", "/tmp/auto.mp4", "2026-01-01T00:00:00", "automotive"),
+    )
+    fts_update(conn, "ad_auto", brand="Jeep", primary_category="automotive")
+
+    results = fts_search_expanded(conn, "white car", limit=10)
+
+    assert results == []
