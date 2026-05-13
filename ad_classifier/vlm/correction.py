@@ -4,8 +4,10 @@ import json
 import logging
 
 import httpx
+import structlog
 
 logger = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
@@ -92,7 +94,24 @@ class SelfCorrectionPass:
             data = resp.json()
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
+
+            finish_reason = data.get("choices", [{}])[0].get("finish_reason", "")
+            if not raw.strip():
+                _log.warning("self_correction_empty_response", finish_reason=finish_reason)
+                return result
+            if finish_reason == "length":
+                _log.warning("self_correction_max_tokens_reached", finish_reason=finish_reason, raw_length=len(raw))
+            elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
+                _log.warning("self_correction_unexpected_finish", finish_reason=finish_reason, raw_length=len(raw))
+
             return _apply_corrections(result, raw)
+        except httpx.RequestError as exc:
+            _log.warning("self_correction_disconnected", error=str(exc)[:300])
+            return result
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:200] if exc.response is not None else ""
+            _log.warning("self_correction_http_error", status=exc.response.status_code if exc.response is not None else None, body=body)
+            return result
         except Exception as exc:
             logger.warning("self_correction_failed: %s", exc)
             return result

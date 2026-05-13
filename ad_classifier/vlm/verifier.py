@@ -493,6 +493,41 @@ class HTTPVLMVerifier(VLMVerifier):
                 data = resp.json()
                 message = data["choices"][0]["message"]
                 raw = message.get("content") or message.get("reasoning_content") or ""
+
+                finish_reason = ""
+                choice = data.get("choices", [{}])[0]
+                finish_reason = choice.get("finish_reason", "")
+
+                if finish_reason == "length":
+                    _logger.warning(
+                        "vlm_max_tokens_reached",
+                        finish_reason=finish_reason,
+                        attempt=attempt + 1,
+                        max_tokens=self._max_tokens,
+                        raw_length=len(raw),
+                    )
+                elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
+                    _logger.warning(
+                        "vlm_unexpected_finish",
+                        finish_reason=finish_reason,
+                        attempt=attempt + 1,
+                        raw_length=len(raw),
+                    )
+
+                if not raw.strip():
+                    last_error = (
+                        f"VLM returned empty response on attempt {attempt + 1} "
+                        f"(finish_reason={finish_reason})"
+                    )
+                    _logger.warning("vlm_empty_response", attempt=attempt + 1, finish_reason=finish_reason)
+                    continue
+
+                _logger.info(
+                    "vlm_response_ok",
+                    attempt=attempt + 1,
+                    finish_reason=finish_reason,
+                    raw_length=len(raw),
+                )
                 return _parse_vlm_content(raw)
             except httpx.HTTPStatusError as exc:
                 body = exc.response.text[:1000] if exc.response is not None else ""
@@ -501,8 +536,10 @@ class HTTPVLMVerifier(VLMVerifier):
                     f"status={exc.response.status_code if exc.response is not None else 'unknown'} "
                     f"body={body!r}"
                 )
+                _logger.warning("vlm_http_error", attempt=attempt + 1, status=exc.response.status_code if exc.response is not None else None, body=body[:200])
             except httpx.RequestError as exc:
                 last_error = f"HTTP error on attempt {attempt + 1}: {exc}"
+                _logger.warning("vlm_request_error", attempt=attempt + 1, error=str(exc)[:300])
             except (json.JSONDecodeError, KeyError, ValueError) as exc:
                 raw_text = raw if "raw" in dir() else ""
                 return VLMVerificationResult.parse_failure(raw_text, str(exc))

@@ -5,8 +5,10 @@ import logging
 from pathlib import Path
 
 import httpx
+import structlog
 
 logger = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
@@ -87,7 +89,24 @@ class OCRCleanupPass:
             data = resp.json()
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
+
+            finish_reason = data.get("choices", [{}])[0].get("finish_reason", "")
+            if not raw.strip():
+                _log.warning("ocr_cleanup_empty_response", finish_reason=finish_reason)
+                return ocr_items
+            if finish_reason == "length":
+                _log.warning("ocr_cleanup_max_tokens_reached", finish_reason=finish_reason, raw_length=len(raw))
+            elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
+                _log.warning("ocr_cleanup_unexpected_finish", finish_reason=finish_reason, raw_length=len(raw))
+
             return _parse_cleaned(raw, ocr_items)
+        except httpx.RequestError as exc:
+            _log.warning("ocr_cleanup_disconnected", error=str(exc)[:300])
+            return ocr_items
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:200] if exc.response is not None else ""
+            _log.warning("ocr_cleanup_http_error", status=exc.response.status_code if exc.response is not None else None, body=body)
+            return ocr_items
         except Exception as exc:
             logger.warning("ocr_cleanup_failed: %s", exc)
             return ocr_items
