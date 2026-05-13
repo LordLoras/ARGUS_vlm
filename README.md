@@ -1,209 +1,322 @@
-# ARGUS — Ad Retrieval, Graphing & Understanding System
+<div align="center">
 
-Local-first multimodal ad classification with structured marketing-entity extraction, embeddings + hybrid search, campaign tracking, and an interactive NL agent — all backed by a single SQLite database.
+# ARGUS
 
-## Quick Start
+**Ad Retrieval, Graphing & Understanding System**
 
-```powershell
-# 1. Clone and create venv
-git clone https://github.com/LordLoras/adscope-local.git
-cd adscope-local
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+Local-first multimodal ad classification · marketing-entity extraction ·
+campaign tracking · hybrid search · NL agent
 
-# 2. Install core dependencies (no GPU required for CPU-only)
-pip install -e .
-pip install -e ".[dev]"
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![SQLite](https://img.shields.io/badge/Database-SQLite%20%2B%20FTS5%20%2B%20sqlite--vec-473B5E?logo=sqlite&logoColor=white)](https://www.sqlite.org)
 
-# 3. Install optional components as needed:
-pip install -e ".[ocr]"        # PaddleOCR (CPU-only on Windows)
-pip install -e ".[whisper]"    # faster-whisper transcription
-pip install paddlepaddle       # required BEFORE paddleocr on Windows
+</div>
 
-# 4. (Optional) GPU embeddings — requires PyTorch with CUDA/ROCm
-#    See "GPU Embeddings" section below. Skip this for CPU-only.
+---
 
-# 5. Create config from template
-Copy-Item .\config.example.yaml .\config.yaml
+## What It Does
 
-# 6. Download embedding models (first run caches them automatically)
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+Upload a TV ad, promo clip, or any video commercial and ARGUS will:
 
-# 7. Initialize database and start
-python -m ad_classifier init-db
-.\start.bat
-```
+1. **Extract frames & transcript** — ffmpeg + whisper.cpp (Vulkan GPU)
+2. **OCR every frame** — PaddleOCR reads prices, offers, brand names, phone numbers
+3. **Classify & verify with a VLM** — sends frames + OCR + transcript to a vision-language model (local or remote) that returns structured JSON
+4. **Extract marketing entities** — brand, products, prices, offers, CTAs, financing terms, disclaimers, creative format, contact points
+5. **Embed & index** — MiniLM text embeddings + SigLIP 2 visual embeddings → sqlite-vec with hybrid search
+6. **Track campaigns** — auto-cluster similar ads by brand and visual similarity
+7. **Answer questions** — NL agent with tool-calling loop over the database
 
-The API runs on `http://localhost:8000`, the frontend on `http://localhost:5173`.
+No cloud services. No Docker. One SQLite file. One command to start.
+
+---
 
 ## Architecture
 
 ```
-video upload
-  → ffmpeg frame extraction + audio
-  → whisper transcript
-  → frame preprocessing (blank/blur/dedup/scene detection)
-  → PaddleOCR (CPU default)
-  → optional PaddleOCR-VL (hard frames)
-  → transcript alignment
-  → deterministic rules engine
-  → evidence bundle construction
-  → VLM verification + classification (remote or local)
-  → final aggregation + marketing-entity extraction
-  → text embeddings (MiniLM) + optional visual embeddings (SigLIP 2)
-  → SQLite persistence, FTS5, sqlite-vec
-  → FastAPI + React frontend
+    ┌─────────────────────────────────────────────────────┐
+    │                   FastAPI + SSE                       │
+    │          http://localhost:8000/api                   │
+    └──────────────────────┬──────────────────────────────┘
+                           │
+    ┌──────────────────────▼──────────────────────────────┐
+    │               Pipeline Worker                       │
+    │                                                     │
+    │  ffmpeg ──► frames + audio                          │
+    │  whisper.cpp ──► transcript                        │
+    │  PaddleOCR ──► text + bounding boxes               │
+    │  Rules engine ──► deterministic triggers           │
+    │  VLM (local/remote) ──► classification + entities  │
+    │  MiniLM + SigLIP 2 ──► embeddings                  │
+    │  sqlite-vec ──► hybrid search                      │
+    └──────────────────────┬──────────────────────────────┘
+                           │
+    ┌──────────────────────▼──────────────────────────────┐
+    │             SQLite (WAL mode)                        │
+    │  ads · frames · ocr_items · classifications         │
+    │  marketing_entities · transcript_segments           │
+    │  rule_triggers · campaigns · agent_sessions         │
+    │  FTS5 full-text · sqlite-vec vectors                │
+    └─────────────────────────────────────────────────────┘
 ```
 
-## Configuration
+---
 
-Copy `config.example.yaml` to `config.yaml` and edit. Key sections:
+## Quick Start
 
-### VLM Endpoint (local or remote)
+### Prerequisites
+
+- **Python 3.11+**
+- **ffmpeg** in PATH (for video frame extraction)
+- **Windows** (tested on 11; Linux/macOS should work with path adjustments)
+- A **VLM endpoint** — either LM Studio running locally, or a remote OpenAI-compatible server
+
+### 1. Clone and install
+
+```powershell
+git clone https://github.com/LordLoras/adscope-local.git
+cd adscope-local
+
+# Create virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install core package
+pip install -e .
+
+# Install optional components (pick what you need):
+pip install -e ".[ocr]"       # PaddleOCR — required for ad processing
+pip install paddlepaddle      # install BEFORE paddleocr on Windows
+pip install -e ".[whisper]"   # faster-whisper (alternative to whisper.cpp)
+pip install -e ".[dev]"       # pytest, ruff, black, mypy
+```
+
+### 2. Whisper.cpp (included)
+
+A Vulkan-accelerated `whisper-cli.exe` is bundled in `tools/whisper.cpp/`. It works on AMD and NVIDIA GPUs out of the box — no extra drivers beyond your GPU vendor's latest Vulkan runtime.
+
+Download a model from [whisper.cpp releases](https://huggingface.co/ggerganov/whisper.cpp/tree/main):
+
+```powershell
+# Recommended: large-v3-turbo (best accuracy)
+mkdir models\whisper
+curl -L -o models\whisper\ggml-large-v3-turbo.bin `
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+
+# Or the tiny model for quick testing (75 MB)
+curl -L -o models\whisper\ggml-tiny.en.bin `
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+```
+
+> **Note:** For automatic model download, you can use `huggingface-cli`:
+> ```powershell
+> pip install huggingface_hub
+> huggingface-cli download ggerganov/whisper.cpp ggml-large-v3-turbo.bin --local-dir models\whisper
+> ```
+
+### 3. Configure
+
+```powershell
+Copy-Item .\config.example.yaml .\config.yaml
+```
+
+Edit `config.yaml`. The key section is the VLM endpoint:
 
 ```yaml
 vlm:
-  # Flip between local LM Studio and a remote endpoint:
-  mode: local   # or "remote"
+  # Flip between local (LM Studio) and remote with one flag:
+  mode: local
 
   local:
     endpoint: "http://127.0.0.1:1234/v1"
     model: "Qwen3.6-27B-Q4_K_M"
-    response_format: json_object   # safer for small/quantized local models
+    response_format: json_object    # safer for quantized local models
 
   remote:
-    endpoint: "https://ai.ipdy.io/v1/"
+    endpoint: "https://your-server.com/v1/"
     model: "unsloth/Qwen3.6-35B-A3B-GGUF"
     api_key_env: "VLM_API_KEY"
     response_format: json_schema   # stronger validation for capable remote models
 ```
 
-Switching `mode` changes both the VLM and the NL agent endpoint — no need to duplicate settings.
+When `mode: remote`, both the VLM and the NL agent use the remote endpoint automatically.
 
-### Visual Embeddings (optional)
+### 4. Initialize the database and start
 
-```yaml
-image_embedder:
-  enabled: true    # set to false to skip SigLIP 2 (no torch required)
-  model: google/siglip2-base-patch16-224
-  device: cpu      # or "cuda" if torch + GPU available
+```powershell
+# Create the SQLite database
+python -m ad_classifier init-db
+
+# Start API + worker + frontend (or run each separately)
+.\start.bat
 ```
 
-When `enabled: false`, the pipeline skips visual embeddings entirely. Text embeddings (MiniLM) still work without torch.
+- **API**: http://localhost:8000
+- **Frontend**: http://localhost:5173
+- **API docs**: http://localhost:8000/docs
 
-### OCR
-
-```yaml
-ocr:
-  device: cpu     # PaddleOCR device; AMD GPU is best-effort on Windows
-  lang: en
-```
-
-PaddleOCR lazy-loads and will error at runtime if not installed. For testing without PaddleOCR, the mock OCR engine is used in unit tests.
+---
 
 ## GPU Embeddings (Optional)
 
-The pipeline works fully on CPU. Visual embeddings (SigLIP 2) require PyTorch with GPU support.
+The pipeline works fully on CPU. Visual embeddings (SigLIP 2) are optional and require PyTorch:
 
-**If you have an NVIDIA GPU:**
+```yaml
+image_embedder:
+  enabled: false   # set to true when torch is installed
+  device: cpu      # or "cuda" / "rocm"
+```
+
+### NVIDIA GPU
 
 ```powershell
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 ```
 
-**If you have an AMD GPU (ROCm on Windows):**
+### AMD GPU (ROCm on Windows)
 
-The `.venv` may already contain a pre-installed GPU PyTorch build. Do NOT reinstall torch:
+A pre-installed GPU PyTorch build may already be in `.venv`. **Do not reinstall torch** — it will replace the GPU wheel with a CPU build.
 
 ```powershell
 # Verify existing torch
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 
-# If torch is missing, install the ROCm wheel manually, then:
+# If torch is not installed, install the ROCm wheel manually, then:
 pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 ```
 
-**⚠️ Do not run `pip install torch` — it will replace the GPU wheel with a CPU build.**
+Then set `image_embedder.enabled: true` and `image_embedder.device: cuda` in config.
 
-Set `image_embedder.enabled: true` and `image_embedder.device: cuda` (or `rocm`) in config.
+---
+
+## VLM Setup
+
+ARGUS needs a vision-capable VLM that accepts OpenAI-format chat completions with `image_url` content blocks.
+
+### Local (LM Studio)
+
+1. Download a vision model (Qwen2.5-VL-7B, Qwen3.6-VL, Gemma 3, etc.)
+2. Start LM Studio server on port 1234
+3. Set `vlm.mode: local` in config
+
+**Tip:** For local LLM servers (llama.cpp, LM Studio), use `response_format: json_object` — `json_schema` structured output is unreliable with quantized models.
+
+### Remote
+
+Set `vlm.mode: remote` and point the endpoint to your server. The system has been tested with:
+- Unsloth-hosted Qwen3.6-35B-A3B (llama.cpp backend)
+- OpenAI-compatible endpoints
+
+**For llama.cpp servers:** add `--timeout 600 --n-predict 8192` to avoid generation timeouts on long VLM responses.
+
+---
+
+## Configuration Reference
+
+| Section | Key | Default | Description |
+|---|---|---|---|
+| `paths` | `data_root` | `./data` | Root for all data dirs |
+| `whisper` | `backend` | `whisper_cpp` | `whisper_cpp`, `faster-whisper`, or `mock` |
+| `whisper` | `model` | `tiny.en` | Whisper model name |
+| `ocr` | `device` | `cpu` | PaddleOCR device (CPU recommended on Windows) |
+| `vlm` | `mode` | `local` | `local` or `remote` — flips both VLM and agent |
+| `vlm` | `max_frames_in_bundle` | `12` | Max frames sent to VLM per request |
+| `vlm` | `image_max_dim` | `512` | Max pixel dimension for VLM frames |
+| `vlm.local` | `endpoint` | `http://127.0.0.1:1234/v1` | LM Studio endpoint |
+| `vlm.remote` | `endpoint` | — | Remote VLM endpoint URL |
+| `vlm.remote` | `api_key_env` | — | Environment variable name for API key |
+| `image_embedder` | `enabled` | `true` | Set `false` to skip visual embeddings (no torch needed) |
+| `agent` | `inherit_vlm` | `true` | Agent uses the active VLM endpoint automatically |
+
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/ads/upload` | Upload video, create processing job |
+| `GET` | `/api/ads` | List ads (filter by brand, category, status, q) |
+| `GET` | `/api/ads/{id}` | Ad detail + classification + marketing entities |
+| `GET` | `/api/ads/{id}/frames` | Frame metadata for an ad |
+| `GET` | `/api/ads/{id}/evidence` | Classification + rule evidence |
+| `GET` | `/api/ads/{id}/similar` | Similar ads by embedding |
+| `PATCH` | `/api/ads/{id}` | Update projection fields |
+| `DELETE` | `/api/ads/{id}` | Delete ad and artifacts |
+| `GET` | `/api/search` | FTS / vector / hybrid search |
+| `POST` | `/api/campaigns/discover` | Run campaign clustering |
+| `GET` | `/api/jobs/{id}/events` | Real-time job progress (SSE) |
+
+Full interactive docs at `http://localhost:8000/docs`.
+
+---
 
 ## Frontend
 
 ```powershell
 cd frontend
 npm install
-npm run codegen   # requires backend running at localhost:8000
+npm run codegen   # requires backend at localhost:8000
 npm run dev
 ```
 
-Pages:
-- `/library` — ad table with filters, detail drawer, edit/delete
-- `/upload` — upload with SSE progress, result panel
-- `/search` — keyword / hybrid / vector search
-- `/campaigns` — campaign cards and discovery
-- `/agent` — NL agent chat (Phase 9)
-
-## API
-
-| Endpoint | Method | Description |
+| Page | Path | Description |
 |---|---|---|
-| `/api/ads/upload` | POST | Upload video, create job |
-| `/api/ads` | GET | List ads (filter by brand, category, status, q) |
-| `/api/ads/{id}` | GET | Ad detail + classification + marketing entities |
-| `/api/ads/{id}/frames` | GET | Frame metadata |
-| `/api/ads/{id}/evidence` | GET | Classification + rule evidence |
-| `/api/ads/{id}/similar` | GET | Similar ads by embedding |
-| `/api/ads/{id}` | PATCH | Update projection fields |
-| `/api/search` | GET | FTS / vector / hybrid search |
-| `/api/campaigns` | GET | List campaigns |
-| `/api/campaigns/discover` | POST | Run campaign clustering |
-| `/api/jobs/{id}/events` | GET (SSE) | Real-time job progress |
+| Library | `/library` | Ad table with filters, detail drawer, edit/delete |
+| Upload | `/upload` | Video upload with real-time progress via SSE |
+| Search | `/search` | Keyword, vector, and hybrid search |
+| Campaigns | `/campaigns` | Campaign cards and discovery |
+| Agent | `/agent` | NL agent chat interface |
 
-## CLI Commands
-
-```powershell
-python -m ad_classifier init-db        # Create/migrate the SQLite database
-python -m ad_classifier api            # Start the FastAPI server
-python -m ad_classifier worker         # Start the pipeline worker
-python -m ad_classifier version        # Show version + torch status
-```
+---
 
 ## Testing
 
 ```powershell
-python -m pytest tests/ -q                                     # all unit tests
-python -m pytest tests/ -k "not paddleocr" -q                 # skip PaddleOCR tests
-RUN_PADDLEOCR_SMOKE=1 python -m pytest tests/ -k paddleocr   # OCR smoke test (needs PaddleOCR)
+python -m pytest tests/ -q                      # all unit tests
+python -m pytest tests/ -k "not paddleocr" -q  # skip PaddleOCR tests
 ```
+
+---
 
 ## Project Structure
 
 ```
 ad_classifier/
-  api/           FastAPI routes and SSE
-  cli/           CLI commands (init-db, api, worker)
-  config.py      Pydantic config from YAML
-  db/            SQLite repos, migrations, FTS5, sqlite-vec
-  dedup/         SHA256 + pHash + vector dedup
-  diagnostics/   Environment and GPU checks
-  embeddings/    MiniLM text + SigLIP 2 visual embedders
-  ingest/        ffmpeg, whisper, frame extraction
-  marketing/     OCR normalization, offer extraction, brand resolution
-  models/        Pydantic models for all pipeline objects
-  pipeline/      Evidence bundles, aggregation, rules engine
-  search/         FTS5 + vector + hybrid search with RRF
-  vlm/            VLM verifier, cleanup, correction, schema, prompt
-  worker/         Pipeline runner and stage orchestration
-frontend/         Vite + React + TypeScript + Tailwind + shadcn/ui
+  api/                FastAPI routes and SSE
+  cli/                CLI commands (init-db, api, worker, version)
+  config.py           Pydantic config from YAML
+  db/                 SQLite repos, migrations, FTS5, sqlite-vec
+  dedup/              SHA256 + pHash + vector dedup
+  diagnostics/        Environment and GPU checks
+  embeddings/         MiniLM text + SigLIP 2 visual embedders
+  ingest/             ffmpeg, whisper, frame extraction
+  marketing/          OCR normalization, offer extraction, brand resolution
+  models/             Pydantic models for all pipeline objects
+  pipeline/           Evidence bundles, aggregation, rules engine
+  search/             FTS5 + vector + hybrid search with RRF
+  vlm/                VLM verifier, cleanup, correction, schema, prompt
+  worker/             Pipeline runner and stage orchestration
+frontend/              Vite + React + TypeScript + Tailwind + shadcn/ui
+tools/whisper.cpp/    whisper-cli.exe with Vulkan DLLs (shipping-bundled)
+config.example.yaml   Full config template with comments
+taxonomy.yaml         Ad categories and risk labels
 ```
+
+---
 
 ## Troubleshooting
 
-**VLM returns empty response / disconnects:** Check the llama.cpp server timeout. Add `--timeout 600` and `--n-predict 8192` to the server launch command. The generation poll timeout (`should_stop`) kills long-running requests by default.
+**VLM returns empty response / disconnects:** The llama.cpp server has a generation timeout that kills long requests. Add `--timeout 600 --n-predict 8192` to the server launch command. Check logs for `vlm_request_error` or `vlm_empty_response` warnings.
 
-**PaddleOCR import error:** Run `pip install paddlepaddle paddleocr`. On Windows, install `paddlepaddle` first.
+**PaddleOCR import error:** `pip install paddlepaddle paddleocr`. On Windows, install `paddlepaddle` first.
 
-**SigLIP/torch import error:** Either install torch with GPU support, or set `image_embedder.enabled: false` in config to skip visual embeddings entirely.
+**SigLIP/torch import error:** Set `image_embedder.enabled: false` in config to skip visual embeddings, or install torch with GPU support.
 
-**`json_schema` response format not working with local model:** Switch to `response_format: json_object` in your local endpoint config. Smaller quantized models often fail with `json_schema` structured output.
+**`json_schema` not working with local model:** Switch to `response_format: json_object` for quantized models. The `json_schema` format requires frontier models.
+
+---
+
+## License
+
+MIT
