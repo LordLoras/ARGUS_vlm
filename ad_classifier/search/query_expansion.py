@@ -14,6 +14,9 @@ DEFAULT_AD_SEARCH_COLUMNS = (
     "landing_page_domain",
 )
 
+_EXACT_CATEGORY_COLUMNS = {"primary_category"}
+_NORMALIZE_SQL_CHARS = ("_", "-", "/", ".", ",", ":", ";", "(", ")", "[", "]")
+
 _HVAC_TERMS = (
     "hvac",
     "heating",
@@ -329,7 +332,33 @@ def build_loose_like_clause(
     term_clauses: list[str] = []
     params: list[str] = []
     for term in terms:
-        term_clauses.append("(" + " OR ".join(f"{column} LIKE ?" for column in cols) + ")")
-        params.extend(f"%{term}%" for _ in cols)
+        normalized = _normalize_search_term(term)
+        if not normalized:
+            continue
 
+        column_clauses: list[str] = []
+        for column in cols:
+            if column in _EXACT_CATEGORY_COLUMNS:
+                column_clauses.append(f"LOWER({column}) = LOWER(?)")
+                params.append(term)
+
+            column_clauses.append(f"{_normalized_column_expr(column)} LIKE ?")
+            params.append(f"% {normalized} %")
+
+        if column_clauses:
+            term_clauses.append("(" + " OR ".join(column_clauses) + ")")
+
+    if not term_clauses:
+        return None, []
     return "(" + " OR ".join(term_clauses) + ")", params
+
+
+def _normalize_search_term(term: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", term.casefold()))
+
+
+def _normalized_column_expr(column: str) -> str:
+    expr = f"COALESCE({column}, '')"
+    for char in _NORMALIZE_SQL_CHARS:
+        expr = f"REPLACE({expr}, '{char}', ' ')"
+    return f"LOWER(' ' || {expr} || ' ')"

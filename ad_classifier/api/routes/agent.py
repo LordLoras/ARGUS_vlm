@@ -61,9 +61,7 @@ def _build_loop(request: Request) -> tuple[AgentLoop, sqlite3.Connection, sqlite
     catalog = ToolCatalog()
     client = _client_factory(request)(config.agent)
     text_factory = getattr(request.app.state, "agent_text_embedder_factory", None)
-    visual_text_factory = getattr(
-        request.app.state, "agent_visual_text_embedder_factory", None
-    )
+    visual_text_factory = getattr(request.app.state, "agent_visual_text_embedder_factory", None)
     vector_factory = getattr(request.app.state, "agent_vector_store_factory", None)
     run = AgentRunContext(
         persistence_conn=persistence,
@@ -71,10 +69,11 @@ def _build_loop(request: Request) -> tuple[AgentLoop, sqlite3.Connection, sqlite
         catalog=catalog,
         client=client,
         config=config.agent,
+        search_config=config.search,
         text_embedder_factory=(lambda: text_factory(config)) if text_factory else None,
         visual_text_embedder_factory=(
-            lambda: visual_text_factory(config)
-        ) if visual_text_factory else None,
+            (lambda: visual_text_factory(config)) if visual_text_factory else None
+        ),
         vector_store_factory=(lambda c: vector_factory(config, c)) if vector_factory else None,
     )
     return AgentLoop(run), persistence, tool_conn
@@ -177,9 +176,7 @@ def _next_or_sentinel(iterator):
 
 
 @router.get("/agent/sessions/{session_id}/events")
-async def agent_events(
-    session_id: str, q: str, request: Request
-) -> EventSourceResponse:
+async def agent_events(session_id: str, q: str, request: Request) -> EventSourceResponse:
     loop, persistence, tool_conn = _build_loop(request)
 
     async def stream():

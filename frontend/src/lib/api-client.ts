@@ -121,7 +121,7 @@ export const api = {
     rerank?: boolean;
     k?: number;
   }) =>
-    apiFetch<{ mode: string; strategy?: string; items: SearchHit[] }>(
+    apiFetch<{ mode: string; strategy?: string; filtered_count?: number; items: SearchHit[] }>(
       `/api/search${params(query)}`
     ),
 

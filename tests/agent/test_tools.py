@@ -20,8 +20,7 @@ def _ctx(conn, agent_config) -> ToolContext:
 
 
 def _insert_hvac_ad(conn) -> None:
-    conn.execute(
-        """
+    conn.execute("""
         INSERT INTO ads (
             id, source_path, ingested_at, status, brand_name, advertiser_name,
             products_text, primary_category, decision, source_hash
@@ -32,8 +31,21 @@ def _insert_hvac_ad(conn) -> None:
             'Heating systems, Cooling systems, Air Conditioning Check',
             'other', 'allow', 'hash_hvac'
         )
-        """
-    )
+        """)
+
+
+def _insert_dose_ad(conn) -> None:
+    conn.execute("""
+        INSERT INTO ads (
+            id, source_path, ingested_at, status, brand_name, advertiser_name,
+            products_text, primary_category, decision, source_hash
+        )
+        VALUES (
+            'ad_dose_a', '/tmp/dose.mp4', datetime('now'), 'completed',
+            'Dose', 'Dose', 'For Cholesterol',
+            'healthcare_pharma', 'allow', 'hash_dose'
+        )
+        """)
 
 
 def test_list_ads_returns_seeded_ads(readonly_conn, agent_config):
@@ -74,6 +86,15 @@ def test_count_ads_expands_automotive_topic(readonly_conn, agent_config):
     assert result.ok
     assert result.data["count"] == 2
     assert "automotive" in result.data["expanded_terms"]["q"]
+
+
+def test_count_ads_car_topic_does_not_match_healthcare(writable_conn, agent_config):
+    _insert_dose_ad(writable_conn)
+
+    result = CountAdsTool().call({"q": "car"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert result.data["count"] == 2
 
 
 def test_count_ads_expands_restaurant_topic(readonly_conn, agent_config):
@@ -124,9 +145,7 @@ def test_list_ads_expands_repair_topic(writable_conn, agent_config):
 def test_count_ads_expands_installation_category_mistake(writable_conn, agent_config):
     _insert_hvac_ad(writable_conn)
 
-    result = CountAdsTool().call(
-        {"category": "installation"}, _ctx(writable_conn, agent_config)
-    )
+    result = CountAdsTool().call({"category": "installation"}, _ctx(writable_conn, agent_config))
 
     assert result.ok
     assert result.data["count"] == 1
@@ -157,17 +176,13 @@ def test_get_campaign(readonly_conn, agent_config):
 
 
 def test_list_campaigns(readonly_conn, agent_config):
-    result = ListCampaignsTool().call(
-        {"brand": "Jeep"}, _ctx(readonly_conn, agent_config)
-    )
+    result = ListCampaignsTool().call({"brand": "Jeep"}, _ctx(readonly_conn, agent_config))
     assert result.ok
     assert result.data[0]["campaign_id"] == "c_jeep_summer"
 
 
 def test_aggregate_by_brand(readonly_conn, agent_config):
-    result = AggregateTool().call(
-        {"group_by": "brand_name"}, _ctx(readonly_conn, agent_config)
-    )
+    result = AggregateTool().call({"group_by": "brand_name"}, _ctx(readonly_conn, agent_config))
     assert result.ok
     buckets = {row["bucket"]: row["count"] for row in result.data}
     assert buckets["Jeep"] == 2
@@ -175,9 +190,7 @@ def test_aggregate_by_brand(readonly_conn, agent_config):
 
 
 def test_aggregate_rejects_unknown_group_by(readonly_conn, agent_config):
-    result = AggregateTool().call(
-        {"group_by": "source_path"}, _ctx(readonly_conn, agent_config)
-    )
+    result = AggregateTool().call({"group_by": "source_path"}, _ctx(readonly_conn, agent_config))
     assert result.ok is False
 
 
@@ -192,9 +205,7 @@ def test_sql_readonly_select_works(readonly_conn, agent_config):
 
 
 def test_sql_readonly_blocks_write(readonly_conn, agent_config):
-    result = SqlReadonlyTool().call(
-        {"sql": "DELETE FROM ads"}, _ctx(readonly_conn, agent_config)
-    )
+    result = SqlReadonlyTool().call({"sql": "DELETE FROM ads"}, _ctx(readonly_conn, agent_config))
     assert result.ok is False
 
 
@@ -232,9 +243,7 @@ def test_readonly_connection_blocks_writes(readonly_conn):
 
 def test_hybrid_search_falls_back_to_fts_without_embedder(readonly_conn, agent_config):
     # No embedder/vector store configured → tool should still return without crashing.
-    result = HybridSearchTool().call(
-        {"query": "Wrangler"}, _ctx(readonly_conn, agent_config)
-    )
+    result = HybridSearchTool().call({"query": "Wrangler"}, _ctx(readonly_conn, agent_config))
     # FTS5 on this seed has nothing indexed, so we just expect ok=True with []
     assert result.ok
     assert isinstance(result.data, list)
@@ -256,9 +265,7 @@ def test_hybrid_search_fallback_uses_prefix_fts(writable_conn, agent_config):
 
 
 def test_vector_similarity_requires_store(readonly_conn, agent_config):
-    result = VectorSimilarityTool().call(
-        {"ad_id": "ad_jeep_a"}, _ctx(readonly_conn, agent_config)
-    )
+    result = VectorSimilarityTool().call({"ad_id": "ad_jeep_a"}, _ctx(readonly_conn, agent_config))
     assert result.ok is False
     assert "vector store" in (result.error or "")
 

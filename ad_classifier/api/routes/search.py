@@ -11,7 +11,13 @@ from ad_classifier.embeddings.image.siglip2 import SigLIP2ImageEmbedder
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
 from ad_classifier.search.fts import fts_search_expanded
 from ad_classifier.search.hybrid import hybrid_search
-from ad_classifier.search.results import filter_hits, group_frame_hits, rerank_hits
+from ad_classifier.search.results import (
+    cosine_similarity,
+    filter_by_min_score,
+    filter_hits,
+    group_frame_hits,
+    rerank_hits,
+)
 from ad_classifier.search.rrf import rrf_fuse
 from ad_classifier.search.visual_query import expand_visual_query_texts, mean_pool
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -62,6 +68,29 @@ def search_ads(
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
             return {"mode": mode, "items": _hydrate_hits(conn, hits)}
 
+        if mode == "hybrid" and q and not ad_id:
+            keyword_hits = [
+                {"ad_id": ad_id, "score": score, "source": "keyword"}
+                for ad_id, score in fts_search_expanded(conn, q, limit=k * 8)
+            ]
+            if keyword_hits:
+                if rerank:
+                    keyword_hits = rerank_hits(conn, keyword_hits, q)
+                keyword_hits = filter_hits(
+                    conn,
+                    keyword_hits,
+                    brand=brand,
+                    category=category,
+                    status=status,
+                    k=k,
+                )
+                return {
+                    "mode": mode,
+                    "strategy": "keyword_first",
+                    "filtered_count": 0,
+                    "items": _hydrate_hits(conn, keyword_hits),
+                }
+
         if mode == "visual":
             if ad_id:
                 vector = store.get_visual(ad_id)
@@ -90,10 +119,20 @@ def search_ads(
                     for found_id, distance in store.search_visual(vector, k=k * 8)
                     if found_id != ad_id
                 ]
+            total_before = len(hits)
+            hits = filter_by_min_score(
+                store, hits, vector, min_score=config.search.visual_min_score, modality="visual"
+            )
+            filtered_count = total_before - len(hits)
             if rerank and q:
                 hits = rerank_hits(conn, hits, q)
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
-            return {"mode": mode, "strategy": "frame_visual", "items": _hydrate_hits(conn, hits)}
+            return {
+                "mode": mode,
+                "strategy": "frame_visual",
+                "filtered_count": filtered_count,
+                "items": _hydrate_hits(conn, hits),
+            }
 
         query_vector = None
         if ad_id:
@@ -122,12 +161,23 @@ def search_ads(
                 for found_id, distance in store.search_text(query_vector, k=k * 8 + 1)
                 if found_id != ad_id
             ]
+            total_before = len(hits)
+            hits = filter_by_min_score(
+                store, hits, query_vector, min_score=config.search.text_min_score, modality="text"
+            )
+            filtered_count = total_before - len(hits)
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
-            return {"mode": mode, "items": _hydrate_hits(conn, hits)}
+            return {
+                "mode": mode,
+                "filtered_count": filtered_count,
+                "items": _hydrate_hits(conn, hits),
+            }
 
         if mode == "visual_hybrid":
             if not q:
-                raise HTTPException(status_code=400, detail="q is required for visual hybrid search")
+                raise HTTPException(
+                    status_code=400, detail="q is required for visual hybrid search"
+                )
             try:
                 vector = _embed_visual_query(config, q)
             except Exception as exc:
@@ -138,6 +188,8 @@ def search_ads(
             if vector is None:
                 raise HTTPException(status_code=503, detail="visual text embedder unavailable")
             fts_results = fts_search_expanded(conn, q, limit=k * 8)
+            fts_ids = {ad_id for ad_id, _score in fts_results}
+            fts_rank = {ad_id: i + 1 for i, (ad_id, _score) in enumerate(fts_results)}
             frame_hits = store.search_frame_visual(vector, k=k * 8)
             visual_hits = group_frame_hits(frame_hits, source="visual_text")
             if not visual_hits:
@@ -145,19 +197,36 @@ def search_ads(
                     {"ad_id": found_id, "distance": distance, "source": "visual_text"}
                     for found_id, distance in store.search_visual(vector, k=k * 8)
                 ]
+            total_before = len(visual_hits)
+            visual_min_score = (
+                config.search.visual_hybrid_min_score
+                if fts_results
+                else config.search.visual_min_score
+            )
+            visual_hits = filter_by_min_score(
+                store,
+                visual_hits,
+                vector,
+                min_score=visual_min_score,
+                modality="visual",
+            )
+            filtered_count = total_before - len(visual_hits)
+            visual_by_ad = {hit["ad_id"]: hit for hit in visual_hits}
             fused = rrf_fuse(
                 [ad_id for ad_id, _score in fts_results],
                 [hit["ad_id"] for hit in visual_hits],
             )
-            fts_rank = {found_id: index + 1 for index, (found_id, _score) in enumerate(fts_results)}
-            visual_by_ad = {hit["ad_id"]: hit for hit in visual_hits}
-            hits = []
+            hits: list[dict[str, Any]] = []
             for found_id, rrf_score in fused:
                 hit = dict(visual_by_ad.get(found_id, {"ad_id": found_id}))
                 hit["rrf_score"] = rrf_score
                 hit["fts_rank"] = fts_rank.get(found_id)
-                if found_id in visual_by_ad:
+                has_fts = found_id in fts_ids
+                has_visual = found_id in visual_by_ad
+                if has_fts and has_visual:
                     hit["source"] = "keyword+visual"
+                elif has_visual:
+                    hit["source"] = "visual_text"
                 else:
                     hit["source"] = "keyword"
                 hits.append(hit)
@@ -167,6 +236,7 @@ def search_ads(
             return {
                 "mode": mode,
                 "strategy": "visual_ocr_rrf",
+                "filtered_count": filtered_count,
                 "items": _hydrate_hits(conn, hits),
             }
 
@@ -192,8 +262,29 @@ def search_ads(
             else:
                 item["source"] = "text_vector"
             items.append(item)
+        filtered_count = 0
+        if query_vector is not None:
+            filtered: list[dict[str, Any]] = []
+            for item in items:
+                if item.get("fts_rank") is not None:
+                    filtered.append(item)
+                    continue
+                stored = store.get_text(item["ad_id"])
+                if stored is not None:
+                    sim = cosine_similarity(query_vector, stored)
+                    if sim < config.search.text_min_score:
+                        filtered_count += 1
+                        continue
+                    item["score"] = round(sim, 4)
+                filtered.append(item)
+            items = filtered
         items = filter_hits(conn, items, brand=brand, category=category, status=status, k=k)
-        return {"mode": mode, "strategy": "hybrid_rrf", "items": _hydrate_hits(conn, items)}
+        return {
+            "mode": mode,
+            "strategy": "hybrid_rrf",
+            "filtered_count": filtered_count,
+            "items": _hydrate_hits(conn, items),
+        }
     finally:
         conn.close()
 

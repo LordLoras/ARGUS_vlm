@@ -1,7 +1,19 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
+
+from ad_classifier.vectors.sqlite_vec import SqliteVecStore
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
 
 
 def group_frame_hits(
@@ -89,7 +101,17 @@ def rerank_hits(conn, hits: list[dict[str, Any]], query: str) -> list[dict[str, 
 
     reranked: list[dict[str, Any]] = []
     for hit in hits:
-        base = 1.0 / (1.0 + float(hit.get("distance", hit.get("vec_distance", 1.0)) or 1.0))
+        distance = hit.get("distance")
+        if distance is None:
+            distance = hit.get("vec_distance")
+        if distance is not None:
+            base = 1.0 / (1.0 + float(distance))
+        elif hit.get("score") is not None:
+            base = float(hit["score"])
+        elif hit.get("rrf_score") is not None:
+            base = min(float(hit["rrf_score"]) * 20.0, 1.0)
+        else:
+            base = 0.5
         haystack = ad_text.get(hit["ad_id"], "")
         for frame in hit.get("matched_frames", []):
             haystack += " " + frame_text.get((hit["ad_id"], int(frame["frame_index"])), "")
@@ -97,12 +119,16 @@ def rerank_hits(conn, hits: list[dict[str, Any]], query: str) -> list[dict[str, 
         matched = sorted(
             token for token in tokens if _token_matches_evidence(token, haystack_tokens)
         )
-        score = base + min(len(matched), 4) * 0.05
-        next_hit = dict(hit)
-        next_hit["rerank_score"] = score
+        match_ratio = len(matched) / len(tokens)
         if matched:
+            score = base * (1.0 + match_ratio) + len(matched) * 0.05
+            next_hit = dict(hit)
+            next_hit["rerank_score"] = round(score, 6)
             next_hit["rerank_reason"] = f"matched text evidence: {', '.join(matched[:4])}"
         else:
+            score = base * 0.6
+            next_hit = dict(hit)
+            next_hit["rerank_score"] = round(score, 6)
             next_hit["rerank_reason"] = "visual similarity"
         reranked.append(next_hit)
     return sorted(reranked, key=lambda row: float(row.get("rerank_score", 0.0)), reverse=True)
@@ -164,3 +190,67 @@ def _token_matches_evidence(token: str, haystack_tokens: set[str]) -> bool:
     if len(token) >= 4:
         return any(candidate.startswith(token) for candidate in haystack_tokens)
     return False
+
+
+def filter_by_min_score(
+    store: SqliteVecStore,
+    hits: list[dict[str, Any]],
+    query_vector: list[float],
+    *,
+    min_score: float,
+    modality: str,
+) -> list[dict[str, Any]]:
+    """Remove hits below a cosine-similarity threshold.
+
+    For visual modality, computes the max similarity across each hit's
+    best-matching frame vectors AND the ad-level vector — if ANY keyframe
+    clears the bar, the ad survives (ad-level vectors are mean-pooled from
+    all keyframes, which dilutes the signal; per-frame checking recovers it).
+
+    The surviving hits get a ``score`` field (rounded to 4 decimal places).
+
+    Returns the filtered list (preserving original order).
+    """
+    if min_score <= 0 or not hits:
+        return hits
+
+    ad_getter = store.get_visual if modality == "visual" else store.get_text
+
+    frame_keys_needed: list[str] = []
+    if modality == "visual":
+        for hit in hits:
+            for frame in hit.get("matched_frames", []):
+                fk = SqliteVecStore.frame_key(hit["ad_id"], int(frame["frame_index"]))
+                frame_keys_needed.append(fk)
+
+    frame_vectors: dict[str, list[float]] = {}
+    if frame_keys_needed and modality == "visual":
+        frame_vectors = store.get_frame_vectors_batch(frame_keys_needed)
+
+    filtered: list[dict[str, Any]] = []
+    for hit in hits:
+        ad_sim: float | None = None
+        best_frame_sim: float | None = None
+
+        stored_ad = ad_getter(hit["ad_id"])
+        if stored_ad is not None:
+            ad_sim = cosine_similarity(query_vector, stored_ad)
+
+        if modality == "visual":
+            for frame in hit.get("matched_frames", []):
+                fk = SqliteVecStore.frame_key(hit["ad_id"], int(frame["frame_index"]))
+                fv = frame_vectors.get(fk)
+                if fv is not None:
+                    frame_sim = cosine_similarity(query_vector, fv)
+                    if best_frame_sim is None or frame_sim > best_frame_sim:
+                        best_frame_sim = frame_sim
+
+        best_sim = ad_sim
+        if best_frame_sim is not None:
+            if best_sim is None or best_frame_sim > best_sim:
+                best_sim = best_frame_sim
+
+        if best_sim is not None and best_sim >= min_score:
+            hit = {**hit, "score": round(best_sim, 4)}
+            filtered.append(hit)
+    return filtered

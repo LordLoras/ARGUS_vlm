@@ -57,6 +57,7 @@ export function SearchPage() {
 
   const canSubmit = Boolean(q || adId);
   const items = query.data?.items ?? [];
+  const filteredCount = query.data?.filtered_count ?? 0;
 
   const openAd = (id: string, edit = false) => {
     navigate(`/library?ad=${encodeURIComponent(id)}${edit ? "&tab=edit" : ""}`);
@@ -193,6 +194,11 @@ export function SearchPage() {
                   <span className="badge badge-mono">{query.data.strategy}</span>
                 ) : null}
                 <span className="count-pill">{items.length}</span>
+                {filteredCount > 0 ? (
+                  <span className="badge badge-mono" style={{ marginLeft: 4 }}>
+                    {filteredCount} below relevance threshold
+                  </span>
+                ) : null}
               </div>
               <div className="search-results">
                 {items.map((hit, idx) => (

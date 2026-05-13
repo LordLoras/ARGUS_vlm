@@ -49,10 +49,13 @@ def hybrid_search(
             fts_results = []
 
     if query_vector:
-        if modality == "visual":
-            vec_results = store.search_visual(query_vector, k=k_vec)
-        else:
-            vec_results = store.search_text(query_vector, k=k_vec)
+        try:
+            if modality == "visual":
+                vec_results = store.search_visual(query_vector, k=k_vec)
+            else:
+                vec_results = store.search_text(query_vector, k=k_vec)
+        except Exception:
+            vec_results = []
 
     fts_ids = [r[0] for r in fts_results]
     vec_ids = [r[0] for r in vec_results]

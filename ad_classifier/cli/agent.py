@@ -61,6 +61,7 @@ def _load_loop_for_cli(config_path: Path | None):
         catalog=catalog,
         client=client,
         config=config.agent,
+        search_config=config.search,
         text_embedder_factory=lambda: text_embedder_factory(config),
         visual_text_embedder_factory=lambda: visual_text_embedder_factory(config),
         vector_store_factory=lambda conn: vector_store_factory(config, conn),

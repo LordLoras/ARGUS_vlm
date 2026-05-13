@@ -215,6 +215,22 @@ class SqliteVecStore:
             )
         return out
 
+    def get_frame_vector(self, frame_key: str) -> list[float] | None:
+        row = self.conn.execute(
+            "SELECT embedding FROM vec_frames_visual WHERE frame_key = ?", (frame_key,)
+        ).fetchone()
+        return deserialize_float32(row[0]) if row else None
+
+    def get_frame_vectors_batch(self, frame_keys: list[str]) -> dict[str, list[float]]:
+        if not frame_keys:
+            return {}
+        placeholders = ", ".join("?" for _ in frame_keys)
+        rows = self.conn.execute(
+            f"SELECT frame_key, embedding FROM vec_frames_visual WHERE frame_key IN ({placeholders})",
+            frame_keys,
+        ).fetchall()
+        return {row["frame_key"]: deserialize_float32(row[1]) for row in rows}
+
     # ------------------------------------------------------------------
     # Delete
     # ------------------------------------------------------------------

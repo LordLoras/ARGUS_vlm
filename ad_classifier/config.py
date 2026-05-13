@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -215,7 +215,9 @@ class VLMConfig(BaseModel):
     enable_post_validation: bool = True
     enable_visual_verify: bool = False
     local: VLMEndpointConfig = Field(default_factory=lambda: VLMEndpointDefaults.LOCAL.model_copy())
-    remote: VLMEndpointConfig = Field(default_factory=lambda: VLMEndpointDefaults.REMOTE.model_copy())
+    remote: VLMEndpointConfig = Field(
+        default_factory=lambda: VLMEndpointDefaults.REMOTE.model_copy()
+    )
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
     @model_validator(mode="after")
@@ -255,6 +257,14 @@ class AgentConfig(BaseModel):
         return "inherited" if self.inherit_vlm else "independent"
 
 
+class SearchConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    text_min_score: float = Field(default=0.20, ge=0.0, le=1.0)
+    visual_min_score: float = Field(default=0.03, ge=-1.0, le=1.0)
+    visual_hybrid_min_score: float = Field(default=0.08, ge=-1.0, le=1.0)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -273,6 +283,7 @@ class AppConfig(BaseModel):
     api: APIConfig = Field(default_factory=APIConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    search: SearchConfig = Field(default_factory=SearchConfig)
 
     @model_validator(mode="after")
     def _resolve_agent_endpoint(self) -> AppConfig:

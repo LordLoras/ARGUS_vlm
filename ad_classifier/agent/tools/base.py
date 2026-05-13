@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ad_classifier.agent.models import ToolResult, ToolSpec
-from ad_classifier.config import AgentConfig
+from ad_classifier.config import AgentConfig, SearchConfig
 
 
 @dataclass
@@ -20,6 +20,7 @@ class ToolContext:
 
     conn: sqlite3.Connection
     config: AgentConfig
+    search_config: SearchConfig = field(default_factory=SearchConfig)
     text_embedder_factory: Any | None = None
     """Optional callable returning a TextEmbedder. Lazy so unit tests don't pay
     the sentence-transformers import cost."""

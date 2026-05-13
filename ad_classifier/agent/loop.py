@@ -5,7 +5,7 @@ import logging
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ad_classifier.agent.catalog import ToolCatalog
@@ -14,7 +14,7 @@ from ad_classifier.agent.models import AgentAnswer, AgentEvent, ToolCall, ToolRe
 from ad_classifier.agent.prompt import render_agent_prompt
 from ad_classifier.agent.schema import render_schema_summary
 from ad_classifier.agent.tools.base import ToolContext
-from ad_classifier.config import AgentConfig
+from ad_classifier.config import AgentConfig, SearchConfig
 from ad_classifier.db.repositories.agent import (
     AgentMessageRepository,
     AgentSessionRepository,
@@ -42,6 +42,7 @@ class AgentRunContext:
     catalog: ToolCatalog
     client: AgentClient
     config: AgentConfig
+    search_config: SearchConfig = field(default_factory=SearchConfig)
     text_embedder_factory: Callable[[], Any] | None = None
     vector_store_factory: Callable[[sqlite3.Connection], Any] | None = None
     visual_text_embedder_factory: Callable[[], Any] | None = None
@@ -70,9 +71,7 @@ class AgentLoop:
         events: list[AgentEvent] = list(self.stream(user_text, session_id=session_id))
         return _answer_from_events(events)
 
-    def stream(
-        self, user_text: str, *, session_id: str | None = None
-    ) -> Iterator[AgentEvent]:
+    def stream(self, user_text: str, *, session_id: str | None = None) -> Iterator[AgentEvent]:
         sid = self.ensure_session(session_id)
         logger.info("agent.stream.start session=%s text=%r", sid, user_text[:120])
         yield AgentEvent(type="session", payload={"session_id": sid})
@@ -97,6 +96,7 @@ class AgentLoop:
         ctx = ToolContext(
             conn=self.run.tool_conn,
             config=self.run.config,
+            search_config=self.run.search_config,
             text_embedder_factory=self.run.text_embedder_factory,
             vector_store_factory=self.run.vector_store_factory,
             visual_text_embedder_factory=self.run.visual_text_embedder_factory,
@@ -119,9 +119,7 @@ class AgentLoop:
                 error = f"agent client error: {exc}"
                 logger.warning("agent.stream.lm_error session=%s err=%s", sid, exc)
                 self._record_assistant_text(sid, error)
-                yield AgentEvent(
-                    type="error", payload={"session_id": sid, "message": str(exc)}
-                )
+                yield AgentEvent(type="error", payload={"session_id": sid, "message": str(exc)})
                 yield AgentEvent(
                     type="message",
                     payload={"role": "assistant", "content": error, "session_id": sid},
@@ -352,11 +350,13 @@ def _build_history(conn: sqlite3.Connection, session_id: str) -> list[dict[str, 
                 result_data = json.loads(record.tool_result_json)
             except (json.JSONDecodeError, TypeError):
                 result_data = record.tool_result_json
-            out.append({
-                "role": "tool",
-                "tool_call_id": record.tool_name,
-                "content": json.dumps(result_data, default=str),
-            })
+            out.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": record.tool_name,
+                    "content": json.dumps(result_data, default=str),
+                }
+            )
     return out
 
 

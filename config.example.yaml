@@ -158,3 +158,19 @@ agent:
   sql_statement_timeout_s: 5
   temperature: 0.1
   max_tokens: 1024
+
+search:
+  # Minimum cosine-similarity threshold for vector search results.
+  # Results below these scores are dropped before ranking/filtering.
+  # Lower values = more recall, higher values = more precision.
+  # Set to 0 to disable relevance filtering entirely.
+  # SigLIP2 cross-modal (text→image) cosine similarities cluster close
+  # to zero on local video frames, and ad-level visual vectors are
+  # mean-pooled from keyframes (diluting the signal), so the visual
+  # threshold must be much more permissive than text-vector search.
+  # For visual mode, the filter also checks
+  # per-frame similarity (picking the best keyframe), not just the
+  # ad-level vector, so an ad survives if ANY keyframe clears the bar.
+  text_min_score: 0.20          # text-vector (all-MiniLM-L6-v2) and hybrid mode
+  visual_min_score: 0.03        # visual-only / exploratory SigLIP2 queries
+  visual_hybrid_min_score: 0.08 # visual-only additions when keyword hits exist
