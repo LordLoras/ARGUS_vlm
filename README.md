@@ -65,10 +65,10 @@ No cloud services. No Docker. One SQLite file. One command to start.
 
 ### Prerequisites
 
-- **Python 3.11+**
+- **Python 3.11+** (3.12 required for AMD GPU — see below)
 - **ffmpeg** in PATH (for video frame extraction)
 - **Windows** (tested on 11; Linux/macOS should work with path adjustments)
-- A **VLM endpoint** — either LM Studio running locally, or a remote OpenAI-compatible server
+- A **VLM endpoint** — any OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 
 ### 1. Clone and install
 
@@ -123,7 +123,7 @@ Edit `config.yaml`. The key section is the VLM endpoint:
 
 ```yaml
 vlm:
-  # Flip between local (LM Studio) and remote with one flag:
+  # Switch between local and remote with one flag:
   mode: local
 
   local:
@@ -175,7 +175,7 @@ pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenize
 
 ### AMD GPU (ROCm on Windows)
 
-AMD GPU support on Windows requires PyTorch wheels built specifically for ROCm. Follow the official guide at [AMD ROCm PyTorch for Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html) to install the correct build.
+**Requires Python 3.12.** AMD's PyTorch ROCm wheels for Windows are only available for Python 3.12. Follow the official guide at [AMD ROCm PyTorch for Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html) to install the correct build.
 
 **Do not run `pip install torch`** — it will replace the GPU wheel with a CPU build. If torch is already installed in `.venv`, leave it alone.
 
@@ -203,17 +203,13 @@ Any OpenAI-compatible inference server works — llama.cpp server, LM Studio, vL
 2. Set `vlm.mode: local` and point `vlm.local.endpoint` to your server
 3. Make sure the model is vision-capable (Qwen2.5-VL, Qwen3.6-VL, Gemma 3, etc.)
 
-**For llama.cpp servers:** add `--timeout 600 --n-predict 8192` to avoid generation timeouts.
-
-**Tip:** For quantized models on llama.cpp, use `response_format: json_object` — `json_schema` structured output is unreliable with smaller/quantized models.
+**For llama.cpp servers:** use `response_format: json_object` — `json_schema` structured output is unreliable with smaller/quantized models.
 
 ### Remote
 
-Set `vlm.mode: remote` and point the endpoint to your server. The system has been tested with:
+Set `vlm.mode: remote` and point the endpoint to your server. Tested with:
 - Unsloth-hosted Qwen3.6-35B-A3B (llama.cpp backend)
 - OpenAI-compatible endpoints
-
-**For llama.cpp servers:** add `--timeout 600 --n-predict 8192` to avoid generation timeouts on long VLM responses.
 
 ---
 
@@ -228,7 +224,7 @@ Set `vlm.mode: remote` and point the endpoint to your server. The system has bee
 | `vlm` | `mode` | `local` | `local` or `remote` — flips both VLM and agent |
 | `vlm` | `max_frames_in_bundle` | `12` | Max frames sent to VLM per request |
 | `vlm` | `image_max_dim` | `512` | Max pixel dimension for VLM frames |
-| `vlm.local` | `endpoint` | `http://127.0.0.1:1234/v1` | LM Studio endpoint |
+| `vlm.local` | `endpoint` | `http://127.0.0.1:1234/v1` | Local inference server endpoint |
 | `vlm.remote` | `endpoint` | — | Remote VLM endpoint URL |
 | `vlm.remote` | `api_key_env` | — | Environment variable name for API key |
 | `image_embedder` | `enabled` | `true` | Set `false` to skip visual embeddings (no torch needed) |
@@ -312,7 +308,7 @@ taxonomy.yaml         Ad categories and risk labels
 
 ## Troubleshooting
 
-**VLM returns empty response / disconnects:** The llama.cpp server has a generation timeout that kills long requests. Add `--timeout 600 --n-predict 8192` to the server launch command. Check logs for `vlm_request_error` or `vlm_empty_response` warnings.
+**VLM returns empty response / disconnects:** Check logs for `vlm_request_error` or `vlm_empty_response` warnings. These indicate the inference server cancelled generation mid-response.
 
 **PaddleOCR import error:** `pip install paddlepaddle paddleocr`. On Windows, install `paddlepaddle` first.
 
