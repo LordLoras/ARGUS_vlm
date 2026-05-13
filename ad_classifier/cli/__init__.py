@@ -8,7 +8,7 @@ from ad_classifier.cli.campaigns import campaigns_app
 from ad_classifier.cli.dedup import dedup_check
 from ad_classifier.cli.ingest import ingest
 from ad_classifier.cli.ocr import ocr_cmd
-from ad_classifier.cli.operational import api, init_db, worker
+from ad_classifier.cli.operational import api, init_db, reindex_visual_frames, worker
 
 app = typer.Typer(
     name="ad-classifier",
@@ -56,6 +56,7 @@ def paddle_rocm_check(
 app.command("init-db")(init_db)
 app.command("api")(api)
 app.command("worker")(worker)
+app.command("reindex-visual-frames")(reindex_visual_frames)
 app.command("ingest")(ingest)
 app.command("dedup-check")(dedup_check)
 app.command("ocr")(ocr_cmd)

@@ -7,6 +7,8 @@ from ad_classifier.agent.tools.base import AgentTool, ToolContext
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.search.fts import fts_search_expanded
 from ad_classifier.search.hybrid import hybrid_search
+from ad_classifier.search.rrf import rrf_fuse
+from ad_classifier.search.visual_query import expand_visual_query_texts, mean_pool
 
 
 class HybridSearchTool(AgentTool):
@@ -46,7 +48,11 @@ class HybridSearchTool(AgentTool):
         if modality == "visual" and ctx.visual_text_embedder_factory is not None:
             try:
                 embedder = ctx.visual_text_embedder_factory()
-                query_vector = embedder.embed_text(query)
+                texts = expand_visual_query_texts(query)
+                if hasattr(embedder, "embed_text_batch"):
+                    query_vector = mean_pool(embedder.embed_text_batch(texts))
+                else:
+                    query_vector = mean_pool([embedder.embed_text(text) for text in texts])
             except Exception:
                 query_vector = None
         elif modality == "text" and ctx.text_embedder_factory is not None:
@@ -61,7 +67,6 @@ class HybridSearchTool(AgentTool):
             try:
                 store = ctx.vector_store_factory(ctx.conn)
                 load_sqlite_vec(ctx.conn)
-                store.ensure_tables()
             except Exception:
                 store = None
 
@@ -82,6 +87,42 @@ class HybridSearchTool(AgentTool):
             )
 
         try:
+            if modality == "visual":
+                fts_results = fts_search_expanded(ctx.conn, query, limit=k * 4)
+                frame_hits = store.search_frame_visual(query_vector, k=k * 4)
+                visual_hits = _group_frame_hits(frame_hits)
+                if not visual_hits:
+                    visual_hits = [
+                        {
+                            "ad_id": ad_id,
+                            "distance": distance,
+                            "source": "visual_text",
+                        }
+                        for ad_id, distance in store.search_visual(query_vector, k=k * 4)
+                    ]
+                fused = rrf_fuse(
+                    [ad_id for ad_id, _score in fts_results],
+                    [hit["ad_id"] for hit in visual_hits],
+                )[:k]
+                visual_by_ad = {hit["ad_id"]: hit for hit in visual_hits}
+                fts_rank = {
+                    ad_id: index + 1 for index, (ad_id, _score) in enumerate(fts_results)
+                }
+                data = []
+                for ad_id, rrf_score in fused:
+                    item = dict(visual_by_ad.get(ad_id, {"ad_id": ad_id}))
+                    item["rrf_score"] = rrf_score
+                    item["fts_rank"] = fts_rank.get(ad_id)
+                    item["modality"] = modality
+                    item["source"] = "keyword+visual" if ad_id in visual_by_ad else "keyword"
+                    data.append(item)
+                return ToolResult(
+                    name=self.name,
+                    ok=True,
+                    data=data,
+                    row_count=len(data),
+                )
+
             results = hybrid_search(
                 ctx.conn,
                 store,
@@ -145,11 +186,13 @@ class VectorSimilarityTool(AgentTool):
         try:
             store = ctx.vector_store_factory(ctx.conn)
             load_sqlite_vec(ctx.conn)
-            store.ensure_tables()
         except Exception as exc:
             return ToolResult(name=self.name, ok=False, error=str(exc))
 
-        seed = store.get_text(ad_id) if modality == "text" else store.get_visual(ad_id)
+        try:
+            seed = store.get_text(ad_id) if modality == "text" else store.get_visual(ad_id)
+        except Exception:
+            seed = None
         if seed is None:
             return ToolResult(
                 name=self.name,
@@ -172,3 +215,29 @@ class VectorSimilarityTool(AgentTool):
             data={"seed_ad_id": ad_id, "modality": modality, "items": items},
             row_count=len(items),
         )
+
+
+def _group_frame_hits(frame_hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for hit in frame_hits:
+        ad_id = str(hit["ad_id"])
+        item = grouped.setdefault(
+            ad_id,
+            {
+                "ad_id": ad_id,
+                "distance": hit["distance"],
+                "source": "visual_text",
+                "matched_frames": [],
+            },
+        )
+        item["distance"] = min(float(item["distance"]), float(hit["distance"]))
+        if len(item["matched_frames"]) < 3:
+            item["matched_frames"].append(
+                {
+                    "frame_index": hit["frame_index"],
+                    "time_ms": hit["time_ms"],
+                    "path": hit["path"],
+                    "distance": hit["distance"],
+                }
+            )
+    return sorted(grouped.values(), key=lambda row: float(row.get("distance", 999.0)))

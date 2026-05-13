@@ -26,14 +26,23 @@ def _load_loop_for_cli(config_path: Path | None):
     from ad_classifier.config import load_config, resolve_config_path  # noqa: PLC0415
     from ad_classifier.db.connection import (  # noqa: PLC0415
         initialize_database,
+        load_sqlite_vec,
         open_database,
         open_readonly_database,
     )
+    from ad_classifier.vectors.sqlite_vec import SqliteVecStore  # noqa: PLC0415
 
     config, config_file = load_config(config_path)
     db_path = resolve_config_path(config.paths.sqlite_path, config_file)
     initialize_database(db_path)
     persistence = open_database(db_path)
+    load_sqlite_vec(persistence)
+    SqliteVecStore(
+        persistence,
+        text_dim=config.vector_store.text_dim,
+        visual_dim=config.vector_store.visual_dim,
+    ).ensure_tables()
+    persistence.commit()
     tool_conn = open_readonly_database(db_path)
     catalog = ToolCatalog()
     client = HTTPAgentClient(

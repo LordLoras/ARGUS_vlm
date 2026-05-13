@@ -125,6 +125,32 @@ def test_search_visual_returns_results(tmp_path):
     assert results[0][0] == "ad_0"
 
 
+def test_search_frame_visual_returns_frame_metadata(tmp_path):
+    conn, store = _store(tmp_path, visual_dim=8)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at) VALUES (?, ?, ?)",
+        ("ad_frame", "/tmp/ad.mp4", "2026-01-01T00:00:00"),
+    )
+    conn.execute(
+        """
+        INSERT INTO frames (ad_id, frame_index, time_ms, path, kept)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ("ad_frame", 3, 1500, "/tmp/frame.png", 1),
+    )
+    emb = MockImageEmbedder(dim=8)
+    vec = emb.embed(Path("/img/frame.png"))
+    store.upsert_frame_visual("ad_frame", 3, 1500, vec)
+    conn.commit()
+
+    results = store.search_frame_visual(vec, k=5)
+
+    assert results[0]["ad_id"] == "ad_frame"
+    assert results[0]["frame_index"] == 3
+    assert results[0]["time_ms"] == 1500
+    assert results[0]["path"] == "/tmp/frame.png"
+
+
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------

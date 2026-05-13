@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -362,6 +361,9 @@ def _write_embeddings(
     visual_vector: list[float] | None = None
     if image_embedder is not None:
         visual_vectors = image_embedder.embed_batch([frame.path for frame in kept_frames])
+        store.delete_frame_visuals(ad_id)
+        for frame, vector in zip(kept_frames, visual_vectors, strict=False):
+            store.upsert_frame_visual(ad_id, frame.frame_index, frame.time_ms, vector)
         visual_vector = _mean_pool(visual_vectors)
         if visual_vector is not None:
             store.upsert_visual(ad_id, visual_vector)

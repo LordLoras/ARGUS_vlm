@@ -111,7 +111,16 @@ export const api = {
       method: "POST"
     }),
 
-  search: (query: { q?: string; mode?: string; ad_id?: string; k?: number }) =>
+  search: (query: {
+    q?: string;
+    mode?: string;
+    ad_id?: string;
+    brand?: string;
+    category?: string;
+    status?: string;
+    rerank?: boolean;
+    k?: number;
+  }) =>
     apiFetch<{ mode: string; strategy?: string; items: SearchHit[] }>(
       `/api/search${params(query)}`
     ),

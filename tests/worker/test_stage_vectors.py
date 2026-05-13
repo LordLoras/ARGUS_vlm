@@ -19,6 +19,10 @@ def test_write_embeddings_loads_sqlite_vec_on_fresh_connection(tmp_path: Path):
     db_path = tmp_path / "vectors.db"
     conn = open_database(db_path)
     apply_migrations(conn)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at) VALUES (?, ?, ?)",
+        ("ad_vec", str(tmp_path / "ad.mp4"), "2026-01-01T00:00:00"),
+    )
 
     config = AppConfig()
     config.vector_store.text_dim = 8
@@ -52,4 +56,7 @@ def test_write_embeddings_loads_sqlite_vec_on_fresh_connection(tmp_path: Path):
     store = SqliteVecStore(conn, text_dim=8, visual_dim=8)
     assert store.get_text("ad_vec") == pytest.approx(text_vector)
     assert store.get_visual("ad_vec") == pytest.approx(visual_vector)
+    frame_hits = store.search_frame_visual(visual_vector, k=5)
+    assert frame_hits[0]["ad_id"] == "ad_vec"
+    assert frame_hits[0]["frame_index"] == 0
     conn.close()

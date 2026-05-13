@@ -180,10 +180,18 @@ export type SearchHit = {
   score?: number | null;
   distance?: number | null;
   rrf_score?: number | null;
+  rerank_score?: number | null;
+  rerank_reason?: string | null;
   fts_rank?: number | null;
   vec_rank?: number | null;
   vec_distance?: number | null;
   source?: string | null;
+  matched_frames?: Array<{
+    frame_index?: number | null;
+    time_ms?: number | null;
+    path?: string | null;
+    distance?: number | null;
+  }>;
   ad?: AdRecord | null;
   thumbnail_path?: string | null;
   thumbnail_time_ms?: number | null;

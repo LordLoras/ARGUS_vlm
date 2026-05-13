@@ -14,7 +14,8 @@ from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.search import router as search_router
 from ad_classifier.config import load_config, resolve_config_path
-from ad_classifier.db.connection import initialize_database
+from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
+from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 
 def create_app(
@@ -30,6 +31,17 @@ def create_app(
     config, config_file = load_config(config_path)
     resolved_db = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
     initialize_database(resolved_db)
+    vector_conn = open_database(resolved_db)
+    try:
+        load_sqlite_vec(vector_conn)
+        SqliteVecStore(
+            vector_conn,
+            text_dim=config.vector_store.text_dim,
+            visual_dim=config.vector_store.visual_dim,
+        ).ensure_tables()
+        vector_conn.commit()
+    finally:
+        vector_conn.close()
 
     # Surface agent loop diagnostics in the uvicorn console so SSE failures are
     # visible without needing structlog wiring. Idempotent across re-creation.

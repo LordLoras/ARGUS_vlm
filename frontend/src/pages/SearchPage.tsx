@@ -15,6 +15,7 @@ import type { SearchHit } from "../lib/types";
 
 const MODES = [
   { key: "hybrid", label: "hybrid" },
+  { key: "visual_hybrid", label: "visual + OCR" },
   { key: "keyword", label: "keyword" },
   { key: "text", label: "text vector" },
   { key: "visual", label: "visual" }
@@ -23,8 +24,19 @@ const MODES = [
 export function SearchPage() {
   const [q, setQ] = useState("");
   const [adId, setAdId] = useState("");
+  const [brand, setBrand] = useState("");
+  const [category, setCategory] = useState("");
+  const [status, setStatus] = useState("");
   const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("hybrid");
-  const [submitted, setSubmitted] = useState<{ q: string; ad_id: string; mode: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{
+    q: string;
+    ad_id: string;
+    brand: string;
+    category: string;
+    status: string;
+    mode: string;
+    rerank: boolean;
+  } | null>(null);
   const navigate = useNavigate();
   const health = useApiHealth();
 
@@ -58,7 +70,11 @@ export function SearchPage() {
           <div className="search-controls">
             <input
               className="input search-query"
-              placeholder={mode === "visual" ? "red car, product shot, outdoor scene…" : "financing, health claim, brand…"}
+              placeholder={
+                mode === "visual" || mode === "visual_hybrid"
+                  ? "red car, product shot, outdoor scene..."
+                  : "financing, health claim, brand..."
+              }
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -67,6 +83,24 @@ export function SearchPage() {
               placeholder="seed ad id (optional)"
               value={adId}
               onChange={(e) => setAdId(e.target.value)}
+            />
+            <input
+              className="input search-seed"
+              placeholder="brand filter"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+            />
+            <input
+              className="input search-seed"
+              placeholder="category filter"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+            <input
+              className="input search-seed"
+              placeholder="status filter"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
             />
             <div className="search-modes">
               {MODES.map((m) => (
@@ -82,7 +116,15 @@ export function SearchPage() {
             <button
               className="btn btn-primary"
               disabled={!canSubmit}
-              onClick={() => setSubmitted({ q, ad_id: adId, mode })}
+              onClick={() => setSubmitted({
+                q,
+                ad_id: adId,
+                brand,
+                category,
+                status,
+                mode,
+                rerank: true
+              })}
             >
               <SearchIcon size={11} />
               <span>Search</span>
@@ -178,6 +220,12 @@ function SearchResultRow({
           <span>{hit.ad_id}</span>
           <span>{formatDuration(ad?.duration_ms)}</span>
           {metric ? <span>{metric}</span> : null}
+          {hit.matched_frames?.length ? (
+            <span>
+              frame {hit.matched_frames[0]?.frame_index} @ {formatDuration(hit.matched_frames[0]?.time_ms)}
+            </span>
+          ) : null}
+          {hit.rerank_reason ? <span>{hit.rerank_reason}</span> : null}
         </div>
       </div>
       <div
@@ -198,6 +246,7 @@ function SearchResultRow({
 }
 
 function formatMetric(hit: SearchHit) {
+  if (hit.rerank_score != null) return `rerank ${hit.rerank_score.toFixed(3)}`;
   if (hit.score != null) return `score ${hit.score.toFixed(3)}`;
   if (hit.rrf_score != null) return `rrf ${hit.rrf_score.toFixed(3)}`;
   if (hit.distance != null) return `d ${hit.distance.toFixed(3)}`;
