@@ -120,15 +120,15 @@ def _apply_corrections(result: VLMVerificationResult, raw: str) -> VLMVerificati
         me.brand.name = corrections["brand_name"]
 
     if "prices_to_remove" in corrections and isinstance(corrections["prices_to_remove"], list):
-        indices = set(corrections["prices_to_remove"])
+        indices = {i for i in corrections["prices_to_remove"] if isinstance(i, int) and 0 <= i < len(me.prices)}
         me.prices = [p for i, p in enumerate(me.prices) if i not in indices]
 
     if "offers_to_remove" in corrections and isinstance(corrections["offers_to_remove"], list):
-        indices = set(corrections["offers_to_remove"])
+        indices = {i for i in corrections["offers_to_remove"] if isinstance(i, int) and 0 <= i < len(me.offers)}
         me.offers = [o for i, o in enumerate(me.offers) if i not in indices]
 
     if "ctas_to_remove" in corrections and isinstance(corrections["ctas_to_remove"], list):
-        indices = set(corrections["ctas_to_remove"])
+        indices = {i for i in corrections["ctas_to_remove"] if isinstance(i, int) and 0 <= i < len(me.ctas)}
         me.ctas = [c for i, c in enumerate(me.ctas) if i not in indices]
 
     if "parent_company" in corrections:

@@ -68,6 +68,7 @@ vlm:
   # Flip the flag to switch all VLM calls + agent between local and remote.
   mode: local
   max_frames_in_bundle: 12
+  image_max_dim: 512       # max pixel dimension for VLM frames; bump to 768 for text-heavy ads
   enable_ocr_cleanup_pass: true       # text-only VLM pass to clean garbled OCR before classification
   enable_self_correction: true        # lightweight text-only consistency check after VLM output
   enable_post_validation: true        # deterministic validation of prices, offers, brands

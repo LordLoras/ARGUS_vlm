@@ -154,12 +154,13 @@ def run_pipeline_for_job(
         max_tokens=config.vlm.endpoint.max_tokens,
         enable_thinking=config.vlm.endpoint.enable_thinking,
         response_format=config.vlm.endpoint.response_format,
+        image_max_dim=config.vlm.image_max_dim,
     )
     vlm_result = vlm.verify(bundle)
 
     if config.vlm.enable_post_validation:
         evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
-        vlm_result = validate_vlm_output(vlm_result, evidence_texts)
+        vlm_result = validate_vlm_output(vlm_result, evidence_texts, primary_category=vlm_result.primary_category)
 
     if config.vlm.enable_self_correction:
         emit("vlm:correct", 0.72, "self-correction check")

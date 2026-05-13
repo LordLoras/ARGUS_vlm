@@ -208,6 +208,7 @@ class VLMConfig(BaseModel):
 
     mode: Literal["local", "remote"] = "local"
     max_frames_in_bundle: int = Field(default=12, ge=1)
+    image_max_dim: int = Field(default=512, ge=128, le=2048)
     enable_ocr_cleanup_pass: bool = True
     enable_self_correction: bool = True
     enable_post_validation: bool = True

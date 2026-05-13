@@ -286,15 +286,27 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                 dirty = True
             if patch.offers is not None:
                 from ad_classifier.models.marketing import OfferEntity
-                marketing.offers = [
-                    OfferEntity(text=o.get("text", "")) for o in patch.offers if o.get("text")
-                ]
+                marketing.offers = []
+                for o in patch.offers:
+                    if o.get("text"):
+                        existing = next(
+                            (e for e in (marketing.offers or []) if e.text == o["text"]),
+                            None,
+                        )
+                        evidence = existing.evidence if existing else []
+                        marketing.offers.append(OfferEntity(text=o["text"], evidence=evidence))
                 dirty = True
             if patch.ctas is not None:
                 from ad_classifier.models.marketing import CTAEntity
-                marketing.ctas = [
-                    CTAEntity(text=c.get("text", "")) for c in patch.ctas if c.get("text")
-                ]
+                marketing.ctas = []
+                for c in patch.ctas:
+                    if c.get("text"):
+                        existing = next(
+                            (e for e in (marketing.ctas or []) if e.text == c["text"]),
+                            None,
+                        )
+                        evidence = existing.evidence if existing else []
+                        marketing.ctas.append(CTAEntity(text=c["text"], evidence=evidence))
                 dirty = True
             if dirty:
                 marketing_repo.upsert(ad_id, marketing)

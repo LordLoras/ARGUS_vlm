@@ -121,8 +121,9 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
         if value is not _MISSING:
             data[key] = _clean_placeholders(value)
 
-    marketing_start = raw.find('"marketing_entities"')
-    if marketing_start >= 0:
+    marketing_match = re.search(r'"marketing_entities"\s*:', raw)
+    if marketing_match:
+        marketing_start = marketing_match.end()
         marketing: dict[str, object] = {}
         for key in (
             "brand",
@@ -143,8 +144,9 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
             if value is not _MISSING:
                 marketing[key] = _clean_placeholders(value)
 
-        offer_terms_start = raw.find('"offer_terms"', marketing_start)
-        if offer_terms_start >= 0:
+        offer_terms_match = re.search(r'"offer_terms"\s*:', raw[marketing_start:])
+        if offer_terms_match:
+            offer_terms_start = marketing_start + offer_terms_match.end()
             offer_terms: dict[str, object] = {}
             for key in (
                 "promo_codes",
@@ -302,7 +304,7 @@ def _looks_like_url_or_domain(value: object) -> bool:
     return _domain_candidate(value) is not None
 
 
-def _encode_image(path: Path, max_dim: int = 320) -> str:
+def _encode_image(path: Path, max_dim: int = 512) -> str:
     try:
         from PIL import Image as _PILImage
 
@@ -333,6 +335,7 @@ def _dedupe_ocr_text(ocr_texts: list[str], threshold: float = 0.65) -> list[bool
         return []
     compacted = [re.sub(r"[^a-z0-9]", "", t.lower()) for t in ocr_texts]
     keep: list[bool] = [True] * len(ocr_texts)
+    surrogate: list[int | None] = [None] * len(ocr_texts)
     for i in range(len(compacted)):
         if not keep[i]:
             continue
@@ -340,7 +343,14 @@ def _dedupe_ocr_text(ocr_texts: list[str], threshold: float = 0.65) -> list[bool
             if not keep[j]:
                 continue
             if _text_overlap(compacted[i], compacted[j]) >= threshold:
-                keep[j] = False
+                if len(ocr_texts[j]) > len(ocr_texts[i]):
+                    keep[i] = False
+                    surrogate[j] = i
+                    break
+                else:
+                    keep[j] = False
+                    surrogate[j] = i
+                    continue
     return keep
 
 
@@ -354,7 +364,7 @@ def _text_overlap(a: str, b: str) -> float:
     return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
 
 
-def _build_content(bundle: EvidenceBundle) -> list[dict]:
+def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dict]:
     parts: list[dict] = []
 
     text_parts: list[str] = []
@@ -401,7 +411,7 @@ def _build_content(bundle: EvidenceBundle) -> list[dict]:
             continue
         suffix = path.suffix.lower().lstrip(".")
         mime = "image/jpeg" if suffix in ("jpg", "jpeg") else f"image/{suffix}"
-        encoded = _encode_image(path)
+        encoded = _encode_image(path, max_dim=image_max_dim)
         parts.append(
             {
                 "type": "image_url",
@@ -427,6 +437,7 @@ class HTTPVLMVerifier(VLMVerifier):
         prompt_override: str | None = None,
         enable_thinking: bool = False,
         response_format: str = "json_object",
+        image_max_dim: int = 512,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("VLM endpoint must be provided")
@@ -441,6 +452,7 @@ class HTTPVLMVerifier(VLMVerifier):
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
         self._response_format = response_format
+        self._image_max_dim = image_max_dim
         self._system_prompt = prompt_override or render_verifier_prompt()
 
         api_key = resolve_api_key(api_key_env)
@@ -449,7 +461,7 @@ class HTTPVLMVerifier(VLMVerifier):
             self._headers["Authorization"] = f"Bearer {api_key}"
 
     def verify(self, bundle: EvidenceBundle) -> VLMVerificationResult:
-        content = _build_content(bundle)
+        content = _build_content(bundle, image_max_dim=self._image_max_dim)
         payload: dict = {
             "model": self._model,
             "messages": [

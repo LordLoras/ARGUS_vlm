@@ -326,7 +326,10 @@ def _is_garbled_offer(text: str) -> bool:
 def _parse_amount(amount: str, cents: str | None) -> float | None:
     try:
         if re.fullmatch(r"\d{1,3}(?:[,.]\d{3})+", amount):
-            return float(amount.replace(",", "").replace(".", ""))
+            clean = amount.replace(",", "")
+            if "." in amount:
+                clean = clean.replace(".", "")
+            return float(clean)
         return float(amount.replace(",", "") + (cents or ""))
     except ValueError:
         return None
@@ -593,8 +596,10 @@ def _text_similarity_ratio(a: str, b: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
-    if not shorter:
+    tokens_a = set(a.lower().split())
+    tokens_b = set(b.lower().split())
+    if not tokens_a or not tokens_b:
         return 0.0
-    shared = sum(1 for c in shorter if c in longer)
-    return shared / max(len(longer), 1)
+    intersection = tokens_a & tokens_b
+    union = tokens_a | tokens_b
+    return len(intersection) / len(union)

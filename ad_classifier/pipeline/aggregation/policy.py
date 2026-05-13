@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import functools
+
 import yaml
 
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
@@ -43,21 +45,13 @@ from ad_classifier.vlm.models import VLMVerificationResult
 
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "taxonomy.yaml"
 
-_SENSITIVE_CATEGORIES: set[str] | None = None
-
-
-def _load_sensitive_categories() -> set[str]:
-    global _SENSITIVE_CATEGORIES
-    if _SENSITIVE_CATEGORIES is not None:
-        return _SENSITIVE_CATEGORIES
+@functools.lru_cache(maxsize=1)
+def _load_sensitive_categories() -> frozenset[str]:
     try:
         taxonomy = yaml.safe_load(_TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
-        _SENSITIVE_CATEGORIES = {
-            c["id"] for c in taxonomy.get("categories", []) if c.get("sensitive")
-        }
+        return frozenset(c["id"] for c in taxonomy.get("categories", []) if c.get("sensitive"))
     except FileNotFoundError:
-        _SENSITIVE_CATEGORIES = set()
-    return _SENSITIVE_CATEGORIES
+        return frozenset()
 
 
 def _map_vlm_evidence(vlm: VLMVerificationResult) -> list[EvidenceItem]:
@@ -134,6 +128,14 @@ def _fuzzy_evidence_match(a: str, b: str) -> bool:
         return a == b
     if a == b:
         return True
+    if len(a) < 5 or len(b) < 5:
+        return a == b
+    tokens_a = set(a.split())
+    tokens_b = set(b.split())
+    if tokens_a and tokens_b:
+        jaccard = len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+        if jaccard >= 0.55:
+            return True
     shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
     shared = sum(1 for c in shorter if c in longer)
     ratio = shared / max(len(longer), 1)
@@ -152,7 +154,8 @@ def _normalize_rule_evidence_text(text: str) -> str:
 
 
 def _compact_evidence_key(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", text.lower())
+    normalized = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    return re.sub(r"\s+", "", normalized)
 
 
 def _rule_evidence_score(rule: RuleTrigger) -> int:
@@ -201,7 +204,14 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
     offers = [
         OfferEntity(
             text=o.value or o.type,
-            evidence=[],
+            evidence=[
+                EvidenceItem(
+                    time_ms=o.time_ms,
+                    frame_index=o.frame_index,
+                    source="vlm",
+                    text=o.value or o.type,
+                )
+            ] if o.time_ms is not None else [],
         )
         for o in me.offers
     ]
@@ -416,8 +426,25 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 def _parse_rating_count(value: str | None) -> int | None:
     if not value:
         return None
-    digits = "".join(ch for ch in value if ch.isdigit())
-    return int(digits) if digits else None
+    match = re.search(r'[\d,]+', value)
+    if not match:
+        letter_match = re.search(r'(\d+(?:\.\d+)?)\s*[KkMm]', value)
+        if letter_match:
+            num = float(letter_match.group(1))
+            suffix = letter_match.group(0).strip()[-1].lower()
+            if suffix == 'k':
+                return int(num * 1000)
+            if suffix == 'm':
+                return int(num * 1_000_000)
+        return None
+    digits_str = match.group(0).replace(",", "")
+    try:
+        count = int(digits_str)
+    except ValueError:
+        return None
+    if count > 10_000_000:
+        return None
+    return count
 
 
 def _risk_labels(vlm_result: VLMVerificationResult, rules: list[RuleTrigger]) -> list[str]:
