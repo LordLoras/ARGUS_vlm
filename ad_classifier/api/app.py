@@ -24,6 +24,7 @@ def create_app(
     upload_probe: Callable[[Path], object] | None = None,
     agent_client_factory: Callable | None = None,
     agent_text_embedder_factory: Callable | None = None,
+    agent_visual_text_embedder_factory: Callable | None = None,
     agent_vector_store_factory: Callable | None = None,
 ) -> FastAPI:
     config, config_file = load_config(config_path)
@@ -51,6 +52,7 @@ def create_app(
     app.state.upload_probe = upload_probe
     app.state.agent_client_factory = agent_client_factory
     app.state.agent_text_embedder_factory = agent_text_embedder_factory
+    app.state.agent_visual_text_embedder_factory = agent_visual_text_embedder_factory
     app.state.agent_vector_store_factory = agent_vector_store_factory
 
     @app.get("/", tags=["health"])

@@ -6,6 +6,7 @@ import sqlite3
 from typing import Any
 
 from ad_classifier.config import AppConfig
+from ad_classifier.embeddings.image import SigLIP2ImageEmbedder
 from ad_classifier.embeddings.text import SentenceTransformerEmbedder
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
@@ -14,6 +15,12 @@ def text_embedder_factory(config: AppConfig) -> Any:
     """Create a text embedder instance from config."""
     cfg = config.text_embedder
     return SentenceTransformerEmbedder(model_name=cfg.model, device=cfg.device)
+
+
+def visual_text_embedder_factory(config: AppConfig) -> Any:
+    """Create a SigLIP text embedder for cross-modal visual-vector search."""
+    cfg = config.image_embedder
+    return SigLIP2ImageEmbedder(model_name=cfg.model, device=cfg.device)
 
 
 def vector_store_factory(config: AppConfig, conn: sqlite3.Connection) -> Any:

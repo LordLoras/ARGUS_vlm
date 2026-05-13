@@ -34,7 +34,7 @@ export function SearchPage() {
     enabled: Boolean(submitted)
   });
 
-  const canSubmit = mode === "visual" ? Boolean(adId) : Boolean(q || adId);
+  const canSubmit = Boolean(q || adId);
   const items = query.data?.items ?? [];
 
   const openAd = (id: string, edit = false) => {
@@ -58,10 +58,9 @@ export function SearchPage() {
           <div className="search-controls">
             <input
               className="input search-query"
-              placeholder={mode === "visual" ? "(query ignored in visual mode)" : "financing, health claim, brand…"}
+              placeholder={mode === "visual" ? "red car, product shot, outdoor scene…" : "financing, health claim, brand…"}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              disabled={mode === "visual"}
             />
             <input
               className="input search-seed"

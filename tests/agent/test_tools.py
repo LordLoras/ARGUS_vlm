@@ -12,6 +12,7 @@ from ad_classifier.agent.tools.get_campaign import GetCampaignTool, ListCampaign
 from ad_classifier.agent.tools.list_ads import ListAdsTool
 from ad_classifier.agent.tools.search import HybridSearchTool, VectorSimilarityTool
 from ad_classifier.agent.tools.sql_readonly import SqlReadonlyTool
+from ad_classifier.search.fts import fts_update
 
 
 def _ctx(conn, agent_config) -> ToolContext:
@@ -239,6 +240,21 @@ def test_hybrid_search_falls_back_to_fts_without_embedder(readonly_conn, agent_c
     assert isinstance(result.data, list)
 
 
+def test_hybrid_search_fallback_uses_prefix_fts(writable_conn, agent_config):
+    fts_update(
+        writable_conn,
+        "ad_jeep_a",
+        brand="Becerra For Governor",
+        primary_category="political",
+        ocr_text="California gubernatorial race",
+    )
+
+    result = HybridSearchTool().call({"query": "gov"}, _ctx(writable_conn, agent_config))
+
+    assert result.ok
+    assert [item["ad_id"] for item in result.data] == ["ad_jeep_a"]
+
+
 def test_vector_similarity_requires_store(readonly_conn, agent_config):
     result = VectorSimilarityTool().call(
         {"ad_id": "ad_jeep_a"}, _ctx(readonly_conn, agent_config)
@@ -253,18 +269,18 @@ def test_vector_similarity_with_store_factory(writable_conn, agent_config):
     from ad_classifier.config import AppConfig
 
     config = AppConfig()
-    store_factory = lambda conn: vector_store_factory(config, conn)
-    
+
+    def store_factory(conn):
+        return vector_store_factory(config, conn)
+
     ctx = ToolContext(
         conn=writable_conn,
         config=agent_config,
         vector_store_factory=store_factory,
     )
-    
+
     # Should fail gracefully because no vectors are stored yet
-    result = VectorSimilarityTool().call(
-        {"ad_id": "ad_jeep_a"}, ctx
-    )
+    result = VectorSimilarityTool().call({"ad_id": "ad_jeep_a"}, ctx)
     assert result.ok is False
     assert "no text vector" in (result.error or "").lower()
 

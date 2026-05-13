@@ -6,7 +6,7 @@ from ad_classifier.embeddings.image.base import ImageEmbedder
 
 
 class SigLIP2ImageEmbedder(ImageEmbedder):
-    """Per-frame visual embedder using google/siglip2-base-patch16-224."""
+    """SigLIP 2 embedder for image vectors and cross-modal text queries."""
 
     def __init__(
         self,
@@ -56,7 +56,29 @@ class SigLIP2ImageEmbedder(ImageEmbedder):
         inputs = {k: v.to(self._device) for k, v in inputs.items()}
 
         with torch.no_grad():
-            outputs = model.vision_model(pixel_values=inputs["pixel_values"])
-            pooled = outputs.pooler_output  # (B, 768)
+            if hasattr(model, "get_image_features"):
+                pooled = model.get_image_features(pixel_values=inputs["pixel_values"])
+            else:
+                outputs = model.vision_model(pixel_values=inputs["pixel_values"])
+                pooled = outputs.pooler_output  # (B, 768)
+
+        return pooled.cpu().numpy().tolist()
+
+    def embed_text(self, text: str) -> list[float]:
+        return self.embed_text_batch([text])[0]
+
+    def embed_text_batch(self, texts: list[str]) -> list[list[float]]:
+        processor, model = self._load()
+        torch = self._torch
+
+        inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True)
+        inputs = {k: v.to(self._device) for k, v in inputs.items()}
+
+        with torch.no_grad():
+            if hasattr(model, "get_text_features"):
+                pooled = model.get_text_features(**inputs)
+            else:
+                outputs = model.text_model(**inputs)
+                pooled = outputs.pooler_output  # (B, 768)
 
         return pooled.cpu().numpy().tolist()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from ad_classifier.search.query_expansion import (
@@ -64,10 +65,12 @@ def fts_search_expanded(
     seen: dict[str, tuple[float, int]] = {}
     order = 0
     for term in terms:
-        try:
-            rows = fts_search(conn, _quote_fts5(term), limit=limit)
-        except Exception:
-            continue
+        rows: list[tuple[str, float]] = []
+        for fts_query in _fts5_queries_for_term(term):
+            try:
+                rows.extend(fts_search(conn, fts_query, limit=limit))
+            except Exception:
+                continue
         for ad_id, score in rows:
             if ad_id not in seen:
                 seen[ad_id] = (score, order)
@@ -78,6 +81,19 @@ def fts_search_expanded(
 
     ranked = sorted(seen.items(), key=lambda item: item[1][1])
     return [(ad_id, score) for ad_id, (score, _order) in ranked[:limit]]
+
+
+def _fts5_queries_for_term(term: str) -> list[str]:
+    """Return exact and prefix-safe FTS5 queries for a user-entered term."""
+    exact = _quote_fts5(term)
+    tokens = re.findall(r"[\w]+", term, flags=re.UNICODE)
+    if not tokens:
+        return [exact]
+
+    prefix = " AND ".join(f"{_quote_fts5(token)}*" for token in tokens)
+    if prefix == exact:
+        return [exact]
+    return [exact, prefix]
 
 
 def _quote_fts5(term: str) -> str:

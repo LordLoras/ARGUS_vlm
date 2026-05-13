@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.db.connection import load_sqlite_vec
+from ad_classifier.embeddings.image.siglip2 import SigLIP2ImageEmbedder
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
 from ad_classifier.search.fts import fts_search_expanded
 from ad_classifier.search.hybrid import hybrid_search
@@ -18,6 +19,11 @@ router = APIRouter(tags=["search"])
 @lru_cache(maxsize=4)
 def _text_embedder(model: str, device: str) -> SentenceTransformerEmbedder:
     return SentenceTransformerEmbedder(model, device)
+
+
+@lru_cache(maxsize=2)
+def _visual_text_embedder(model: str, device: str) -> SigLIP2ImageEmbedder:
+    return SigLIP2ImageEmbedder(model, device)
 
 
 @router.get("/search")
@@ -49,13 +55,24 @@ def search_ads(
             return {"mode": mode, "items": _hydrate_hits(conn, hits)}
 
         if mode == "visual":
-            if not ad_id:
-                raise HTTPException(status_code=400, detail="ad_id is required for visual search")
-            vector = store.get_visual(ad_id)
+            if ad_id:
+                vector = store.get_visual(ad_id)
+                source = "visual_seed"
+            elif q:
+                vector = _visual_text_embedder(
+                    config.image_embedder.model,
+                    config.image_embedder.device,
+                ).embed_text(q)
+                source = "visual_text"
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="q or ad_id is required for visual search",
+                )
             if vector is None:
                 raise HTTPException(status_code=404, detail="visual vector not found")
             hits = [
-                {"ad_id": found_id, "distance": distance, "source": "visual"}
+                {"ad_id": found_id, "distance": distance, "source": source}
                 for found_id, distance in store.search_visual(vector, k=k)
                 if found_id != ad_id
             ]
@@ -64,11 +81,19 @@ def search_ads(
         query_vector = None
         if ad_id:
             query_vector = store.get_text(ad_id)
-        elif q and mode == "text":
-            query_vector = _text_embedder(
-                config.text_embedder.model,
-                config.text_embedder.device,
-            ).embed(q)
+        elif q and mode in ("text", "hybrid"):
+            try:
+                query_vector = _text_embedder(
+                    config.text_embedder.model,
+                    config.text_embedder.device,
+                ).embed(q)
+            except Exception as exc:
+                if mode == "text":
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"text embedder unavailable: {exc}",
+                    ) from exc
+                query_vector = None
 
         if mode == "text":
             if query_vector is None:
@@ -84,23 +109,6 @@ def search_ads(
 
         if not q and query_vector is None:
             raise HTTPException(status_code=400, detail="q or ad_id is required for hybrid search")
-        if q and not ad_id:
-            keyword_hits = [
-                {
-                    "ad_id": found_id,
-                    "score": score,
-                    "source": "keyword",
-                    "fts_rank": index + 1,
-                }
-                for index, (found_id, score) in enumerate(
-                    fts_search_expanded(conn, q, limit=k)
-                )
-            ]
-            return {
-                "mode": mode,
-                "strategy": "keyword_first",
-                "items": _hydrate_hits(conn, keyword_hits),
-            }
         hits = hybrid_search(
             conn,
             store,

@@ -63,13 +63,18 @@ def api(
     import uvicorn
 
     from ad_classifier.api.app import create_app
-    from ad_classifier.api.factories import text_embedder_factory, vector_store_factory
+    from ad_classifier.api.factories import (
+        text_embedder_factory,
+        vector_store_factory,
+        visual_text_embedder_factory,
+    )
     from ad_classifier.config import load_config
 
     app_config, _ = load_config(config)
     app = create_app(
         config_path=config,
         agent_text_embedder_factory=lambda cfg: text_embedder_factory(cfg),
+        agent_visual_text_embedder_factory=lambda cfg: visual_text_embedder_factory(cfg),
         agent_vector_store_factory=lambda cfg, conn: vector_store_factory(cfg, conn),
     )
     uvicorn.run(

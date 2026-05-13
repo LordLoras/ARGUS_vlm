@@ -25,6 +25,8 @@ class ToolContext:
     the sentence-transformers import cost."""
     vector_store_factory: Any | None = None
     """Optional callable returning a SqliteVecStore."""
+    visual_text_embedder_factory: Any | None = None
+    """Optional callable returning an embedder with embed_text() for visual search."""
 
 
 class AgentTool(ABC):

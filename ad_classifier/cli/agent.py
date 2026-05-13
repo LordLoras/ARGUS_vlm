@@ -18,6 +18,11 @@ def _load_loop_for_cli(config_path: Path | None):
     from ad_classifier.agent.catalog import ToolCatalog  # noqa: PLC0415
     from ad_classifier.agent.client import HTTPAgentClient  # noqa: PLC0415
     from ad_classifier.agent.loop import AgentLoop, AgentRunContext  # noqa: PLC0415
+    from ad_classifier.api.factories import (  # noqa: PLC0415
+        text_embedder_factory,
+        vector_store_factory,
+        visual_text_embedder_factory,
+    )
     from ad_classifier.config import load_config, resolve_config_path  # noqa: PLC0415
     from ad_classifier.db.connection import (  # noqa: PLC0415
         initialize_database,
@@ -47,6 +52,9 @@ def _load_loop_for_cli(config_path: Path | None):
         catalog=catalog,
         client=client,
         config=config.agent,
+        text_embedder_factory=lambda: text_embedder_factory(config),
+        visual_text_embedder_factory=lambda: visual_text_embedder_factory(config),
+        vector_store_factory=lambda conn: vector_store_factory(config, conn),
     )
     return AgentLoop(run), persistence, tool_conn
 

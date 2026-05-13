@@ -5,16 +5,16 @@ from typing import Any
 from ad_classifier.agent.models import ToolResult
 from ad_classifier.agent.tools.base import AgentTool, ToolContext
 from ad_classifier.db.connection import load_sqlite_vec
-from ad_classifier.search.fts import fts_search
+from ad_classifier.search.fts import fts_search_expanded
 from ad_classifier.search.hybrid import hybrid_search
 
 
 class HybridSearchTool(AgentTool):
     name = "hybrid_search"
     description = (
-        "Search ads by free-text query using FTS5 keyword + sentence-transformer "
-        "vector similarity fused with reciprocal rank. Best for free-form questions "
-        "mixing keywords with semantic meaning."
+        "Search ads by free-text query using FTS5 keyword + vector similarity fused "
+        "with reciprocal rank. Use modality=text for transcript/OCR semantics and "
+        "modality=visual for cross-modal visual queries like 'red car'."
     )
 
     def parameters(self) -> dict[str, Any]:
@@ -22,6 +22,7 @@ class HybridSearchTool(AgentTool):
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
+                "modality": {"type": "string", "enum": ["text", "visual"], "default": "text"},
                 "k": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
             },
             "required": ["query"],
@@ -31,13 +32,24 @@ class HybridSearchTool(AgentTool):
         query = (args.get("query") or "").strip()
         if not query:
             return ToolResult(name=self.name, ok=False, error="query is required")
+        modality = args.get("modality", "text")
+        if modality not in ("text", "visual"):
+            return ToolResult(
+                name=self.name, ok=False, error="modality must be 'text' or 'visual'"
+            )
         k = min(int(args.get("k", 10)), 50)
 
-        # Embed the query if a text embedder factory was provided. When no
+        # Embed the query if a matching embedder factory was provided. When no
         # factory is configured (tests, or vector store unavailable), fall back
         # to FTS-only — hybrid_search handles a None vector.
         query_vector = None
-        if ctx.text_embedder_factory is not None:
+        if modality == "visual" and ctx.visual_text_embedder_factory is not None:
+            try:
+                embedder = ctx.visual_text_embedder_factory()
+                query_vector = embedder.embed_text(query)
+            except Exception:
+                query_vector = None
+        elif modality == "text" and ctx.text_embedder_factory is not None:
             try:
                 embedder = ctx.text_embedder_factory()
                 query_vector = embedder.embed(query)
@@ -56,13 +68,16 @@ class HybridSearchTool(AgentTool):
         if store is None or query_vector is None:
             # FTS5-only fallback. Still useful for keyword matches.
             try:
-                hits = fts_search(ctx.conn, query, limit=k)
+                hits = fts_search_expanded(ctx.conn, query, limit=k)
             except Exception as exc:
                 return ToolResult(name=self.name, ok=False, error=str(exc))
             return ToolResult(
                 name=self.name,
                 ok=True,
-                data=[{"ad_id": ad_id, "fts_score": score} for ad_id, score in hits],
+                data=[
+                    {"ad_id": ad_id, "fts_score": score, "source": "keyword"}
+                    for ad_id, score in hits
+                ],
                 row_count=len(hits),
             )
 
@@ -72,7 +87,7 @@ class HybridSearchTool(AgentTool):
                 store,
                 query_text=query,
                 query_vector=query_vector,
-                modality="text",
+                modality=modality,
                 k_fts=k * 4,
                 k_vec=k * 4,
                 k_final=k,
@@ -83,7 +98,10 @@ class HybridSearchTool(AgentTool):
         return ToolResult(
             name=self.name,
             ok=True,
-            data=[r.model_dump(mode="json") for r in results],
+            data=[
+                {**r.model_dump(mode="json"), "modality": modality}
+                for r in results
+            ],
             row_count=len(results),
         )
 

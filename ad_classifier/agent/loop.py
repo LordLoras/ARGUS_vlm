@@ -44,6 +44,7 @@ class AgentRunContext:
     config: AgentConfig
     text_embedder_factory: Callable[[], Any] | None = None
     vector_store_factory: Callable[[sqlite3.Connection], Any] | None = None
+    visual_text_embedder_factory: Callable[[], Any] | None = None
 
 
 class AgentLoop:
@@ -98,6 +99,7 @@ class AgentLoop:
             config=self.run.config,
             text_embedder_factory=self.run.text_embedder_factory,
             vector_store_factory=self.run.vector_store_factory,
+            visual_text_embedder_factory=self.run.visual_text_embedder_factory,
         )
         tools = self.run.catalog.openai_tools()
 
