@@ -500,8 +500,8 @@ def _run_self_correction(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
         api_key=api_key,
-        timeout_s=30.0,
-        max_tokens=1024,
+        timeout_s=300.0,
+        max_tokens=4096,
         enable_thinking=config.vlm.endpoint.enable_thinking,
     )
     return correction.run(result, evidence_texts)
