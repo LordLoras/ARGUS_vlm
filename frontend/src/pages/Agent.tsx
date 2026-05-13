@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import bannerUrl from "../../banner.png";
+import logoUrl from "../../logo-mark.png";
 import type { ToolCard } from "../components/Chat/ToolCallCard";
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { Topbar } from "../components/Topbar";
@@ -275,16 +278,17 @@ export function Agent() {
               />
             </>
           ) : (
-            <div className="agent-landing">
-              <div className="agent-landing-glow" />
+            <div
+              className="agent-landing"
+              style={{ "--agent-banner": `url(${bannerUrl})` } as CSSProperties}
+            >
               <div className="agent-landing-content">
-                <div className="agent-landing-badge">ARGUS v0.1</div>
-                <h1 className="agent-landing-title">
-                  Ad Retrieval, <span className="grdt">Graphing</span> &amp; Understanding System
-                </h1>
+                <img className="agent-landing-mark" src={logoUrl} alt="" />
+                <div className="agent-landing-badge">ARGUS intelligence agent</div>
+                <h1 className="agent-landing-title">Ask the local ad database.</h1>
                 <p className="agent-landing-sub">
-                  Natural-language query engine for your ad library. Ask questions, compare
-                  campaigns, and discover patterns across brands, categories, and time.
+                  Query classifications, entities, campaigns, OCR, transcripts, and vector
+                  search through audited read-only tools.
                 </p>
                 <div className="agent-landing-cards">
                   <div className="agent-card">

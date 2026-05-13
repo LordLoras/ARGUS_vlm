@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 
+import logoUrl from "../../logo-mark.png";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { cn } from "../lib/utils";
 import {
@@ -49,7 +50,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark" />
+        <img className="brand-logo" src={logoUrl} alt="" />
         <div className="brand-name">ARGUS</div>
         <div className="brand-meta">v0.4</div>
       </div>

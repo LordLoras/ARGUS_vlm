@@ -93,21 +93,12 @@ input, textarea, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border);
   height: 48px;
 }
-.brand-mark {
-  width: 22px; height: 22px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, var(--accent), #5b21b6);
-  position: relative;
-  box-shadow: 0 0 0 1px #ffffff10 inset, 0 0 12px var(--accent-bg);
+.brand-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
   flex-shrink: 0;
-}
-.brand-mark::after {
-  content: "";
-  position: absolute; inset: 4px;
-  border: 1.5px solid #ffffff90;
-  border-radius: 2px;
-  border-right-color: transparent;
-  border-bottom-color: transparent;
+  filter: drop-shadow(0 0 10px #0ea5e933);
 }
 .brand-name {
   font-weight: 600;
@@ -1906,31 +1897,40 @@ button.ts-link:hover {
 .agent-landing {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
   position: relative;
   overflow: hidden;
   padding: 40px;
+  background:
+    linear-gradient(90deg, rgba(8,9,11,0.96) 0%, rgba(8,9,11,0.78) 42%, rgba(8,9,11,0.42) 100%),
+    var(--agent-banner) center / cover no-repeat;
 }
-.agent-landing-glow {
+.agent-landing::after {
+  content: "";
   position: absolute;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(8,9,11,0.72) 100%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 34px);
   pointer-events: none;
 }
 .agent-landing-content {
   position: relative;
-  max-width: 640px;
-  text-align: center;
+  z-index: 1;
+  width: min(620px, 100%);
+  text-align: left;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
+  align-items: flex-start;
   gap: 24px;
+}
+.agent-landing-mark {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 24px #0ea5e955);
 }
 .agent-landing-badge {
   font-size: 10px;
@@ -1942,25 +1942,19 @@ button.ts-link:hover {
   padding: 4px 16px;
 }
 .agent-landing-title {
-  font-size: 28px;
+  font-size: 42px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.05;
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--fg);
-}
-.agent-landing-title .grdt {
-  background: linear-gradient(135deg, #a78bfa, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 .agent-landing-sub {
   font-size: 14px;
   line-height: 1.6;
   color: var(--fg-mute);
   margin: 0;
-  max-width: 480px;
+  max-width: 520px;
 }
 .agent-landing-cards {
   display: grid;
@@ -1974,8 +1968,9 @@ button.ts-link:hover {
   gap: 10px;
   padding: 14px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  background: rgba(12, 14, 18, 0.76);
   border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
   font-size: 12px;
   line-height: 1.5;
   color: var(--fg-mute);
@@ -2004,9 +1999,9 @@ button.ts-link:hover {
   display: block;
   width: 100%;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  background: rgba(12, 14, 18, 0.8);
   color: var(--fg);
   font-size: 12px;
   text-align: left;
