@@ -107,6 +107,10 @@ text_embedder:
   dim: 384
 
 image_embedder:
+  # enabled: true requires torch + transformers (SigLIP 2).
+  # Set to false to skip visual embeddings — useful for testing or when
+  # torch is not installed.  Text embeddings still work without torch.
+  enabled: true
   model: google/siglip2-base-patch16-224
   device: cpu
   batch_size: 8

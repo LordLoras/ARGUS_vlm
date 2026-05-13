@@ -106,6 +106,7 @@ class TextEmbedderConfig(BaseModel):
 class ImageEmbedderConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    enabled: bool = True
     model: str = "google/siglip2-base-patch16-224"
     device: str = "cpu"
     batch_size: int = Field(default=8, ge=1)

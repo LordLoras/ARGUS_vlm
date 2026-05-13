@@ -178,10 +178,12 @@ def run_pipeline_for_job(
         config.text_embedder.model,
         config.text_embedder.device,
     )
-    image_embedder = components.image_embedder or SigLIP2ImageEmbedder(
-        config.image_embedder.model,
-        config.image_embedder.device,
-    )
+    image_embedder = components.image_embedder
+    if image_embedder is None and config.image_embedder.enabled:
+        image_embedder = SigLIP2ImageEmbedder(
+            config.image_embedder.model,
+            config.image_embedder.device,
+        )
     text_vector, visual_vector = _write_embeddings(
         conn,
         config,
@@ -345,7 +347,7 @@ def _write_embeddings(
     ocr_items: list[OCRItem],
     kept_frames: list[FrameAnalysis],
     text_embedder: TextEmbedder,
-    image_embedder: ImageEmbedder,
+    image_embedder: ImageEmbedder | None,
 ) -> tuple[list[float], list[float] | None]:
     load_sqlite_vec(conn)
     store = SqliteVecStore(
@@ -357,10 +359,12 @@ def _write_embeddings(
     text_corpus = "\n".join([ingest.transcript.text, " ".join(item.text for item in ocr_items)])
     text_vector = text_embedder.embed(text_corpus)
     store.upsert_text(ad_id, text_vector)
-    visual_vectors = image_embedder.embed_batch([frame.path for frame in kept_frames])
-    visual_vector = _mean_pool(visual_vectors)
-    if visual_vector is not None:
-        store.upsert_visual(ad_id, visual_vector)
+    visual_vector: list[float] | None = None
+    if image_embedder is not None:
+        visual_vectors = image_embedder.embed_batch([frame.path for frame in kept_frames])
+        visual_vector = _mean_pool(visual_vectors)
+        if visual_vector is not None:
+            store.upsert_visual(ad_id, visual_vector)
     return text_vector, visual_vector
 
 
