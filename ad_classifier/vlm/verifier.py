@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import httpx
 import structlog
 
 from ad_classifier.pipeline.evidence.models import EvidenceBundle
+from ad_classifier._env import resolve_api_key
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
 from ad_classifier.vlm.prompt import render_verifier_prompt
@@ -300,9 +302,21 @@ def _looks_like_url_or_domain(value: object) -> bool:
     return _domain_candidate(value) is not None
 
 
-def _encode_image(path: Path) -> str:
-    data = path.read_bytes()
-    return base64.b64encode(data).decode("ascii")
+def _encode_image(path: Path, max_dim: int = 320) -> str:
+    try:
+        from PIL import Image as _PILImage
+
+        img = _PILImage.open(path)
+        w, h = img.size
+        if w > max_dim or h > max_dim:
+            ratio = min(max_dim / w, max_dim / h)
+            img = img.resize((int(w * ratio), int(h * ratio)), _PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        data = path.read_bytes()
+        return base64.b64encode(data).decode("ascii")
 
 
 def _normalize_chat_endpoint(endpoint: str) -> str:
@@ -412,6 +426,7 @@ class HTTPVLMVerifier(VLMVerifier):
         max_tokens: int,
         prompt_override: str | None = None,
         enable_thinking: bool = False,
+        response_format: str = "json_object",
     ) -> None:
         if not endpoint.strip():
             raise ValueError("VLM endpoint must be provided")
@@ -425,11 +440,10 @@ class HTTPVLMVerifier(VLMVerifier):
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
+        self._response_format = response_format
         self._system_prompt = prompt_override or render_verifier_prompt()
 
-        api_key: str | None = None
-        if api_key_env:
-            api_key = os.environ.get(api_key_env)
+        api_key = resolve_api_key(api_key_env)
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
@@ -444,7 +458,7 @@ class HTTPVLMVerifier(VLMVerifier):
             ],
             "temperature": self._temperature,
             "max_tokens": self._max_tokens,
-            "response_format": _vlm_response_format(),
+            "response_format": _vlm_response_format(self._response_format),
         }
         if self._enable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": True}

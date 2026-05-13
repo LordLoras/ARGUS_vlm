@@ -17,11 +17,8 @@ if not exist "config.yaml" (
 set "PORT_API=8000"
 set "PORT_WEB=5173"
 
-REM Free the API and web ports so the new uvicorn / vite get to bind them.
-REM Without this, Vite falls back to 5174 and CORS preflights from that
-REM origin start failing 400 against the API allowlist.
-call :free_port %PORT_API% API
-call :free_port %PORT_WEB% web
+REM Kill leftover processes before starting new ones.
+call :kill_existing
 
 echo [start.bat] Starting ARGUS API, worker, and frontend...
 
@@ -45,6 +42,25 @@ echo [start.bat] First run can take 10-30s while Python warms up imports.
 echo [start.bat] Each component lives in its own cmd window. Close those to stop.
 
 endlocal
+exit /b 0
+
+
+:kill_existing
+REM Kill stale API, worker, and Vite processes.
+REM 1. Port-based kill for API and Vite (they bind TCP ports).
+call :free_port %PORT_API% API
+call :free_port %PORT_WEB% web
+
+REM 2. Process-based kill for the worker (no TCP port to probe).
+REM    Match on "ad_classifier worker" in the command line so we
+REM    don't accidentally kill unrelated Python processes.
+set "_wk_killed="
+for /f "tokens=2" %%P in ('wmic process where "commandline like '%%ad_classifier worker%%'" get processid /format:value 2^>nul ^| findstr /r "[0-9]"') do (
+  echo [start.bat] Killing stale worker PID %%P
+  taskkill /F /PID %%P >nul 2>&1
+  set "_wk_killed=1"
+)
+if defined _wk_killed timeout /t 1 /nobreak >nul
 exit /b 0
 
 

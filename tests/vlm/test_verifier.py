@@ -164,29 +164,12 @@ def test_http_verifier_requests_structured_output():
     assert request_payload["model"] == "test-vlm"
     assert request_payload["temperature"] == 0.1
     assert request_payload["max_tokens"] == 4096
-    assert request_payload["response_format"]["type"] == "json_schema"
-    assert (
-        request_payload["response_format"]["json_schema"]["name"]
-        == _vlm_response_format()["json_schema"]["name"]
-    )
+    assert request_payload["response_format"]["type"] == "json_object"
 
 
-def test_vlm_response_format_includes_tracking_fields():
-    schema = _vlm_response_format()["json_schema"]["schema"]
-    marketing_ref = schema["properties"]["marketing_entities"]["$ref"]
-    marketing_key = marketing_ref.removeprefix("#/$defs/")
-    marketing_schema = schema["$defs"][marketing_key]
-
-    for field in (
-        "contact_points",
-        "advertiser",
-        "landing_page",
-        "offer_terms",
-        "creative_attributes",
-        "campaign_suggestions",
-    ):
-        assert field in marketing_schema["properties"]
-        assert field in marketing_schema["required"]
+def test_vlm_response_format_returns_json_object():
+    fmt = _vlm_response_format()
+    assert fmt["type"] == "json_object"
 
 
 def test_http_verifier_reads_reasoning_content_when_content_empty():

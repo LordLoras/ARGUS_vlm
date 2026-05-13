@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
+from ad_classifier._env import resolve_api_key
 from ad_classifier.config import AppConfig
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdRepository
@@ -152,6 +153,7 @@ def run_pipeline_for_job(
         temperature=config.vlm.endpoint.temperature,
         max_tokens=config.vlm.endpoint.max_tokens,
         enable_thinking=config.vlm.endpoint.enable_thinking,
+        response_format=config.vlm.endpoint.response_format,
     )
     vlm_result = vlm.verify(bundle)
 
@@ -471,7 +473,7 @@ def _run_ocr_cleanup(
     ocr_items: list[OCRItem],
     transcript: WhisperTranscript,
 ) -> list[OCRItem]:
-    api_key = os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    api_key = resolve_api_key(config.vlm.endpoint.api_key_env)
     cleanup = OCRCleanupPass(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
@@ -488,7 +490,7 @@ def _run_self_correction(
     result: VLMVerificationResult,
     evidence_texts: list[str],
 ) -> VLMVerificationResult:
-    api_key = os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    api_key = resolve_api_key(config.vlm.endpoint.api_key_env)
     correction = SelfCorrectionPass(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
@@ -505,8 +507,7 @@ def _run_visual_verify(
     result: VLMVerificationResult,
     kept_frames: list,
 ) -> VLMVerificationResult:
-    import os as _os
-    api_key = _os.environ.get(config.vlm.endpoint.api_key_env) if config.vlm.endpoint.api_key_env else None
+    api_key = resolve_api_key(config.vlm.endpoint.api_key_env)
     verify = VisualVerificationPass(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,

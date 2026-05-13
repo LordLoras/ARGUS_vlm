@@ -82,7 +82,7 @@ def test_worker_reload_config_refreshes_vlm_model(tmp_path: Path):
         yaml.safe_dump(
             {
                 "paths": {"sqlite_path": str(db_path)},
-                "vlm": {"endpoint": {"model": "argus/vlm"}},
+                "vlm": {"mode": "local", "local": {"model": "argus/vlm"}},
             }
         ),
         encoding="utf-8",
@@ -94,7 +94,7 @@ def test_worker_reload_config_refreshes_vlm_model(tmp_path: Path):
         yaml.safe_dump(
             {
                 "paths": {"sqlite_path": str(db_path)},
-                "vlm": {"endpoint": {"model": "qwen-test-model"}},
+                "vlm": {"mode": "local", "local": {"model": "qwen-test-model"}},
             }
         ),
         encoding="utf-8",

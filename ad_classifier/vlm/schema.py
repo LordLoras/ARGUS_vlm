@@ -1,26 +1,9 @@
-from __future__ import annotations
-
 from copy import deepcopy
 from typing import Any
 
 from ad_classifier.vlm.models import VLMVerificationResult
 
 _PARSING_METADATA_FIELDS = {"parse_ok", "raw_response", "parse_error"}
-
-
-def _require_all_object_properties(schema: dict[str, Any]) -> None:
-    if schema.get("type") == "object":
-        properties = schema.get("properties")
-        if isinstance(properties, dict):
-            schema["required"] = list(properties)
-
-    for value in schema.values():
-        if isinstance(value, dict):
-            _require_all_object_properties(value)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict):
-                    _require_all_object_properties(item)
 
 
 def _strip_parsing_metadata(schema: dict[str, Any]) -> None:
@@ -36,15 +19,17 @@ def _strip_parsing_metadata(schema: dict[str, Any]) -> None:
         schema["required"] = [field for field in required if field not in _PARSING_METADATA_FIELDS]
 
 
-def vlm_response_format() -> dict[str, Any]:
-    schema = deepcopy(VLMVerificationResult.model_json_schema())
-    _strip_parsing_metadata(schema)
-    _require_all_object_properties(schema)
-    _strip_parsing_metadata(schema)
+def vlm_response_format(fmt: str = "json_object") -> dict[str, Any]:
+    if fmt == "json_schema":
+        schema = deepcopy(VLMVerificationResult.model_json_schema())
+        _strip_parsing_metadata(schema)
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "ad_verification_result",
+                "schema": schema,
+            },
+        }
     return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "ad_verification_result",
-            "schema": schema,
-        },
+        "type": "json_object",
     }

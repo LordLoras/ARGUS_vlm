@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PathsConfig(BaseModel):
@@ -173,33 +173,73 @@ class VLMEndpointConfig(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, ge=64)
     enable_thinking: bool = False
+    response_format: Literal["json_object", "json_schema"] = "json_object"
+
+
+class VLMEndpointDefaults:
+    LOCAL = VLMEndpointConfig(
+        endpoint="http://127.0.0.1:1234/v1",
+        model="Qwen3.6-27B-Q4_K_M",
+        api_key_env=None,
+        timeout_s=600.0,
+        max_retries=2,
+        retry_delay_s=2.0,
+        temperature=0.1,
+        max_tokens=8192,
+        enable_thinking=False,
+        response_format="json_object",
+    )
+    REMOTE = VLMEndpointConfig(
+        endpoint="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        api_key_env="OPENAI_API_KEY",
+        timeout_s=120.0,
+        max_retries=2,
+        retry_delay_s=2.0,
+        temperature=0.3,
+        max_tokens=4096,
+        enable_thinking=False,
+        response_format="json_schema",
+    )
 
 
 class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    mode: Literal["local", "remote"] = "local"
     max_frames_in_bundle: int = Field(default=12, ge=1)
     enable_ocr_cleanup_pass: bool = True
     enable_self_correction: bool = True
     enable_post_validation: bool = True
     enable_visual_verify: bool = False
+    local: VLMEndpointConfig = Field(default_factory=lambda: VLMEndpointDefaults.LOCAL.model_copy())
+    remote: VLMEndpointConfig = Field(default_factory=lambda: VLMEndpointDefaults.REMOTE.model_copy())
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
+
+    @model_validator(mode="after")
+    def _resolve_mode_endpoint(self) -> VLMConfig:
+        if self.mode == "local":
+            self.endpoint = self.local.model_copy()
+        else:
+            self.endpoint = self.remote.model_copy()
+        return self
 
 
 class AgentEndpointConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    endpoint: str = "http://127.0.0.1:1234/v1"
-    model: str = "argus/vlm"
+    endpoint: str | None = None
+    model: str | None = None
     api_key_env: str | None = None
-    timeout_s: float = Field(default=120.0, ge=0.0)
-    max_retries: int = Field(default=2, ge=0)
-    retry_delay_s: float = Field(default=2.0, ge=0.0)
+    timeout_s: float | None = None
+    max_retries: int | None = None
+    retry_delay_s: float | None = None
 
 
 class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    inherit_vlm: bool = True
     endpoint: AgentEndpointConfig = Field(default_factory=AgentEndpointConfig)
     max_iterations: int = Field(default=8, ge=1, le=32)
     list_max_rows: int = Field(default=50, ge=1, le=500)
@@ -207,6 +247,10 @@ class AgentConfig(BaseModel):
     sql_statement_timeout_s: float = Field(default=5.0, ge=0.1)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=64)
+
+    @property
+    def effective_mode(self) -> str:
+        return "inherited" if self.inherit_vlm else "independent"
 
 
 class AppConfig(BaseModel):
@@ -227,6 +271,36 @@ class AppConfig(BaseModel):
     api: APIConfig = Field(default_factory=APIConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+
+    @model_validator(mode="after")
+    def _resolve_agent_endpoint(self) -> AppConfig:
+        v = self.vlm.endpoint
+        a = self.agent.endpoint
+        if self.agent.inherit_vlm:
+            if a.endpoint is None:
+                a.endpoint = v.endpoint
+            if a.model is None:
+                a.model = v.model
+            if a.api_key_env is None:
+                a.api_key_env = v.api_key_env
+            if a.timeout_s is None:
+                a.timeout_s = v.timeout_s
+            if a.max_retries is None:
+                a.max_retries = v.max_retries
+            if a.retry_delay_s is None:
+                a.retry_delay_s = v.retry_delay_s
+        else:
+            if a.endpoint is None:
+                a.endpoint = "http://127.0.0.1:1234/v1"
+            if a.model is None:
+                a.model = "argus/vlm"
+            if a.timeout_s is None:
+                a.timeout_s = 120.0
+            if a.max_retries is None:
+                a.max_retries = 2
+            if a.retry_delay_s is None:
+                a.retry_delay_s = 2.0
+        return self
 
 
 def default_config_path(cwd: Path | None = None) -> Path:

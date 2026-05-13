@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from ad_classifier._env import resolve_api_key
 from ad_classifier.agent.models import ToolCall
 
 
@@ -106,9 +107,7 @@ class HTTPAgentClient(AgentClient):
         self._temperature = temperature
         self._max_tokens = max_tokens
 
-        api_key: str | None = None
-        if api_key_env:
-            api_key = os.environ.get(api_key_env)
+        api_key = resolve_api_key(api_key_env)
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
