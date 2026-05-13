@@ -10,9 +10,17 @@ from ad_classifier.embeddings.image.mock import MockImageEmbedder
 from ad_classifier.embeddings.text.mock import MockTextEmbedder
 from ad_classifier.ingest.models import IngestArtifacts, IngestFrame, WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
+from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
 from ad_classifier.pipeline.preprocess.models import FrameAnalysis
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
-from ad_classifier.worker.stages import _write_embeddings
+from ad_classifier.worker.document_ocr import (
+    document_outputs_to_ocr_items,
+    search_ocr_items,
+    select_glm_ocr_frames,
+)
+from ad_classifier.worker.stages import (
+    _write_embeddings,
+)
 
 
 def test_write_embeddings_loads_sqlite_vec_on_fresh_connection(tmp_path: Path):
@@ -60,3 +68,84 @@ def test_write_embeddings_loads_sqlite_vec_on_fresh_connection(tmp_path: Path):
     assert frame_hits[0]["ad_id"] == "ad_vec"
     assert frame_hits[0]["frame_index"] == 0
     conn.close()
+
+
+def test_select_glm_ocr_frames_prioritizes_gating_then_text_density(tmp_path: Path):
+    config = AppConfig()
+    config.glm_ocr.enabled = True
+    config.glm_ocr.max_frames_per_ad = 2
+    config.glm_ocr.min_ocr_chars = 100
+
+    frames = [
+        FrameAnalysis(frame_index=0, time_ms=0, path=tmp_path / "0.png"),
+        FrameAnalysis(frame_index=1, time_ms=500, path=tmp_path / "1.png"),
+        FrameAnalysis(frame_index=2, time_ms=1000, path=tmp_path / "2.png"),
+    ]
+    ocr_by_frame = {
+        0: [OCRItem(frame_index=0, time_ms=0, text="short", confidence=0.2, engine="mock")],
+        1: [OCRItem(frame_index=1, time_ms=500, text="A" * 180, confidence=0.95, engine="mock")],
+        2: [OCRItem(frame_index=2, time_ms=1000, text="B" * 220, confidence=0.95, engine="mock")],
+    }
+
+    selected = select_glm_ocr_frames(
+        config=config,
+        kept_frames=frames,
+        ocr_by_frame=ocr_by_frame,
+    )
+
+    assert [frame.frame_index for frame in selected] == [0, 2]
+
+
+def test_select_glm_ocr_frames_can_run_when_paddle_ocr_disabled(tmp_path: Path):
+    config = AppConfig()
+    config.ocr.enabled = False
+    config.glm_ocr.enabled = True
+    config.glm_ocr.max_frames_per_ad = 2
+
+    frames = [
+        FrameAnalysis(frame_index=0, time_ms=0, path=tmp_path / "0.png"),
+        FrameAnalysis(frame_index=1, time_ms=500, path=tmp_path / "1.png"),
+        FrameAnalysis(frame_index=2, time_ms=1000, path=tmp_path / "2.png"),
+    ]
+
+    selected = select_glm_ocr_frames(
+        config=config,
+        kept_frames=frames,
+        ocr_by_frame={},
+    )
+
+    assert [frame.frame_index for frame in selected] == [0, 1]
+
+
+def test_document_outputs_become_separate_searchable_ocr_items():
+    output = PaddleVLOutput(
+        frame_index=4,
+        time_ms=2000,
+        raw_text="SALE",
+        parsed={"text": "SALE\nCall now"},
+        parse_ok=True,
+        engine="glm_ocr",
+    )
+
+    items = document_outputs_to_ocr_items({4: output})
+
+    assert len(items) == 1
+    assert items[0].engine == "glm_ocr"
+    assert items[0].bbox is None
+    assert items[0].confidence is None
+    assert items[0].text == "SALE\nCall now"
+
+
+def test_search_ocr_items_respects_glm_include_switch():
+    config = AppConfig()
+    config.glm_ocr.enabled = True
+    raw = [OCRItem(frame_index=0, time_ms=0, text="paddle", confidence=1.0, engine="paddleocr")]
+    glm = [OCRItem(frame_index=0, time_ms=0, text="glm", confidence=None, engine="glm_ocr")]
+
+    assert [item.engine for item in search_ocr_items(raw, glm, config)] == [
+        "paddleocr",
+        "glm_ocr",
+    ]
+
+    config.glm_ocr.include_in_search = False
+    assert [item.engine for item in search_ocr_items(raw, glm, config)] == ["paddleocr"]

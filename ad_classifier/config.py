@@ -61,6 +61,8 @@ class DedupConfig(BaseModel):
 class OCRConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    enabled: bool = True
+    backend: Literal["paddleocr"] = "paddleocr"
     device: str = "cpu"
     lang: str = "en"
 
@@ -85,6 +87,73 @@ class PaddleVLConfig(BaseModel):
     )
     timeout_s: float = Field(default=60.0, ge=0.0)
     gating: PaddleVLGatingConfig = Field(default_factory=PaddleVLGatingConfig)
+
+
+class GLMOCREndpointConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    endpoint: str = "http://127.0.0.1:5050/v1"
+    model: str = "glm-ocr"
+    api_key_env: str | None = None
+    timeout_s: float = Field(default=120.0, ge=0.0)
+    max_retries: int = Field(default=1, ge=0)
+    retry_delay_s: float = Field(default=1.0, ge=0.0)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=2048, ge=64)
+
+
+class GLMOCREndpointDefaults:
+    LOCAL = GLMOCREndpointConfig(
+        endpoint="http://127.0.0.1:5050/v1",
+        model="glm-ocr",
+        api_key_env=None,
+        timeout_s=120.0,
+        max_retries=1,
+        retry_delay_s=1.0,
+        temperature=0.0,
+        max_tokens=2048,
+    )
+    REMOTE = GLMOCREndpointConfig(
+        endpoint="https://your-openai-compatible-glm-ocr.example/v1",
+        model="glm-ocr",
+        api_key_env="GLM_OCR_API_KEY",
+        timeout_s=120.0,
+        max_retries=1,
+        retry_delay_s=1.0,
+        temperature=0.0,
+        max_tokens=2048,
+    )
+
+
+class GLMOCRConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    mode: Literal["local", "remote"] = "local"
+    prompt: str = "Text Recognition:"
+    image_max_dim: int = Field(default=1024, ge=128, le=2048)
+    include_in_search: bool = True
+    include_in_vlm_bundle: bool = False
+    run_on_text_frames: bool = True
+    min_ocr_chars: int = Field(default=100, ge=0)
+    run_when_ocr_disabled: bool = True
+    max_frames_per_ad: int = Field(default=12, ge=1)
+    gating: PaddleVLGatingConfig = Field(default_factory=PaddleVLGatingConfig)
+    local: GLMOCREndpointConfig = Field(
+        default_factory=lambda: GLMOCREndpointDefaults.LOCAL.model_copy()
+    )
+    remote: GLMOCREndpointConfig = Field(
+        default_factory=lambda: GLMOCREndpointDefaults.REMOTE.model_copy()
+    )
+    endpoint: GLMOCREndpointConfig = Field(default_factory=GLMOCREndpointConfig)
+
+    @model_validator(mode="after")
+    def _resolve_mode_endpoint(self) -> GLMOCRConfig:
+        if self.mode == "local":
+            self.endpoint = self.local.model_copy()
+        else:
+            self.endpoint = self.remote.model_copy()
+        return self
 
 
 class RulesConfig(BaseModel):
@@ -274,6 +343,7 @@ class AppConfig(BaseModel):
     dedup: DedupConfig = Field(default_factory=DedupConfig)
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     paddlevl: PaddleVLConfig = Field(default_factory=PaddleVLConfig)
+    glm_ocr: GLMOCRConfig = Field(default_factory=GLMOCRConfig)
     rules: RulesConfig = Field(default_factory=RulesConfig)
     vlm: VLMConfig = Field(default_factory=VLMConfig)
     text_embedder: TextEmbedderConfig = Field(default_factory=TextEmbedderConfig)

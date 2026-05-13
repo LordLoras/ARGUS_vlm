@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import io
 import json
-import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -13,8 +12,8 @@ from urllib.parse import urlparse
 import httpx
 import structlog
 
-from ad_classifier.pipeline.evidence.models import EvidenceBundle
 from ad_classifier._env import resolve_api_key
+from ad_classifier.pipeline.evidence.models import EvidenceBundle
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
 from ad_classifier.vlm.prompt import render_verifier_prompt
@@ -391,7 +390,8 @@ def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dic
         if fs.paddlevl_output and fs.paddlevl_output.parsed:
             pv_text = fs.paddlevl_output.parsed.get("text", "")
             if pv_text:
-                seg += f"\nPaddleVL: {pv_text}"
+                label = fs.paddlevl_output.engine or "paddlevl"
+                seg += f"\nDocumentOCR[{label}]: {pv_text}"
         if fs.transcript_nearby:
             seg += f"\nTranscript: {' | '.join(s.text for s in fs.transcript_nearby)}"
         text_parts.append(seg)

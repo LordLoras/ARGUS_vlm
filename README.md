@@ -273,6 +273,32 @@ vlm:
 When `agent.inherit_vlm` is enabled, the NL agent uses the same active VLM
 endpoint as the classifier.
 
+### Optional GLM-OCR
+
+PaddleOCR remains the grounded raw OCR engine. You can turn it off with
+`ocr.enabled: false`, but the only raw OCR backend supported here is local
+PaddleOCR.
+
+GLM-OCR is optional and is intended for text-heavy frames, end cards, article
+graphics, and CTA screens. It is stored separately with engine `glm_ocr` in
+`ocr_items` and included in search text when `glm_ocr.include_in_search: true`.
+It is not included in the classifier VLM bundle unless
+`glm_ocr.include_in_vlm_bundle: true`.
+
+For a local llama.cpp server:
+
+```yaml
+glm_ocr:
+  enabled: true
+  mode: local
+  local:
+    endpoint: "http://127.0.0.1:5050/v1"
+    model: "glm-ocr"
+```
+
+Keep `temperature: 0` for OCR. Treat GLM-OCR numeric/legal fine print as
+advisory unless PaddleOCR, transcript, or another frame corroborates it.
+
 ### 8. Initialize and Run
 
 ```powershell
@@ -297,6 +323,7 @@ Different parts of ARGUS use different acceleration paths:
 | Component | Uses GPU when |
 |---|---|
 | VLM classification | Your LM Studio / llama.cpp / vLLM server is configured for GPU |
+| GLM-OCR | Your configured local/remote GLM-OCR server is configured for GPU |
 | Whisper transcript | `whisper.whisper_cpp.use_gpu: true` and the bundled CLI works with your driver |
 | PaddleOCR | Usually CPU by default in this project |
 | MiniLM text embeddings | `text_embedder.device: cuda` and torch GPU is available |

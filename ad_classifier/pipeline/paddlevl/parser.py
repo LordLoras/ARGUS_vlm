@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
+import mimetypes
 import subprocess
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import httpx
+
+from ad_classifier._env import resolve_api_key
 from ad_classifier.pipeline.ocr.models import FrameRef
 from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
 
@@ -121,3 +128,162 @@ class PaddleVLParser(DocumentParser):
                 parse_ok=parse_ok,
                 stderr=proc.stderr.strip() or None,
             )
+
+
+class GLMOCRParser(DocumentParser):
+    """
+    OpenAI-compatible adapter for GLM-OCR served by llama.cpp/Ollama-compatible
+    gateways or a remote OpenAI-style endpoint.
+
+    GLM-OCR does not provide Paddle-style boxes/confidence here; callers should
+    store its text under engine="glm_ocr" and keep raw PaddleOCR as the
+    grounded OCR source.
+    """
+
+    def __init__(
+        self,
+        *,
+        endpoint: str = "http://127.0.0.1:5050/v1",
+        model: str = "glm-ocr",
+        api_key_env: str | None = None,
+        prompt: str = "Text Recognition:",
+        timeout_s: float = 120.0,
+        max_retries: int = 1,
+        retry_delay_s: float = 1.0,
+        temperature: float = 0.0,
+        max_tokens: int = 2048,
+        image_max_dim: int = 1024,
+    ) -> None:
+        if not endpoint.strip():
+            raise ValueError("GLM-OCR endpoint must be provided")
+        if not model.strip():
+            raise ValueError("GLM-OCR model must be provided")
+        self._endpoint = _normalize_chat_endpoint(endpoint)
+        self._model = model
+        self._prompt = prompt
+        self._timeout_s = timeout_s
+        self._max_retries = max_retries
+        self._retry_delay_s = retry_delay_s
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._image_max_dim = image_max_dim
+        self._headers: dict[str, str] = {"Content-Type": "application/json"}
+        api_key = resolve_api_key(api_key_env)
+        if api_key:
+            self._headers["Authorization"] = f"Bearer {api_key}"
+
+    def parse(self, frame: FrameRef) -> PaddleVLOutput:
+        try:
+            encoded = _encode_image(frame.path, self._image_max_dim)
+        except Exception as exc:
+            return PaddleVLOutput(
+                frame_index=frame.frame_index,
+                time_ms=frame.time_ms,
+                parse_ok=False,
+                stderr=f"image encode failed: {exc}",
+                engine="glm_ocr",
+            )
+
+        mime = mimetypes.guess_type(frame.path.name)[0] or "image/png"
+        payload: dict = {
+            "model": self._model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self._prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{encoded}"},
+                        },
+                    ],
+                }
+            ],
+            "temperature": self._temperature,
+            "max_tokens": self._max_tokens,
+            "stream": False,
+        }
+
+        last_error = "no attempts made"
+        for attempt in range(self._max_retries + 1):
+            if attempt > 0:
+                time.sleep(self._retry_delay_s)
+            try:
+                resp = httpx.post(
+                    self._endpoint,
+                    headers=self._headers,
+                    json=payload,
+                    timeout=self._timeout_s,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                raw = _extract_chat_text(data).strip()
+                return PaddleVLOutput(
+                    frame_index=frame.frame_index,
+                    time_ms=frame.time_ms,
+                    raw_text=raw,
+                    parsed={"text": raw} if raw else None,
+                    parse_ok=bool(raw),
+                    stderr=None if raw else "empty GLM-OCR response",
+                    engine="glm_ocr",
+                )
+            except httpx.HTTPStatusError as exc:
+                body = exc.response.text[:500] if exc.response is not None else ""
+                status = exc.response.status_code if exc.response is not None else "unknown"
+                last_error = f"HTTP {status}: {body}"
+            except httpx.RequestError as exc:
+                last_error = str(exc)
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                last_error = f"response parse failed: {exc}"
+
+        return PaddleVLOutput(
+            frame_index=frame.frame_index,
+            time_ms=frame.time_ms,
+            parse_ok=False,
+            stderr=last_error,
+            engine="glm_ocr",
+        )
+
+
+def _normalize_chat_endpoint(endpoint: str) -> str:
+    normalized = endpoint.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return f"{normalized}/chat/completions"
+    return f"{normalized}/v1/chat/completions"
+
+
+def _encode_image(path: Path, max_dim: int) -> str:
+    try:
+        from PIL import Image as PILImage  # noqa: PLC0415
+
+        img = PILImage.open(path)
+        width, height = img.size
+        if width > max_dim or height > max_dim:
+            ratio = min(max_dim / width, max_dim / height)
+            img = img.resize(
+                (max(1, int(width * ratio)), max(1, int(height * ratio))),
+                PILImage.LANCZOS,
+            )
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _extract_chat_text(data: dict) -> str:
+    choice = data.get("choices", [{}])[0]
+    message = choice.get("message") or {}
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        return "\n".join(parts)
+    text = choice.get("text")
+    return text if isinstance(text, str) else ""

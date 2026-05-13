@@ -40,6 +40,12 @@ from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.validation import validate_vlm_output
 from ad_classifier.vlm.verifier import PROMPT_VERSION, HTTPVLMVerifier, VLMVerifier
 from ad_classifier.vlm.visual_verify import VisualVerificationPass
+from ad_classifier.worker.document_ocr import (
+    bundle_document_outputs,
+    document_outputs_to_ocr_items,
+    run_glm_ocr,
+    search_ocr_items,
+)
 
 ProgressCallback = Callable[[str, float, str], None]
 
@@ -50,12 +56,14 @@ class PipelineComponents:
         *,
         ocr_engine: OCREngine | None = None,
         document_parser: DocumentParser | None = None,
+        glm_ocr_parser: DocumentParser | None = None,
         vlm_verifier: VLMVerifier | None = None,
         text_embedder: TextEmbedder | None = None,
         image_embedder: ImageEmbedder | None = None,
     ) -> None:
         self.ocr_engine = ocr_engine
         self.document_parser = document_parser
+        self.glm_ocr_parser = glm_ocr_parser
         self.vlm_verifier = vlm_verifier
         self.text_embedder = text_embedder
         self.image_embedder = image_embedder
@@ -92,11 +100,15 @@ def run_pipeline_for_job(
     _persist_frame_analysis(conn, ad_id, preprocess_result.frames)
     conn.commit()
 
-    emit("ocr", 0.34, "extracting OCR")
-    ocr_items = _run_ocr(
-        components.ocr_engine or PaddleOCREngine(config.ocr.device, config.ocr.lang),
-        preprocess_result.kept_frames,
-    )
+    if config.ocr.enabled:
+        emit("ocr", 0.34, "extracting OCR")
+        ocr_items = _run_ocr(
+            components.ocr_engine or PaddleOCREngine(config.ocr.device, config.ocr.lang),
+            preprocess_result.kept_frames,
+        )
+    else:
+        emit("ocr", 0.34, "OCR disabled")
+        ocr_items = []
     _replace_ocr_items(conn, ad_id, ocr_items)
     conn.commit()
 
@@ -107,6 +119,18 @@ def run_pipeline_for_job(
         kept_frames=preprocess_result.kept_frames,
         ocr_by_frame=_ocr_by_frame(ocr_items),
     )
+
+    emit("glm_ocr", 0.47, "checking GLM-OCR frames")
+    glm_ocr_by_frame = run_glm_ocr(
+        config=config,
+        kept_frames=preprocess_result.kept_frames,
+        ocr_by_frame=_ocr_by_frame(ocr_items),
+        parser=components.glm_ocr_parser,
+    )
+    glm_ocr_items = document_outputs_to_ocr_items(glm_ocr_by_frame)
+    if glm_ocr_items:
+        _replace_ocr_items(conn, ad_id, ocr_items + glm_ocr_items)
+        conn.commit()
 
     raw_ocr_items = list(ocr_items)
 
@@ -137,7 +161,11 @@ def run_pipeline_for_job(
         transcript=ingest.transcript,
         rules_triggered=rules,
         ocr_by_frame=_ocr_by_frame(ocr_items),
-        paddlevl_by_frame=paddlevl_by_frame,
+        paddlevl_by_frame=bundle_document_outputs(
+            paddlevl_by_frame,
+            glm_ocr_by_frame,
+            include_glm=config.glm_ocr.include_in_vlm_bundle,
+        ),
         alignment_window_ms=config.rules.alignment_window_ms,
         max_frames=config.vlm.max_frames_in_bundle,
         metadata=ingest.metadata.model_dump() if ingest.metadata else {},
@@ -173,6 +201,7 @@ def run_pipeline_for_job(
         )
 
     emit("embeddings", 0.78, "embedding ad")
+    search_ocr_for_index = search_ocr_items(ocr_items, glm_ocr_items, config)
     text_embedder = components.text_embedder or SentenceTransformerEmbedder(
         config.text_embedder.model,
         config.text_embedder.device,
@@ -188,7 +217,7 @@ def run_pipeline_for_job(
         config,
         ad_id,
         ingest,
-        ocr_items,
+        search_ocr_for_index,
         preprocess_result.kept_frames,
         text_embedder,
         image_embedder,
@@ -282,7 +311,7 @@ def run_pipeline_for_job(
         products=final.marketing_entities.products_text or "",
         primary_category=final.primary_category,
         transcript_text=ingest.transcript.text,
-        ocr_text=" ".join(item.text for item in ocr_items),
+        ocr_text=" ".join(item.text for item in search_ocr_for_index),
         marketing_entities_text=json.dumps(final.marketing_entities.model_dump()),
     )
     conn.commit()

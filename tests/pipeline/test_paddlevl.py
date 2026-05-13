@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
+import httpx
+
+from ad_classifier.config import AppConfig
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.pipeline.paddlevl import (
+    GLMOCRParser,
     MockPaddleVLParser,
     PaddleVLGatingConfig,
     should_run_paddlevl,
 )
 from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
 from ad_classifier.pipeline.preprocess.models import FrameAnalysis
-from pathlib import Path
 
 
 def _item(text: str, confidence: float | None = 0.9) -> OCRItem:
@@ -150,3 +153,71 @@ def test_mock_parser_can_simulate_parse_failure(tmp_path):
 
     assert out.parse_ok is False
     assert out.parsed is None
+
+
+def test_glm_ocr_parser_calls_openai_compatible_endpoint(tmp_path, monkeypatch):
+    from ad_classifier.pipeline.ocr.models import FrameRef
+
+    captured: dict = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "SALE\nCall now"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr("ad_classifier.pipeline.paddlevl.parser.httpx.post", fake_post)
+    img = tmp_path / "frame.png"
+    img.write_bytes(b"fake image bytes")
+
+    parser = GLMOCRParser(
+        endpoint="http://127.0.0.1:5050/v1",
+        model="glm-ocr",
+        prompt="Text Recognition:",
+        timeout_s=12,
+        temperature=0,
+    )
+    out = parser.parse(FrameRef(frame_index=2, time_ms=1000, path=img))
+
+    assert out.parse_ok is True
+    assert out.engine == "glm_ocr"
+    assert out.parsed == {"text": "SALE\nCall now"}
+    assert captured["url"] == "http://127.0.0.1:5050/v1/chat/completions"
+    assert captured["timeout"] == 12
+    assert captured["json"]["model"] == "glm-ocr"
+    assert captured["json"]["temperature"] == 0
+    assert captured["json"]["stream"] is False
+    content = captured["json"]["messages"][0]["content"]
+    assert content[0] == {"type": "text", "text": "Text Recognition:"}
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_glm_ocr_config_resolves_local_and_remote_endpoints():
+    local = AppConfig.model_validate(
+        {
+            "glm_ocr": {
+                "mode": "local",
+                "local": {"endpoint": "http://localhost:5050/v1", "model": "local-glm"},
+                "remote": {"endpoint": "https://remote.example/v1", "model": "remote-glm"},
+            }
+        }
+    )
+    assert local.glm_ocr.endpoint.endpoint == "http://localhost:5050/v1"
+    assert local.glm_ocr.endpoint.model == "local-glm"
+
+    remote = AppConfig.model_validate(
+        {
+            "glm_ocr": {
+                "mode": "remote",
+                "local": {"endpoint": "http://localhost:5050/v1", "model": "local-glm"},
+                "remote": {"endpoint": "https://remote.example/v1", "model": "remote-glm"},
+            }
+        }
+    )
+    assert remote.glm_ocr.endpoint.endpoint == "https://remote.example/v1"
+    assert remote.glm_ocr.endpoint.model == "remote-glm"
