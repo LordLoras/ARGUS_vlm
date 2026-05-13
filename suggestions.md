@@ -1,110 +1,174 @@
-# Demo feature suggestions
+# Pipeline & Demo Analysis
 
-These require **zero pipeline changes** — all use existing API/data. Sorted by demo impact.
+## Critical Accuracy Issues
 
----
+### A1. Short brand names silently dropped from products
+**File**: `ad_classifier/vlm/validation.py:48-49`
 
-## Frontend-only (quickest to build)
+`_product_in_evidence` requires at least one token >= 4 chars to appear in the evidence blob. Short brand names like "Ram", "GMC", "BMW", "Kia", "Audi" score 0 matches and are silently removed. The `_KNOWN_SHORT_WORDS` list (line 83-86) doesn't include most 3-letter automotive brands.
 
-### 1. Share of Voice donut chart
-Replace the flat category list on the library page with a colored donut/ring chart showing ad count by category. Makes the portfolio composition instantly visual.
+**Fix**: Add common short brand names to `_KNOWN_SHORT_WORDS`, and also check against VLM evidence items (source="vlm") in addition to OCR/transcript.
 
-**Files:** `Library.tsx`, `index.css`  
-**Data:** Already available in `counts.byCategory`  
-**Effort:** ~1 hour (chart component + legend)
+### A2. VLM structured offer data discarded during aggregation
+**File**: `ad_classifier/pipeline/aggregation/policy.py:201-206`
 
-### 2. Ad Timeline heatmap
-Calendar grid showing ingest activity. Hover over a day to see how many ads were uploaded. Useful for spotting campaign seasonality ("most ads uploaded in March").
+When mapping VLM `VLMOffer` objects to `OfferEntity`, only `o.value or o.type` is preserved as text. The VLM's structured fields — `expiry_text`, `expiry_resolved`, `promo_code`, `scarcity_signals`, `urgency_signals` — are all silently thrown away. These are the most valuable marketing intelligence fields (offer expiry dates, promo codes, urgency tactics).
 
-**Files:** `Library.tsx`, `index.css`  
-**Data:** `ad.ingested_at` already in list response  
-**Effort:** ~2 hours
+**Fix**: Map VLM offer fields into `OfferTerms`. At minimum, extract `promo_code` → `offer_terms.promo_codes`, `expiry_text`/`expiry_resolved` → `offer_terms.expiry`, and `scarcity_signals`/`urgency_signals` → `offer_terms.scarcity_signals`/`offer_terms.urgency_signals`.
 
-### 3. Disclaimer Complexity Leaderboard
-Rank ads by `disclaimer_density` (already extracted by VLM as "low/medium/high"). Shows which ads have the most fine print. Fun demo: "Show me the ad with the most disclaimers."
+### A3. `_parse_rating_count` produces garbage from formatted strings
+**File**: `ad_classifier/pipeline/aggregation/policy.py:416-420`
 
-**Files:** `Library.tsx`, `Shared components`  
-**Data:** `marketing_entities.creative_attributes.disclaimer_density` in detail API  
-**Effort:** ~1 hour
+Strips all non-digit characters. "4.7 out of 5 (2,341 ratings)" → `472341` instead of `2341`. "1.2K" → `12`.
 
-### 4. Brand Adjacency Network
-A graph/diagram connecting brands to their advertisers. Shows "Jeep" → "Iowa Jeep", "Dick Poe Chrysler Jeep", etc. Useful for dealer relationship analysis.
+**Fix**: Use regex: `re.search(r'[\d,]+', value)` for the count portion, then strip commas. Handle K/M suffixes.
 
-**Files:** `Library.tsx` or new page, `index.css`  
-**Data:** `ad.brand_name` + `ad.advertiser_name` from list API  
-**Effort:** ~3 hours (needs a graph layout library like d3-force or vis-network)
+### A4. Brand validation no-op — ungrounded brands kept
+**File**: `ad_classifier/vlm/validation.py:41-44`
 
-### 5. Ad comparison heatmap
-Side-by-side comparison grid: pick 3-4 ads, see their attributes (brand, category, subcategory, price range, offer count, disclaimer density) as a colored heatmap. Makes cross-ad analysis instant.
+When `_brand_in_evidence` returns False, the code does `pass` instead of clearing or flagging the brand. The validation check is completely bypassed.
 
-**Files:** New component, `Library.tsx`  
-**Data:** Already available from detail API  
-**Effort:** ~3 hours
+**Fix**: Replace `pass` with logic that clears the brand (`me.brand.name = None`) or reduces confidence.
 
 ---
 
-## Agent tool (one .py file each, no pipeline changes)
+## High-Severity Accuracy Issues
 
-### 6. `competitive_brief` agent tool
-Single tool call returns a structured cross-brand report:
-```
-Brand     Ads  Avg price   Top offers                Common CTAs
-Jeep      12   $42,000     0% APR, $1k rebate        "Build yours"
-Ford      8    $48,500     $750 bonus cash, 1.9% APR "Find your F-150"
-```
-Chains `count_ads`, `list_ads`, `aggregate` internally.
+### A5. OCR cleanup replaces in-memory data; raw vs cleaned inconsistency
+**File**: `ad_classifier/worker/stages.py:112-127`
 
-**Files:** `ad_classifier/agent/tools/competitive_brief.py`  
-**Data:** Existing tools + repository methods  
-**Effort:** ~2 hours
+Original OCR items are saved to DB, then the in-memory list is replaced with VLM-cleaned items. All downstream consumers (rules engine, evidence bundle, marketing extraction) use cleaned OCR. The API `/ads/{id}/frames` returns original PaddleOCR items, but FTS search uses cleaned text — inconsistency.
 
-### 7. `ad_trend` agent tool
-"Show me ad volume by month for the last 6 months." Returns a time series of ingest counts grouped by month, optionally filtered by category/brand.
+**Fix**: Maintain dual OCR lists. Use originals for evidence validation; cleaned for FTS and marketing extraction. Or write VLM-corrected items with `engine="vlm_corrected"` so both are queryable.
 
-**Files:** `ad_classifier/agent/tools/ad_trend.py`  
-**Data:** `ads.ingested_at` + `ads.primary_category` from repository  
-**Effort:** ~1 hour
+### A6. European locale price misinterpretation
+**File**: `ad_classifier/marketing/offer_extraction.py:326-332`
 
-### 8. `top_offers` agent tool
-"What offers appear most frequently in automotive ads?" Returns the most common offer texts/patterns across ads, optionally filtered by category or brand.
+`_parse_amount` treats `"1.200"` as 1200.0 (US comma-thousands). In EU locales this means 1.20 Euros. Only US-locale ads with `$1,200`-style formatting should use comma-thousands.
 
-**Files:** `ad_classifier/agent/tools/top_offers.py`  
-**Data:** `marketing_entities.offers` JSON via repository  
-**Effort:** ~2 hours
+**Fix**: Only apply comma-thousands parsing when a currency symbol is present. Add locale awareness or at minimum require `$`/`€`/`£` prefix.
 
----
+### A7. Auto-specific price filters applied to all categories
+**File**: `ad_classifier/vlm/validation.py:95-114`
 
-## Would need small backend changes
+`_NON_PRICE_CONTEXT` includes auto-dealership terms (cash allowance, dealer fee, per $1,000 financed). For non-automotive ads (furniture, insurance), legitimate prices get suppressed.
 
-### 9. Real-time pipeline dashboard
-Show worker status, queue depth, ads processed per minute, failure rate. A `/api/worker/stats` endpoint returning job queue metrics + a dashboard page.
+**Fix**: Gate `_filter_non_vehicle_prices` behind `primary_category == "automotive"`.
 
-**Files:** `api/routes/worker.py`, new frontend page  
-**Data:** `jobs` table  
-**Effort:** ~4 hours
+### A8. OCR dedup always keeps first frame, losing later higher-quality text
+**File**: `ad_classifier/vlm/verifier.py:331-354`
 
-### 10. Bulk CSV export
-"Export all ads matching filter X as CSV." A `GET /api/ads/export?category=automotive` that returns `text/csv` with flat ad fields + marketing entity summary.
+`_dedupe_ocr_text` marks later occurrences as duplicates and replaces with "(repeats above)". But later frames (e.g., end cards with full legal text) often have more complete OCR than earlier partial views.
 
-**Files:** `api/routes/ads.py`, frontend button  
-**Data:** Existing repository methods  
-**Effort:** ~2 hours
+**Fix**: When deduplicating, keep the version with longer text rather than always keeping the first occurrence.
 
-### 11. Keyword timestamp browser
-Search for a word across all OCR/transcript, get back a timeline of where it appears in each ad. "Find me all ads that mention 'warranty'" with clickable timestamps.
+### A9. VLM salvage parser can match keys inside string values
+**File**: `ad_classifier/vlm/verifier.py:124-174`
 
-**Files:** `api/routes/ads.py` (search endpoint), frontend page  
-**Data:** `ocr_items.text` + `transcript_segments.text` via FTS  
-**Effort:** ~3 hours
+`raw.find('"marketing_entities"')` can match inside a string like `"summary": "The ad includes marketing_entities such as..."`, causing garbage parsing.
+
+**Fix**: Search for `"marketing_entities": {` (key followed by object start) instead of bare key name.
+
+### A10. Character-level similarity metric over-deduplicates distinct offers
+**File**: `ad_classifier/marketing/offer_extraction.py:591-599`
+
+`_text_similarity_ratio` counts character overlap divided by longer string length. Two completely different offers with shared vocabulary ("0% APR financing" vs "0% APR for 60 months") score very highly and get deduped incorrectly.
+
+**Fix**: Use token-level Jaccard similarity or Levenshtein distance ratio instead.
 
 ---
 
-## Highest demo impact picks
+## Medium-Severity Issues
 
-| # | Feature | Effort | Demo wow factor |
-|---|---------|--------|----------------|
-| 1 | Share of Voice donut | 1h | ★★★★★ (instant visual data) |
-| 6 | `competitive_brief` tool | 2h | ★★★★★ (feels like real analysis) |
-| 4 | Brand Adjacency Network | 3h | ★★★★☆ (impressive graph viz) |
-| 10 | Bulk CSV export | 2h | ★★★☆☆ ("we can take this to Excel") |
-| 2 | Timeline heatmap | 2h | ★★★☆☆ (shows activity patterns) |
+### A11. Brand normalization mangles known brand capitalization
+**File**: `ad_classifier/marketing/brand.py:52-55`
+
+`_title_case` turns "IPHONE" → "Iphone" (should be "iPhone"), "MACBOOK" → "Macbook" (should be "MacBook"). The alias map is too small (6 brands).
+
+**Fix**: Expand `brands_aliases.yaml` significantly, especially for tech and automotive brands.
+
+### A12. VLM `decision` field computed but never persisted
+The `decision` column exists in the `ads` DB table and VLM returns it, but `aggregate()` never writes it. Dead column.
+
+**Fix**: Either remove the column and VLM field, or persist the VLM decision.
+
+### A13. 320px image compression makes small VLM text unreadable
+**File**: `ad_classifier/vlm/verifier.py:305-319`
+
+`_encode_image` resizes to max 320px at 85% JPEG quality. For ad disclaimer text, phone numbers, and URLs, this can make critical detail illegible to the VLM.
+
+**Fix**: Make `max_dim` and JPEG quality configurable. Consider 512px for text-heavy categories or as a second zoom pass.
+
+### A14. Self-correction index-based removal has no bounds checking
+**File**: `ad_classifier/vlm/correction.py:122-132`
+
+`prices_to_remove`, `offers_to_remove`, `ctas_to_remove` are used as direct list indices without bounds validation. Off-by-one LLM errors silently remove wrong items.
+
+**Fix**: Add bounds checking and log out-of-range indices.
+
+---
+
+## Demo-Feature Gaps (Highest Impact for Marketing Researchers)
+
+### D1. `related_ads` computed but never persisted
+**File**: `ad_classifier/worker/stages.py:202-208`
+
+`enrich_related_ads()` computes similarity verdicts (near_duplicate, same_campaign_different_offer, etc.) but they're never written to the DB. The `/ads/{id}/similar` endpoint re-computes on the fly with potentially different results.
+
+**Impact**: This is the most valuable competitive intelligence data — "show me ads that are variants of the same campaign." It's computed and thrown away.
+
+**Fix**: Persist `related_ads` results. Add a `related_ads` table or store as JSON in the classification.
+
+### D2. No aggregate statistics endpoint
+There's no API endpoint for: category distribution, brand frequency, offer type counts, average prices, risk label distribution, or any dashboard-worthy statistics. The agent can do `aggregate` via SQL, but the REST API can't.
+
+**Impact**: Marketing researchers need "how many ads mention brand X" or "most common offers in automotive."
+
+**Fix**: Add `/api/stats` endpoint returning pre-computed aggregates (category counts, brand counts, offer type distribution, CTA distribution, risk label distribution).
+
+### D3. Transcript segments not in API
+Transcript data (speech content with timestamps) is stored but has no API endpoint.
+
+**Fix**: Add `/ads/{id}/transcript` endpoint.
+
+### D4. OCR items not queryable per-ad through a direct endpoint
+OCR items require joining through frame IDs. No direct `/ads/{id}/ocr` endpoint exists.
+
+**Fix**: Add `/ads/{id}/ocr` endpoint that returns all OCR items for an ad.
+
+### D5. No sentiment/tone detection
+The VLM sees every ad but never reports emotional strategy (aspirational, humorous, urgent, fear-based, comforting). This is core marketing intelligence.
+
+**Fix**: Add `tone` field to `MarketingEntities` and `CreativeAttributes`, prompt the VLM to classify ad tone.
+
+### D6. No target audience/demographic inference
+The VLM could estimate target demographics (age range, gender, lifestyle segment) from ad content. Not currently extracted.
+
+**Fix**: Add `target_audience` field to `MarketingEntities`, prompt VLM for audience inference.
+
+### D7. Creative attributes not filterable
+`creative_attributes` (format, aspect_ratio, voiceover, disclaimer_density) are stored but have no API filter. Researchers can't query "show me all before_after ads" or "ads with disclaimer_density=high."
+
+**Fix**: Add `creative_format`, `has_voiceover`, `disclaimer_density` as query params on `/ads`.
+
+### D8. Risk labels not searchable via REST
+`risk_labels` stored as JSON array with no index and no API filter. Agent can query via SQL, but REST API cannot.
+
+**Fix**: Add `risk_labels` filter to `/ads` endpoint query params.
+
+---
+
+## Quick Wins (Highest Impact / Lowest Effort)
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| 1 | Persist related_ads to DB | 2h | ★★★★★ — "show me campaign variants" is the killer demo feature |
+| 2 | Add `/api/stats` aggregation endpoint | 3h | ★★★★★ — dashboard-ready data |
+| 3 | Map VLM offer fields into OfferTerms (A2) | 2h | ★★★★☆ — offer expiry, promo codes, urgency are gold for researchers |
+| 4 | Fix brand validation no-op (A4) | 15min | ★★★★☆ — brands appearing when they shouldn't |
+| 5 | Fix rating count parsing (A3) | 30min | ★★★☆☆ — garbage numbers undermine credibility |
+| 6 | Add sentiment/tone to VLM prompt | 2h | ★★★★☆ — emotional strategy is what researchers care about |
+| 7 | Add target audience to VLM prompt | 2h | ★★★★☆ — "who is this ad targeting?" is a top research question |
+| 8 | Improve OCR dedup to keep longer text (A8) | 1h | ★★★☆☆ — end-card legal text gets lost |
+| 9 | Make image resolution configurable (A13) | 1h | ★★★☆☆ — small text legibility directly affects accuracy |
+| 10 | Add `/ads/{id}/transcript` and `/ads/{id}/ocr` endpoints | 2h | ★★★☆☆ — makes full ad data accessible |
