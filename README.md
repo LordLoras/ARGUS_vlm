@@ -8,7 +8,6 @@ Local-first multimodal ad classification · marketing-entity extraction ·
 campaign tracking · hybrid search · NL agent
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20%2B%20FTS5%20%2B%20sqlite--vec-473B5E?logo=sqlite&logoColor=white)](https://www.sqlite.org)
 
 </div>
@@ -176,13 +175,15 @@ pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenize
 
 ### AMD GPU (ROCm on Windows)
 
-A pre-installed GPU PyTorch build may already be in `.venv`. **Do not reinstall torch** — it will replace the GPU wheel with a CPU build.
+AMD GPU support on Windows requires PyTorch wheels built specifically for ROCm. Follow the official guide at [AMD ROCm PyTorch for Windows](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html) to install the correct build.
+
+**Do not run `pip install torch`** — it will replace the GPU wheel with a CPU build. If torch is already installed in `.venv`, leave it alone.
 
 ```powershell
 # Verify existing torch
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 
-# If torch is not installed, install the ROCm wheel manually, then:
+# Install embedding dependencies without touching torch:
 pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 ```
 
@@ -194,13 +195,17 @@ Then set `image_embedder.enabled: true` and `image_embedder.device: cuda` in con
 
 ARGUS needs a vision-capable VLM that accepts OpenAI-format chat completions with `image_url` content blocks.
 
-### Local (LM Studio)
+### Local (llama.cpp or compatible)
 
-1. Download a vision model (Qwen2.5-VL-7B, Qwen3.6-VL, Gemma 3, etc.)
-2. Start LM Studio server on port 1234
-3. Set `vlm.mode: local` in config
+Any OpenAI-compatible inference server works — llama.cpp server, LM Studio, vLLM, ollama, etc. The endpoint must support the `/v1/chat/completions` format with `image_url` content blocks.
 
-**Tip:** For local LLM servers (llama.cpp, LM Studio), use `response_format: json_object` — `json_schema` structured output is unreliable with quantized models.
+1. Start your inference server (e.g., llama.cpp with Vulkan or CUDA support)
+2. Set `vlm.mode: local` and point `vlm.local.endpoint` to your server
+3. Make sure the model is vision-capable (Qwen2.5-VL, Qwen3.6-VL, Gemma 3, etc.)
+
+**For llama.cpp servers:** add `--timeout 600 --n-predict 8192` to avoid generation timeouts.
+
+**Tip:** For quantized models on llama.cpp, use `response_format: json_object` — `json_schema` structured output is unreliable with smaller/quantized models.
 
 ### Remote
 
@@ -314,9 +319,3 @@ taxonomy.yaml         Ad categories and risk labels
 **SigLIP/torch import error:** Set `image_embedder.enabled: false` in config to skip visual embeddings, or install torch with GPU support.
 
 **`json_schema` not working with local model:** Switch to `response_format: json_object` for quantized models. The `json_schema` format requires frontier models.
-
----
-
-## License
-
-MIT
