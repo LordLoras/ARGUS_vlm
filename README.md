@@ -80,14 +80,9 @@ cd adscope-local
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# Install core package
-pip install -e .
-
-# Install optional components (pick what you need):
-pip install -e ".[ocr]"       # PaddleOCR — required for ad processing
-pip install paddlepaddle      # install BEFORE paddleocr on Windows
-pip install -e ".[whisper]"   # faster-whisper (alternative to whisper.cpp)
-pip install -e ".[dev]"       # pytest, ruff, black, mypy
+# Install everything (core + optional components — all are small):
+pip install -e ".[ocr,whisper,dev]"
+pip install paddlepaddle      # must install BEFORE paddleocr on Windows
 ```
 
 ### 2. Whisper.cpp (included)
@@ -163,8 +158,10 @@ The pipeline works fully on CPU. Visual embeddings (SigLIP 2) are optional and r
 ```yaml
 image_embedder:
   enabled: false   # set to true when torch is installed
-  device: cpu      # or "cuda" / "rocm"
+  device: cpu      # "cuda" works for both NVIDIA and AMD (with ROCm wheels)
 ```
+
+Set `device: cuda` on any GPU — NVIDIA CUDA and AMD ROCm both work with the appropriate PyTorch wheel.
 
 ### NVIDIA GPU
 
@@ -202,6 +199,8 @@ Any OpenAI-compatible inference server works — llama.cpp server, LM Studio, vL
 1. Start your inference server (e.g., llama.cpp with Vulkan or CUDA support)
 2. Set `vlm.mode: local` and point `vlm.local.endpoint` to your server
 3. Make sure the model is vision-capable (Qwen2.5-VL, Qwen3.6-VL, Gemma 3, etc.)
+
+**Model compatibility:** The Qwen family (Qwen2.5-VL, Qwen3.6-VL) works best — it follows instructions reliably and produces structured JSON output. Other instruct-tuned vision models may work but field names and response shapes can vary, especially at lower quantizations. Higher quant (Q5_K_M, Q6_K, Q8_0) produces significantly more accurate and consistent results than IQ3 or Q4.
 
 **For llama.cpp servers:** use `response_format: json_object` — `json_schema` structured output is unreliable with smaller/quantized models.
 
