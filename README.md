@@ -80,8 +80,8 @@ cd adscope-local
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# Install everything (core + optional components — all are small):
-pip install -e ".[ocr,whisper,dev]"
+# Install everything (core + OCR + dev tools):
+pip install -e ".[ocr,dev]"
 pip install paddlepaddle      # must install BEFORE paddleocr on Windows
 ```
 
@@ -217,7 +217,7 @@ Set `vlm.mode: remote` and point the endpoint to your server. Tested with:
 | Section | Key | Default | Description |
 |---|---|---|---|
 | `paths` | `data_root` | `./data` | Root for all data dirs |
-| `whisper` | `backend` | `whisper_cpp` | `whisper_cpp`, `faster-whisper`, or `mock` |
+| `whisper` | `backend` | `whisper_cpp` | `whisper_cpp` (bundled, Vulkan), `faster-whisper` (pip extra), or `mock` |
 | `whisper` | `model` | `tiny.en` | Whisper model name |
 | `ocr` | `device` | `cpu` | PaddleOCR device (CPU recommended on Windows) |
 | `vlm` | `mode` | `local` | `local` or `remote` — flips both VLM and agent |
