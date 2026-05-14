@@ -675,6 +675,13 @@ Useful query examples:
 - `mobile app screen`
 - `before and after comparison`
 
+Typed visual queries are expanded into a small set of visual phrases, but ARGUS
+searches those phrases separately and keeps the best cosine match per ad. It
+does not average `car`, `automobile`, `vehicle`, etc. into one diluted query
+vector. Broad category terms such as `car`, `suv`, and `doctor` also use the
+same lightweight query-intent filter as hybrid search to reduce unrelated
+category bleed after the visual score gate.
+
 For existing ads processed before per-frame indexing was added, backfill visual
 frame vectors with:
 

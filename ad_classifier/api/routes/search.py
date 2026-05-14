@@ -14,13 +14,14 @@ from ad_classifier.search.hybrid import hybrid_search
 from ad_classifier.search.results import (
     cosine_similarity,
     filter_by_min_score,
+    filter_by_min_score_any,
     filter_by_query_intent,
     filter_hits,
     group_frame_hits,
     rerank_hits,
 )
 from ad_classifier.search.rrf import rrf_fuse
-from ad_classifier.search.visual_query import expand_visual_query_texts, mean_pool
+from ad_classifier.search.visual_query import expand_visual_query_texts
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 router = APIRouter(tags=["search"])
@@ -95,12 +96,14 @@ def search_ads(
                 }
 
         if mode == "visual":
+            visual_k = _visual_candidate_k(k)
             if ad_id:
                 vector = store.get_visual(ad_id)
+                vectors = [vector] if vector is not None else []
                 source = "visual_seed"
             elif q:
                 try:
-                    vector = _embed_visual_query(config, q)
+                    vectors = _embed_visual_queries(config, q)
                 except Exception as exc:
                     raise HTTPException(
                         status_code=503,
@@ -112,23 +115,26 @@ def search_ads(
                     status_code=400,
                     detail="q or ad_id is required for visual search",
                 )
-            if vector is None:
+            if not vectors:
                 raise HTTPException(status_code=404, detail="visual vector not found")
-            frame_hits = store.search_frame_visual(vector, k=k * 8)
-            hits = group_frame_hits(frame_hits, source=source, exclude_ad_id=ad_id)
+            hits = _visual_hits_for_vectors(store, vectors, k=visual_k, source=source, ad_id=ad_id)
             if not hits:
-                hits = [
-                    {"ad_id": found_id, "distance": distance, "source": source}
-                    for found_id, distance in store.search_visual(vector, k=k * 8)
-                    if found_id != ad_id
-                ]
+                hits = _ad_visual_hits_for_vectors(
+                    store, vectors, k=visual_k, source=source, ad_id=ad_id
+                )
             total_before = len(hits)
-            hits = filter_by_min_score(
-                store, hits, vector, min_score=config.search.visual_min_score, modality="visual"
+            hits = filter_by_min_score_any(
+                store,
+                hits,
+                vectors,
+                min_score=config.search.visual_min_score,
+                modality="visual",
             )
             filtered_count = total_before - len(hits)
+            hits = _sort_visual_scores(hits)
             if rerank and q:
                 hits = rerank_hits(conn, hits, q)
+            hits = filter_by_query_intent(conn, hits, q)
             hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
             return {
                 "mode": mode,
@@ -177,38 +183,40 @@ def search_ads(
             }
 
         if mode == "visual_hybrid":
+            visual_k = _visual_candidate_k(k)
             if not q:
                 raise HTTPException(
                     status_code=400, detail="q is required for visual hybrid search"
                 )
             try:
-                vector = _embed_visual_query(config, q)
+                vectors = _embed_visual_queries(config, q)
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,
                     detail=f"visual text embedder unavailable: {exc}",
                 ) from exc
-            if vector is None:
+            if not vectors:
                 raise HTTPException(status_code=503, detail="visual text embedder unavailable")
             fts_results = fts_search_expanded(conn, q, limit=k * 8)
             fts_ids = {ad_id for ad_id, _score in fts_results}
             fts_rank = {ad_id: i + 1 for i, (ad_id, _score) in enumerate(fts_results)}
-            frame_hits = store.search_frame_visual(vector, k=k * 8)
-            visual_hits = group_frame_hits(frame_hits, source="visual_text")
+            visual_hits = _visual_hits_for_vectors(
+                store, vectors, k=visual_k, source="visual_text"
+            )
             if not visual_hits:
-                visual_hits = [
-                    {"ad_id": found_id, "distance": distance, "source": "visual_text"}
-                    for found_id, distance in store.search_visual(vector, k=k * 8)
-                ]
+                visual_hits = _ad_visual_hits_for_vectors(
+                    store, vectors, k=visual_k, source="visual_text"
+                )
             total_before = len(visual_hits)
-            visual_hits = filter_by_min_score(
+            visual_hits = filter_by_min_score_any(
                 store,
                 visual_hits,
-                vector,
+                vectors,
                 min_score=config.search.visual_hybrid_min_score,
                 modality="visual",
             )
             filtered_count = total_before - len(visual_hits)
+            visual_hits = _sort_visual_scores(visual_hits)
             visual_by_ad = {hit["ad_id"]: hit for hit in visual_hits}
             fused = rrf_fuse(
                 [ad_id for ad_id, _score in fts_results],
@@ -289,17 +297,79 @@ def search_ads(
         conn.close()
 
 
-def _embed_visual_query(config, query: str) -> list[float] | None:
+def _embed_visual_queries(config, query: str) -> list[list[float]]:
     embedder = _visual_text_embedder(
         config.image_embedder.model,
         config.image_embedder.device,
     )
     texts = expand_visual_query_texts(query)
     if not texts:
-        return None
-    if hasattr(embedder, "embed_text_batch"):
-        return mean_pool(embedder.embed_text_batch(texts))
-    return mean_pool([embedder.embed_text(text) for text in texts])
+        return []
+    return [embedder.embed_text(text) for text in texts]
+
+
+def _visual_candidate_k(k: int) -> int:
+    return min(max(k * 32, 256), 2000)
+
+
+def _visual_hits_for_vectors(
+    store: SqliteVecStore,
+    vectors: list[list[float]],
+    *,
+    k: int,
+    source: str,
+    ad_id: str | None = None,
+) -> list[dict[str, Any]]:
+    by_ad: dict[str, dict[str, Any]] = {}
+    for vector in vectors:
+        for hit in group_frame_hits(
+            store.search_frame_visual(vector, k=k),
+            source=source,
+            exclude_ad_id=ad_id,
+        ):
+            _merge_visual_hit(by_ad, hit)
+    return sorted(by_ad.values(), key=lambda row: float(row.get("distance", 999.0)))
+
+
+def _ad_visual_hits_for_vectors(
+    store: SqliteVecStore,
+    vectors: list[list[float]],
+    *,
+    k: int,
+    source: str,
+    ad_id: str | None = None,
+) -> list[dict[str, Any]]:
+    by_ad: dict[str, dict[str, Any]] = {}
+    for vector in vectors:
+        for found_id, distance in store.search_visual(vector, k=k):
+            if found_id == ad_id:
+                continue
+            _merge_visual_hit(
+                by_ad,
+                {"ad_id": found_id, "distance": distance, "source": source},
+            )
+    return sorted(by_ad.values(), key=lambda row: float(row.get("distance", 999.0)))
+
+
+def _merge_visual_hit(by_ad: dict[str, dict[str, Any]], hit: dict[str, Any]) -> None:
+    ad_id = str(hit["ad_id"])
+    existing = by_ad.get(ad_id)
+    if existing is None:
+        by_ad[ad_id] = dict(hit)
+        return
+    if float(hit.get("distance", 999.0)) < float(existing.get("distance", 999.0)):
+        existing["distance"] = hit.get("distance")
+    frames = existing.setdefault("matched_frames", [])
+    seen = {int(frame["frame_index"]) for frame in frames if frame.get("frame_index") is not None}
+    for frame in hit.get("matched_frames", []):
+        frame_index = int(frame["frame_index"])
+        if frame_index not in seen and len(frames) < 3:
+            frames.append(frame)
+            seen.add(frame_index)
+
+
+def _sort_visual_scores(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(hits, key=lambda row: float(row.get("score", -1.0)), reverse=True)
 
 
 def _hydrate_hits(conn, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:

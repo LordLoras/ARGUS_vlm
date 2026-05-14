@@ -290,6 +290,23 @@ def filter_by_min_score(
     min_score: float,
     modality: str,
 ) -> list[dict[str, Any]]:
+    return filter_by_min_score_any(
+        store,
+        hits,
+        [query_vector],
+        min_score=min_score,
+        modality=modality,
+    )
+
+
+def filter_by_min_score_any(
+    store: SqliteVecStore,
+    hits: list[dict[str, Any]],
+    query_vectors: list[list[float]],
+    *,
+    min_score: float,
+    modality: str,
+) -> list[dict[str, Any]]:
     """Remove hits below a cosine-similarity threshold.
 
     For visual modality, computes the max similarity across each hit's
@@ -301,7 +318,9 @@ def filter_by_min_score(
 
     Returns the filtered list (preserving original order).
     """
-    if min_score <= 0 or not hits:
+    if not query_vectors or not hits:
+        return []
+    if min_score <= 0:
         return hits
 
     ad_getter = store.get_visual if modality == "visual" else store.get_text
@@ -323,17 +342,20 @@ def filter_by_min_score(
         best_frame_sim: float | None = None
 
         stored_ad = ad_getter(hit["ad_id"])
-        if stored_ad is not None:
-            ad_sim = cosine_similarity(query_vector, stored_ad)
+        for query_vector in query_vectors:
+            if stored_ad is not None:
+                current_ad_sim = cosine_similarity(query_vector, stored_ad)
+                if ad_sim is None or current_ad_sim > ad_sim:
+                    ad_sim = current_ad_sim
 
-        if modality == "visual":
-            for frame in hit.get("matched_frames", []):
-                fk = SqliteVecStore.frame_key(hit["ad_id"], int(frame["frame_index"]))
-                fv = frame_vectors.get(fk)
-                if fv is not None:
-                    frame_sim = cosine_similarity(query_vector, fv)
-                    if best_frame_sim is None or frame_sim > best_frame_sim:
-                        best_frame_sim = frame_sim
+            if modality == "visual":
+                for frame in hit.get("matched_frames", []):
+                    fk = SqliteVecStore.frame_key(hit["ad_id"], int(frame["frame_index"]))
+                    fv = frame_vectors.get(fk)
+                    if fv is not None:
+                        frame_sim = cosine_similarity(query_vector, fv)
+                        if best_frame_sim is None or frame_sim > best_frame_sim:
+                            best_frame_sim = frame_sim
 
         best_sim = ad_sim
         if best_frame_sim is not None and (best_sim is None or best_frame_sim > best_sim):
