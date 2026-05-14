@@ -279,18 +279,23 @@ PaddleOCR remains the grounded raw OCR engine. You can turn it off with
 `ocr.enabled: false`, but the only raw OCR backend supported here is local
 PaddleOCR.
 
-GLM-OCR is optional and is intended for text-heavy frames, end cards, article
-graphics, and CTA screens. It is stored separately with engine `glm_ocr` in
-`ocr_items` and included in search text when `glm_ocr.include_in_search: true`.
-It is not included in the classifier VLM bundle unless
-`glm_ocr.include_in_vlm_bundle: true`.
+GLM-OCR is intended for text-heavy frames, end cards, article graphics, and CTA
+screens. If you keep a local GLM-OCR server running, enable it for normal local
+ingestion; the worker calls it on demand only for frames selected by the gating
+rules. It is stored separately with engine `glm_ocr` in `ocr_items` and included
+in search text when `glm_ocr.include_in_search: true`. It is not included in the
+classifier VLM bundle unless `glm_ocr.include_in_vlm_bundle: true`.
 
-For a local llama.cpp server:
+The template leaves `glm_ocr.enabled: false` so a fresh install does not depend
+on a second local model server. For this local setup, where llama.cpp serves
+GLM-OCR on port `5050`, use:
 
 ```yaml
 glm_ocr:
   enabled: true
   mode: local
+  include_in_search: true
+  include_in_vlm_bundle: false
   local:
     endpoint: "http://127.0.0.1:5050/v1"
     model: "glm-ocr"

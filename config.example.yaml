@@ -63,7 +63,9 @@ glm_ocr:
   # Optional document/OCR-VL pass for text-heavy frames. Output is stored
   # separately as ocr_items.engine = "glm_ocr" and included in search text
   # when include_in_search is true. It is not used as grounded OCR evidence
-  # for rules/marketing unless you explicitly wire that downstream.
+  # for rules/marketing unless you explicitly wire that downstream. Keep false
+  # in the template so fresh installs do not require a GLM-OCR server; enable
+  # for normal local ingestion when llama.cpp serves GLM-OCR on port 5050.
   enabled: false
   mode: local                 # local | remote
   prompt: "Text Recognition:"
