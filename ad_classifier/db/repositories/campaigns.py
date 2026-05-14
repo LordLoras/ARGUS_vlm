@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from ad_classifier.db.repositories.base import db_value, row_to_dict
 from ad_classifier.models.campaigns import AdCampaignRecord, CampaignRecord
 
+_UNSET = object()
+
 
 def _campaign_from_row(row: sqlite3.Row) -> CampaignRecord:
     data = row_to_dict(row)
@@ -157,26 +159,26 @@ class CampaignRepository:
         self,
         campaign_id: str,
         *,
-        name: str | None = None,
-        advertiser: str | None = None,
-        brand: str | None = None,
-        theme: str | None = None,
-        start_date: object | None = None,
-        end_date: object | None = None,
-        description: str | None = None,
+        name: object = _UNSET,
+        advertiser: object = _UNSET,
+        brand: object = _UNSET,
+        theme: object = _UNSET,
+        start_date: object = _UNSET,
+        end_date: object = _UNSET,
+        description: object = _UNSET,
     ) -> CampaignRecord | None:
         existing = self.get(campaign_id)
         if existing is None:
             return None
 
         values = {
-            "name": existing.name if name is None else name,
-            "advertiser": existing.advertiser if advertiser is None else advertiser,
-            "brand": existing.brand if brand is None else brand,
-            "theme": existing.theme if theme is None else theme,
-            "start_date": existing.start_date if start_date is None else start_date,
-            "end_date": existing.end_date if end_date is None else end_date,
-            "description": existing.description if description is None else description,
+            "name": existing.name if name is _UNSET else name,
+            "advertiser": existing.advertiser if advertiser is _UNSET else advertiser,
+            "brand": existing.brand if brand is _UNSET else brand,
+            "theme": existing.theme if theme is _UNSET else theme,
+            "start_date": existing.start_date if start_date is _UNSET else start_date,
+            "end_date": existing.end_date if end_date is _UNSET else end_date,
+            "description": existing.description if description is _UNSET else description,
         }
         self.conn.execute(
             """

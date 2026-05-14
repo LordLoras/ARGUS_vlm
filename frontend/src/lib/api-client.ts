@@ -7,6 +7,7 @@ import type {
   AgentSession,
   AgentStreamEvent,
   Campaign,
+  CampaignDetail,
   FrameRecord,
   JobStreamEvent,
   JobRecord,
@@ -131,6 +132,20 @@ export const api = {
   createCampaign: (body: Partial<Campaign> & { name: string }) =>
     apiFetch<Campaign>("/api/campaigns", { method: "POST", body: JSON.stringify(body) }),
 
+  getCampaign: (campaignId: string) =>
+    apiFetch<CampaignDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}`),
+
+  updateCampaign: (campaignId: string, body: Partial<Campaign>) =>
+    apiFetch<Campaign>(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+
+  deleteCampaign: (campaignId: string) =>
+    apiFetch<{ deleted: string }>(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+      method: "DELETE"
+    }),
+
   discoverCampaigns: () =>
     apiFetch<{ campaigns?: Campaign[]; discovered?: unknown[]; proposals?: unknown[] }>("/api/campaigns/discover", {
       method: "POST"
@@ -143,10 +158,16 @@ export const api = {
     }),
 
   assignAdsToCampaign: (campaignId: string, adIds: string[]) =>
-    apiFetch<{ campaign_id: string; assigned: string[] }>(`/api/campaigns/${campaignId}/ads`, {
+    apiFetch<{ campaign_id: string; assigned: string[] }>(`/api/campaigns/${encodeURIComponent(campaignId)}/ads`, {
       method: "POST",
       body: JSON.stringify({ ad_ids: adIds })
     }),
+
+  unassignAdFromCampaign: (campaignId: string, adId: string) =>
+    apiFetch<{ campaign_id: string; unassigned: string }>(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/ads/${encodeURIComponent(adId)}`,
+      { method: "DELETE" }
+    ),
 
   listAgentSessions: () =>
     apiFetch<{ items: AgentSession[]; limit: number; offset: number }>("/api/agent/sessions"),

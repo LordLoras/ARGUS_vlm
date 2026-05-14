@@ -124,6 +124,91 @@ export type Campaign = {
   last_seen?: string | null;
 };
 
+export type CampaignCount = {
+  value: string;
+  count: number;
+  share?: number | null;
+};
+
+export type CampaignInsight = {
+  kind?: string | null;
+  title: string;
+  detail: string;
+};
+
+export type CampaignAd = {
+  ad_id: string;
+  campaign_id?: string | null;
+  similarity_score?: number | null;
+  assigned_by?: string | null;
+  assigned_at?: string | null;
+  source_path?: string | null;
+  ingested_at?: string | null;
+  duration_ms?: number | null;
+  status?: string | null;
+  brand_name?: string | null;
+  advertiser_name?: string | null;
+  products?: string[];
+  products_text?: string | null;
+  primary_category?: string | null;
+  subcategory?: string | null;
+  confidence?: number | null;
+  risk_labels?: string[];
+  offers?: string[];
+  ctas?: string[];
+  prices?: string[];
+  disclaimer_count?: number | null;
+  small_print_count?: number | null;
+};
+
+export type CampaignResearch = {
+  summary: {
+    ad_count: number;
+    user_assigned?: number;
+    auto_assigned?: number;
+    mean_similarity?: number | null;
+    avg_confidence?: number | null;
+    min_confidence?: number | null;
+    first_seen?: string | null;
+    last_seen?: string | null;
+    span_days?: number | null;
+    brands: CampaignCount[];
+    advertisers: CampaignCount[];
+    categories: CampaignCount[];
+    subcategories: CampaignCount[];
+  };
+  messaging: {
+    top_products: CampaignCount[];
+    top_offers: CampaignCount[];
+    top_ctas: CampaignCount[];
+    top_prices: CampaignCount[];
+    campaign_signals: CampaignCount[];
+  };
+  creative: {
+    aspect_ratios: CampaignCount[];
+    formats: CampaignCount[];
+    voiceover_ads: number;
+    on_screen_text_ads: number;
+    disclaimer_ads: number;
+    small_print_ads: number;
+    disclaimer_density: CampaignCount[];
+  };
+  watchouts: {
+    risk_labels: CampaignCount[];
+    disclaimer_count: number;
+    small_print_count: number;
+    low_confidence_ads: string[];
+  };
+  insights: CampaignInsight[];
+  research_prompts: string[];
+};
+
+export type CampaignDetail = {
+  campaign: Campaign;
+  ads: CampaignAd[];
+  research: CampaignResearch;
+};
+
 export type AdDetail = {
   ad: AdRecord;
   classification?: ClassificationRecord | null;

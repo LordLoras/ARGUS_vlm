@@ -206,8 +206,62 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:
         conn.execute(
-            "INSERT INTO ads (id, source_path, ingested_at) VALUES (?, ?, ?)",
-            ("ad_campaign", "/tmp/ad.mp4", datetime.now(UTC).isoformat()),
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, brand_name, products_text, primary_category
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_campaign",
+                "/tmp/ad.mp4",
+                datetime.now(UTC).isoformat(),
+                "Jeep",
+                "Wrangler",
+                "automotive",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO marketing_entities (
+                ad_id, products_json, offers_json, ctas_json, disclaimers_json,
+                creative_format_json, creative_attributes_json, campaign_suggestions_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_campaign",
+                '["Wrangler"]',
+                '[{"text":"0% APR"}]',
+                '[{"text":"Shop now"}]',
+                '[{"text":"Offer terms apply", "is_small_print": true}]',
+                '{"has_voiceover": true, "has_on_screen_text": true, "aspect_ratio": "16:9"}',
+                '{"format": "offer_end_card", "disclaimer_density": "medium"}',
+                '[{"name":"Declaration of Deals","confidence":0.92}]',
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO classifications (
+                ad_id, primary_category, risk_labels_json, confidence,
+                ocr_quality_json, vlm_raw_json, evidence_json, vlm_model,
+                vlm_prompt_version, embedder_text_model, embedder_visual_model,
+                pipeline_version, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_campaign",
+                "automotive",
+                '["hidden_disclaimers"]',
+                0.82,
+                "{}",
+                "{}",
+                "[]",
+                "mock",
+                "test",
+                "text",
+                "visual",
+                "test",
+                datetime.now(UTC).isoformat(),
+            ),
         )
         conn.commit()
     finally:
@@ -226,10 +280,17 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     detail = client.get("/api/campaigns/c_test").json()
     assert detail["campaign"]["name"] == "Test Campaign"
     assert detail["ads"][0]["ad_id"] == "ad_campaign"
+    assert detail["ads"][0]["offers"] == ["0% APR"]
+    assert detail["research"]["summary"]["ad_count"] == 1
+    assert detail["research"]["messaging"]["top_products"][0]["value"] == "Wrangler"
+    assert detail["research"]["creative"]["small_print_ads"] == 1
 
     patched = client.patch("/api/campaigns/c_test", json={"theme": "summer"})
     assert patched.status_code == 200
     assert patched.json()["theme"] == "summer"
+    cleared = client.patch("/api/campaigns/c_test", json={"theme": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["theme"] is None
 
     unassign = client.delete("/api/campaigns/c_test/ads/ad_campaign")
     assert unassign.status_code == 200

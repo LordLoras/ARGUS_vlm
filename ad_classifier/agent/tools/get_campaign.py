@@ -4,7 +4,8 @@ from typing import Any
 
 from ad_classifier.agent.models import ToolResult
 from ad_classifier.agent.tools.base import AgentTool, ToolContext
-from ad_classifier.db.repositories import AdCampaignRepository, CampaignRepository
+from ad_classifier.campaigns.research import campaign_detail
+from ad_classifier.db.repositories import CampaignRepository
 
 
 class GetCampaignTool(AgentTool):
@@ -31,15 +32,12 @@ class GetCampaignTool(AgentTool):
             return ToolResult(
                 name=self.name, ok=False, error=f"campaign not found: {campaign_id}"
             )
-        ads = AdCampaignRepository(ctx.conn).list_for_campaign(campaign_id)
+        detail = campaign_detail(ctx.conn, campaign)
         return ToolResult(
             name=self.name,
             ok=True,
-            data={
-                "campaign": campaign.model_dump(mode="json"),
-                "ads": [a.model_dump(mode="json") for a in ads],
-            },
-            row_count=len(ads),
+            data=detail,
+            row_count=len(detail["ads"]),
         )
 
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.campaigns.discover import discover_campaigns
+from ad_classifier.campaigns.research import campaign_detail, campaign_rollup
 from ad_classifier.campaigns.suggestions import CampaignProposal, scan_campaign_proposals
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdCampaignRepository, CampaignRepository
@@ -82,7 +83,7 @@ def list_campaigns(
             offset=offset,
         )
         return {
-            "items": [_campaign_payload(conn, item) for item in items],
+            "items": [campaign_rollup(conn, item) for item in items],
             "limit": limit,
             "offset": offset,
         }
@@ -101,7 +102,7 @@ def create_campaign(body: CampaignCreate, request: Request) -> dict[str, Any]:
         campaign = CampaignRecord(id=campaign_id, **body_data, created_by="user")
         CampaignRepository(conn).create(campaign)
         conn.commit()
-        return _campaign_payload(conn, campaign)
+        return campaign_rollup(conn, campaign)
     finally:
         conn.close()
 
@@ -176,7 +177,7 @@ def accept_discovered(body: AcceptDiscoveryRequest, request: Request) -> dict[st
                             assigned_by="user",
                         )
                     )
-                accepted.append(_campaign_payload(conn, campaign))
+                accepted.append(campaign_rollup(conn, campaign))
         else:
             campaigns = repo.list(created_by="auto", limit=100)
             if selected_ids:
@@ -184,7 +185,7 @@ def accept_discovered(body: AcceptDiscoveryRequest, request: Request) -> dict[st
             for campaign in campaigns:
                 promoted = repo.promote_to_user(campaign.id)
                 if promoted is not None:
-                    accepted.append(_campaign_payload(conn, promoted))
+                    accepted.append(campaign_rollup(conn, promoted))
 
         conn.commit()
         return {"accepted": accepted}
@@ -197,11 +198,7 @@ def get_campaign(campaign_id: str, request: Request) -> dict[str, Any]:
     conn = open_request_db(request)
     try:
         campaign = _resolve_campaign(conn, campaign_id)
-        assignments = AdCampaignRepository(conn).list_for_campaign(campaign.id)
-        return {
-            "campaign": _campaign_payload(conn, campaign),
-            "ads": [_dump(item) for item in assignments],
-        }
+        return campaign_detail(conn, campaign)
     finally:
         conn.close()
 
@@ -212,9 +209,14 @@ def patch_campaign(campaign_id: str, body: CampaignPatch, request: Request) -> d
     try:
         repo = CampaignRepository(conn)
         current = _resolve_campaign(conn, campaign_id)
-        updated = repo.update(current.id, **body.model_dump(exclude_unset=True))
+        patch = body.model_dump(exclude_unset=True)
+        if "name" in patch and not (patch["name"] or "").strip():
+            raise HTTPException(status_code=400, detail="campaign name cannot be empty")
+        updated = repo.update(current.id, **patch)
         conn.commit()
-        return _dump(updated)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="campaign not found")
+        return campaign_rollup(conn, updated)
     finally:
         conn.close()
 
@@ -236,6 +238,9 @@ def assign_ads(campaign_id: str, body: AssignAdsRequest, request: Request) -> di
     conn = open_request_db(request)
     try:
         campaign = _resolve_campaign(conn, campaign_id)
+        missing = _missing_ads(conn, body.ad_ids)
+        if missing:
+            raise HTTPException(status_code=404, detail={"missing_ads": missing})
         repo = AdCampaignRepository(conn)
         repo.assign_many(campaign.id, body.ad_ids, assigned_by="user")
         conn.commit()
@@ -264,26 +269,17 @@ def _resolve_campaign(conn, campaign_id_or_name: str) -> CampaignRecord:
     return campaign
 
 
-def _campaign_payload(conn, campaign: CampaignRecord) -> dict[str, Any]:
-    payload = _dump(campaign)
-    row = conn.execute(
-        """
-        SELECT
-          COUNT(*) AS ad_count,
-          AVG(similarity_score) AS mean_similarity,
-          MIN(ads.ingested_at) AS first_seen,
-          MAX(ads.ingested_at) AS last_seen
-        FROM ad_campaigns
-        LEFT JOIN ads ON ads.id = ad_campaigns.ad_id
-        WHERE ad_campaigns.campaign_id = ?
-        """,
-        (campaign.id,),
-    ).fetchone()
-    payload["ad_count"] = int(row["ad_count"] or 0)
-    payload["mean_similarity"] = row["mean_similarity"]
-    payload["first_seen"] = row["first_seen"]
-    payload["last_seen"] = row["last_seen"]
-    return payload
+def _missing_ads(conn, ad_ids: list[str]) -> list[str]:
+    unique_ids = sorted(set(ad_ids))
+    if not unique_ids:
+        return []
+    placeholders = ",".join("?" for _ in unique_ids)
+    rows = conn.execute(
+        f"SELECT id FROM ads WHERE id IN ({placeholders})",
+        unique_ids,
+    ).fetchall()
+    found = {str(row["id"]) for row in rows}
+    return [ad_id for ad_id in unique_ids if ad_id not in found]
 
 
 def _proposal_from_discovered(item) -> CampaignProposal:
@@ -307,7 +303,3 @@ def _campaign_id(name: str, brand: str | None) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", raw.casefold()).strip("_") or "campaign"
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
     return f"c_{slug}_{digest}"[:96]
-
-
-def _dump(value):
-    return value.model_dump(mode="json") if hasattr(value, "model_dump") else value

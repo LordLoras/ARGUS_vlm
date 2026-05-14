@@ -4,8 +4,11 @@ import { CloseIcon, PlusIcon } from "../../lib/icons";
 
 export type CreateCampaignInput = {
   name: string;
+  advertiser?: string | null;
   brand?: string | null;
   theme?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
   description?: string | null;
 };
 
@@ -13,25 +16,37 @@ export function CreateCampaignDialog({
   open,
   onClose,
   onCreate,
-  saving
+  saving,
+  initial,
+  title = "New campaign",
+  submitLabel = "Create"
 }: {
   open: boolean;
   onClose: () => void;
   onCreate: (input: CreateCampaignInput) => void;
   saving?: boolean;
+  initial?: Partial<CreateCampaignInput>;
+  title?: string;
+  submitLabel?: string;
 }) {
   const [name, setName] = useState("");
+  const [advertiser, setAdvertiser] = useState("");
   const [brand, setBrand] = useState("");
   const [theme, setTheme] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [description, setDescription] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setName("");
-    setBrand("");
-    setTheme("");
-    setDescription("");
-  }, [open]);
+    setName(initial?.name ?? "");
+    setAdvertiser(initial?.advertiser ?? "");
+    setBrand(initial?.brand ?? "");
+    setTheme(initial?.theme ?? "");
+    setStartDate(initial?.start_date ?? "");
+    setEndDate(initial?.end_date ?? "");
+    setDescription(initial?.description ?? "");
+  }, [initial, open]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -39,8 +54,11 @@ export function CreateCampaignDialog({
     if (!trimmedName) return;
     onCreate({
       name: trimmedName,
+      advertiser: advertiser.trim() || null,
       brand: brand.trim() || null,
       theme: theme.trim() || null,
+      start_date: startDate || null,
+      end_date: endDate || null,
       description: description.trim() || null
     });
   };
@@ -52,7 +70,7 @@ export function CreateCampaignDialog({
           <span style={{ color: "var(--accent-2)" }}>
             <PlusIcon size={14} />
           </span>
-          <h3>New campaign</h3>
+          <h3>{title}</h3>
           <button
             type="button"
             className="btn btn-icon btn-ghost"
@@ -81,6 +99,14 @@ export function CreateCampaignDialog({
             />
           </label>
           <label>
+            <span>Advertiser</span>
+            <input
+              className="input"
+              value={advertiser}
+              onChange={(event) => setAdvertiser(event.target.value)}
+            />
+          </label>
+          <label>
             <span>Theme</span>
             <input
               className="input"
@@ -88,6 +114,26 @@ export function CreateCampaignDialog({
               onChange={(event) => setTheme(event.target.value)}
             />
           </label>
+          <div className="form-two">
+            <label>
+              <span>Start date</span>
+              <input
+                className="input"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>End date</span>
+              <input
+                className="input"
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+          </div>
           <label>
             <span>Description</span>
             <textarea
@@ -103,7 +149,7 @@ export function CreateCampaignDialog({
             Cancel
           </button>
           <button className="btn btn-primary" disabled={!name.trim() || saving} type="submit">
-            Create
+            {submitLabel}
           </button>
         </div>
       </form>

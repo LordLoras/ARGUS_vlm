@@ -7,12 +7,16 @@ export function CampaignCard({
   campaign,
   count,
   meanSimilarity,
-  range
+  range,
+  selected,
+  onSelect
 }: {
   campaign: Campaign;
   count?: number;
   meanSimilarity?: number;
   range?: string;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const seeds = deriveSeed(campaign.id);
   const adCount = count ?? campaign.ad_count ?? undefined;
@@ -23,7 +27,7 @@ export function CampaignCard({
     "--seed-b": shift(seeds.seedB, i)
   }) as CSSProperties);
   return (
-    <article className="cam-card">
+    <article className={`cam-card ${selected ? "selected" : ""}`} onClick={onSelect}>
       <div className="cam-card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <span className="name">{campaign.name}</span>
