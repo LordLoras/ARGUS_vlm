@@ -37,6 +37,9 @@ def answer_campaign_question(
     ]
     try:
         response = client.complete(messages, enable_thinking=thinking)
+        answer = (response.content or "").strip()
+        if not answer and response.finish_reason == "length" and thinking:
+            response = client.complete(messages, enable_thinking=False)
     except AgentClientError as exc:
         fallback = _local_question_answer(
             question,
@@ -154,6 +157,9 @@ def _local_question_answer(
         else:
             answer = "Local evidence does not support a specific campaign metadata edit yet."
         evidence = _finding_ad_ids(findings)
+    elif any(term in normalized for term in ("important", "main", "key", "priority", "priorities", "takeaway", "takeaways", "matter")):
+        answer = _important_findings_answer(detail, findings)
+        evidence = _finding_ad_ids(findings)
     elif any(term in normalized for term in ("product", "products", "sku", "variant")) or (
         "related" in normalized and any(term in normalized for term in ("campaign", "ad", "ads"))
     ):
@@ -197,6 +203,26 @@ def _local_question_answer(
         "limits": "Local fallback answer; no LLM, web, landing page, or competitor evidence was used.",
         "source": "local",
     }
+
+
+def _important_findings_answer(detail: dict[str, Any], findings: list[dict[str, Any]]) -> str:
+    research = detail["research"]
+    parts: list[str] = []
+    for finding in findings[:3]:
+        parts.append(str(finding["detail"]))
+    if not parts:
+        offer = first_count(research["messaging"]["top_offers"])
+        cta = first_count(research["messaging"]["top_ctas"])
+        product = first_count(research["messaging"]["top_products"])
+        if product:
+            parts.append(f"Leading product signal: {product['value']}.")
+        if offer:
+            parts.append(f"Leading offer: {offer['value']} in {offer['count']} ads.")
+        if cta:
+            parts.append(f"Leading CTA: {cta['value']} in {cta['count']} ads.")
+    if not parts:
+        return "There is not enough local campaign evidence to rank the most important points."
+    return "Most important local campaign points: " + " ".join(parts)
 
 
 def _product_relationship_answer(detail: dict[str, Any]) -> str:

@@ -70,7 +70,7 @@ export function Campaigns() {
         include_web: false,
         depth: "deep",
         question,
-        thinking: true
+        thinking: false
       })
   });
 
