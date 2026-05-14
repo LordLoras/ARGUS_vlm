@@ -36,6 +36,8 @@ _FALLBACK_TEMPLATE = (
     "- Always cite ad_ids and campaign_ids in your answer when referencing records.\n"
     "- If a tool returns truncated results, ask the user to narrow the filter.\n"
     "- Never fabricate ad_ids, brand names, or counts. If you don't know, call a tool.\n"
+    "- Use list_campaigns/get_campaign for curated campaigns; use list_ads.q or "
+    "hybrid_search for campaign-like phrases that may not be accepted yet.\n"
     "- Keep answers under 200 words unless asked for detail.\n"
 )
 

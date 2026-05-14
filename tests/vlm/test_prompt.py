@@ -26,3 +26,15 @@ def test_sensitive_categories_included():
     prompt = render_verifier_prompt()
     assert "healthcare_pharma" in prompt
     assert "banking_lending" in prompt
+
+
+def test_prompt_is_categorization_only():
+    prompt = render_verifier_prompt()
+    assert "CATEGORIZATION ONLY" in prompt
+    assert 'Set decision to "allow" and needs_human_review to false' in prompt
+
+
+def test_prompt_restricts_campaign_suggestion_names():
+    prompt = render_verifier_prompt()
+    assert "Campaign suggestions" in prompt
+    assert "Do NOT invent generic campaign buckets" in prompt

@@ -39,6 +39,7 @@ def _insert_ad(
     brand: str,
     products: list[str] | None = None,
     offer: str | None = None,
+    campaign_suggestions: list[dict] | None = None,
 ) -> None:
     conn.execute(
         """
@@ -55,13 +56,16 @@ def _insert_ad(
     )
     conn.execute(
         """
-        INSERT INTO marketing_entities (ad_id, products_json, offers_json)
-        VALUES (?, ?, ?)
+        INSERT INTO marketing_entities (
+            ad_id, products_json, offers_json, campaign_suggestions_json
+        )
+        VALUES (?, ?, ?, ?)
         """,
         (
             ad_id,
             json.dumps(products or []),
             json.dumps([{"text": offer}] if offer else []),
+            json.dumps(campaign_suggestions or []),
         ),
     )
 
@@ -184,3 +188,77 @@ def test_scan_campaign_proposals_does_not_persist(conn):
     assert proposal.ad_ids == ["ad_jeep_0", "ad_jeep_1", "ad_jeep_2"]
     assert CampaignRepository(conn).list() == []
     assert conn.execute("SELECT COUNT(*) FROM ad_campaigns").fetchone()[0] == 0
+
+
+def test_scan_campaign_proposals_uses_repeated_campaign_suggestions(conn):
+    for idx, name in enumerate(
+        ["Jeep Declaration of Deals", "Declaration of Deals", "Jeep Declaration of Deals"]
+    ):
+        _insert_ad(
+            conn,
+            f"ad_deals_{idx}",
+            brand="Jeep",
+            products=["Wrangler"],
+            offer="$299/mo",
+            campaign_suggestions=[{"name": name, "confidence": 0.92}],
+        )
+    for idx in range(2):
+        _insert_ad(
+            conn,
+            f"ad_other_{idx}",
+            brand="Jeep",
+            products=["Grand Cherokee"],
+            offer="$299/mo",
+        )
+    conn.commit()
+
+    store = FakeVisualStore(
+        {
+            "ad_deals_0": [1.0, 0.0],
+            "ad_deals_1": [0.999, 0.001],
+            "ad_deals_2": [0.998, 0.002],
+            "ad_other_0": [0.997, 0.003],
+            "ad_other_1": [0.996, 0.004],
+        }
+    )
+
+    result = scan_campaign_proposals(conn, store, config=_discovery_config())
+
+    proposal = next(p for p in result.proposals if "Declaration of Deals" in p.name)
+    assert proposal.name == "Jeep Declaration of Deals"
+    assert proposal.theme == "Declaration of Deals"
+    assert proposal.ad_ids == ["ad_deals_0", "ad_deals_1", "ad_deals_2"]
+    assert "extracted campaign signal" in (proposal.description or "")
+
+
+def test_discover_campaigns_persists_campaign_suggestion_groups(conn):
+    for idx, name in enumerate(
+        ["Jeep Declaration of Deals", "Declaration of Deals", "Jeep Declaration of Deals"]
+    ):
+        _insert_ad(
+            conn,
+            f"ad_deals_{idx}",
+            brand="Jeep",
+            products=["Wrangler"],
+            campaign_suggestions=[{"name": name, "confidence": 0.92}],
+        )
+    conn.commit()
+
+    store = FakeVisualStore(
+        {
+            "ad_deals_0": [1.0, 0.0],
+            "ad_deals_1": [0.999, 0.001],
+            "ad_deals_2": [0.998, 0.002],
+        }
+    )
+
+    result = discover_campaigns(conn, store, config=_discovery_config())
+    conn.commit()
+
+    assert len(result.discovered) == 1
+    discovered = result.discovered[0]
+    assert discovered.campaign.name == "Jeep Declaration of Deals"
+    assert discovered.campaign.theme == "Declaration of Deals"
+    assert discovered.ad_ids == ["ad_deals_0", "ad_deals_1", "ad_deals_2"]
+    assigned = AdCampaignRepository(conn).list_for_campaign(discovered.campaign.id)
+    assert {item.ad_id for item in assigned} == set(discovered.ad_ids)

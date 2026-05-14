@@ -147,7 +147,10 @@ class GLMOCRConfig(BaseModel):
 
     enabled: bool = False
     mode: Literal["local", "remote"] = "local"
-    prompt: str = "Text Recognition:"
+    prompt: str = (
+        "Transcribe all visible text exactly. Preserve line breaks and reading order. "
+        "Do not summarize or infer."
+    )
     image_max_dim: int = Field(default=1024, ge=128, le=2048)
     include_in_search: bool = True
     include_in_vlm_bundle: bool = False
@@ -213,6 +216,8 @@ class CampaignDiscoveryConfig(BaseModel):
     lookback_days: int = Field(default=90, ge=1)
     min_cluster_size: int = Field(default=3, ge=2)
     min_mean_similarity: float = Field(default=0.75, ge=0.0, le=1.0)
+    use_campaign_suggestions: bool = True
+    min_campaign_signal_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
     clusterer: Literal["hdbscan", "agglomerative"] = "hdbscan"
     name_template: str = "{brand} {month} {year}"
 

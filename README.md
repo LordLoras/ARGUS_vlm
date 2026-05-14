@@ -296,9 +296,20 @@ and visual vectors. Similar ads are not merged. They are reported as
   subcategory
 
 Campaign discovery is a separate user-triggered step. The default API path scans
-brand-grouped visual vectors and returns reviewable proposals without writing
-campaign rows. Accepting proposals creates user-owned campaign assignments, so
-accepted suggestions become curated truth and are shielded from later automatic
+brand-grouped signals and returns reviewable proposals without writing campaign
+rows. Discovery uses repeated VLM-extracted campaign suggestions first, then
+brand-scoped visual-vector clusters. Suggested names are normalized so a brand
+prefix does not split the same phrase (`Jeep Declaration of Deals` and
+`Declaration of Deals` group together), but no campaign names are hardcoded.
+The repeated campaign signal must appear across at least
+`campaigns.discover.min_cluster_size` ads, clear
+`campaigns.discover.min_campaign_signal_confidence`, and remain visually
+coherent enough to pass `campaigns.discover.min_mean_similarity`. Exact duplicate
+proposal ad sets are deduped so the extracted campaign name wins over a generic
+visual/offer label.
+
+Accepting proposals creates user-owned campaign assignments, so accepted
+suggestions become curated truth and are shielded from later automatic
 rediscovery. Manual campaign creation and per-ad assignment use the same
 `campaigns` and `ad_campaigns` tables with `created_by = 'user'` /
 `assigned_by = 'user'`.
@@ -527,6 +538,7 @@ GLM-OCR on port `5050`, use:
 glm_ocr:
   enabled: true
   mode: local
+  prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
   include_in_search: true
   include_in_vlm_bundle: false
   local:

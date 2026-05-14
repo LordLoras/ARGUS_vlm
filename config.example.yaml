@@ -83,7 +83,7 @@ glm_ocr:
   # for normal local ingestion when llama.cpp serves GLM-OCR on port 5050.
   enabled: false
   mode: local                 # local | remote
-  prompt: "Text Recognition:"
+  prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
   image_max_dim: 1024
   include_in_search: true
   include_in_vlm_bundle: false # keep false for finance/legal fine print unless reviewed
@@ -188,6 +188,8 @@ campaigns:
     lookback_days: 90
     min_cluster_size: 3
     min_mean_similarity: 0.75
+    use_campaign_suggestions: true
+    min_campaign_signal_confidence: 0.80
     clusterer: hdbscan            # hdbscan | agglomerative
     name_template: "{brand} {month} {year}"
 
