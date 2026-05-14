@@ -209,6 +209,63 @@ export type CampaignDetail = {
   research: CampaignResearch;
 };
 
+export type CampaignDeepFinding = {
+  priority: "high" | "medium" | "low" | string;
+  title: string;
+  detail: string;
+  evidence_ad_ids: string[];
+};
+
+export type CampaignCreativeReviewItem = {
+  area: "Attention" | "Branding" | "Connection" | "Direction" | string;
+  status: string;
+  detail: string;
+};
+
+export type CampaignAssignmentReview = {
+  outliers: Array<{ ad_id?: string | null; reasons: string[] }>;
+  missing_offer_ads: Array<string | null>;
+  missing_cta_ads: Array<string | null>;
+  missing_product_ads: Array<string | null>;
+};
+
+export type CampaignSuggestedEdit = {
+  field: string;
+  value: string;
+  reason: string;
+};
+
+export type CampaignDeepResearch = {
+  mode: "local" | string;
+  include_web: boolean;
+  web_available: boolean;
+  requested_web?: boolean;
+  requested_question?: string | null;
+  analysis_mode?: string;
+  scope: string;
+  campaign: Campaign;
+  generated_from: {
+    ad_count: number;
+    ad_ids: string[];
+    evidence_tables: string[];
+  };
+  findings: CampaignDeepFinding[];
+  creative_review: CampaignCreativeReviewItem[];
+  assignment_review: CampaignAssignmentReview;
+  suggested_edits: CampaignSuggestedEdit[];
+  question_answer?: {
+    question: string;
+    answer: string;
+    evidence_ad_ids: string[];
+    limits: string;
+  } | null;
+  open_questions: string[];
+  future_expansion: {
+    web_research: string;
+    supported_later: string[];
+  };
+};
+
 export type AdDetail = {
   ad: AdRecord;
   classification?: ClassificationRecord | null;

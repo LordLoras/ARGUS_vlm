@@ -7,6 +7,7 @@ import type {
   AgentSession,
   AgentStreamEvent,
   Campaign,
+  CampaignDeepResearch,
   CampaignDetail,
   FrameRecord,
   JobStreamEvent,
@@ -145,6 +146,23 @@ export const api = {
     apiFetch<{ deleted: string }>(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
       method: "DELETE"
     }),
+
+  runCampaignDeepResearch: (
+    campaignId: string,
+    body: {
+      include_web?: boolean;
+      depth?: "standard" | "deep";
+      question?: string;
+      thinking?: boolean;
+    } = {}
+  ) =>
+    apiFetch<CampaignDeepResearch>(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/research/deep`,
+      {
+        method: "POST",
+        body: JSON.stringify({ include_web: false, depth: "deep", ...body })
+      }
+    ),
 
   discoverCampaigns: () =>
     apiFetch<{ campaigns?: Campaign[]; discovered?: unknown[]; proposals?: unknown[] }>("/api/campaigns/discover", {

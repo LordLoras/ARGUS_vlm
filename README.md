@@ -321,6 +321,15 @@ rediscovery. Manual campaign creation and per-ad assignment use the same
 `campaigns` and `ad_campaigns` tables with `created_by = 'user'` /
 `assigned_by = 'user'`.
 
+Campaign detail includes a local-first analyst research mode exposed at
+`POST /api/campaigns/{id}/research/deep`. It does not call the internet. It
+summarizes assigned ads, structured marketing entities, classification tags,
+campaign suggestions, and assignment scores into findings, creative review,
+membership review, suggested campaign edits, and an optional local answer to an
+analyst question. The request shape already carries `include_web`, `question`,
+and `thinking` fields so a later web/LLM-backed research pass can be added
+without changing the frontend contract.
+
 For operational backfills, `POST /api/campaigns/discover?persist=true` and the
 CLI discovery command still persist auto-created campaigns directly. Auto
 campaigns never overwrite user-created campaigns with the same id.
@@ -633,6 +642,7 @@ python -m ad_classifier reindex-visual-frames
 | `POST` | `/api/campaigns/discover` | Scan campaign suggestions without persistence |
 | `POST` | `/api/campaigns/discover/accept` | Accept selected suggestions as user assignments |
 | `POST` | `/api/campaigns/{id}/ads` | Manually assign ads to a campaign |
+| `POST` | `/api/campaigns/{id}/research/deep` | Run local campaign research and answer an optional analyst question |
 | `GET` | `/api/jobs/{id}/events` | Stream job progress |
 | `GET` | `/api/agent/sessions/{id}/events` | Stream agent responses |
 

@@ -64,6 +64,20 @@ export function Campaigns() {
 
   const selectedCampaign = detail.data?.campaign ?? items.find((campaign) => campaign.id === selectedId);
 
+  const deepResearch = useMutation({
+    mutationFn: ({ campaignId, question }: { campaignId: string; question?: string }) =>
+      api.runCampaignDeepResearch(campaignId, {
+        include_web: false,
+        depth: "deep",
+        question,
+        thinking: true
+      })
+  });
+
+  useEffect(() => {
+    deepResearch.reset();
+  }, [selectedId]);
+
   const discover = useMutation({
     mutationFn: api.discoverCampaigns,
     onSuccess: async (data) => {
@@ -111,6 +125,7 @@ export function Campaigns() {
       api.updateCampaign(campaignId, input),
     onSuccess: async (campaign) => {
       setEditOpen(false);
+      deepResearch.reset();
       await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       await queryClient.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
     }
@@ -120,6 +135,7 @@ export function Campaigns() {
     mutationFn: (campaignId: string) => api.deleteCampaign(campaignId),
     onSuccess: async () => {
       setSelectedId(null);
+      deepResearch.reset();
       await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       await queryClient.invalidateQueries({ queryKey: ["campaign-detail"] });
     }
@@ -129,6 +145,7 @@ export function Campaigns() {
     mutationFn: ({ campaignId, adIds }: { campaignId: string; adIds: string[] }) =>
       api.assignAdsToCampaign(campaignId, adIds),
     onSuccess: async (_result, variables) => {
+      deepResearch.reset();
       await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       await queryClient.invalidateQueries({ queryKey: ["campaign-detail", variables.campaignId] });
     }
@@ -140,6 +157,7 @@ export function Campaigns() {
     onMutate: (variables) => setUnassigningAdId(variables.adId),
     onSettled: () => setUnassigningAdId(null),
     onSuccess: async (_result, variables) => {
+      deepResearch.reset();
       await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       await queryClient.invalidateQueries({ queryKey: ["campaign-detail", variables.campaignId] });
     }
@@ -229,7 +247,9 @@ export function Campaigns() {
             </aside>
             <CampaignDetailPanel
               detail={detail.data}
+              deepResearch={deepResearch.data}
               loading={detail.isLoading}
+              researchLoading={deepResearch.isPending}
               onEdit={() => setEditOpen(true)}
               onDelete={() => {
                 if (
@@ -245,6 +265,11 @@ export function Campaigns() {
               assigning={assign.isPending}
               onUnassign={(adId) => {
                 if (selectedId) unassign.mutate({ campaignId: selectedId, adId });
+              }}
+              onRunDeepResearch={(question) => {
+                if (selectedId) {
+                  deepResearch.mutate({ campaignId: selectedId, question });
+                }
               }}
               unassigningAdId={unassigningAdId}
             />

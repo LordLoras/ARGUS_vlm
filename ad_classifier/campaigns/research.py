@@ -4,6 +4,7 @@ import sqlite3
 from collections import Counter
 from typing import Any
 
+from ad_classifier.campaigns.research_deep import build_deep_research
 from ad_classifier.campaigns.research_helpers import (
     campaign_suggestion_values,
     clean,
@@ -58,6 +59,24 @@ def campaign_detail(conn: sqlite3.Connection, campaign: CampaignRecord) -> dict[
         "ads": ads,
         "research": _research_payload(campaign, ads),
     }
+
+
+def campaign_deep_research(
+    conn: sqlite3.Connection,
+    campaign: CampaignRecord,
+    *,
+    include_web: bool = False,
+    question: str | None = None,
+    thinking: bool = False,
+) -> dict[str, Any]:
+    detail = campaign_detail(conn, campaign)
+    return build_deep_research(
+        campaign,
+        detail,
+        include_web=include_web,
+        question=question,
+        thinking=thinking,
+    )
 
 
 def _campaign_ad_rows(conn: sqlite3.Connection, campaign_id: str) -> list[dict[str, Any]]:

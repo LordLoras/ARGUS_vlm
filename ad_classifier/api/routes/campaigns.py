@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field
 
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.campaigns.discover import discover_campaigns
-from ad_classifier.campaigns.research import campaign_detail, campaign_rollup
+from ad_classifier.campaigns.research import (
+    campaign_deep_research,
+    campaign_detail,
+    campaign_rollup,
+)
 from ad_classifier.campaigns.suggestions import CampaignProposal, scan_campaign_proposals
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdCampaignRepository, CampaignRepository
@@ -43,6 +47,13 @@ class CampaignPatch(BaseModel):
 
 class AssignAdsRequest(BaseModel):
     ad_ids: list[str]
+
+
+class CampaignResearchRequest(BaseModel):
+    include_web: bool = False
+    depth: str = Field(default="deep", pattern="^(standard|deep)$")
+    question: str | None = Field(default=None, max_length=500)
+    thinking: bool = False
 
 
 class CampaignProposalInput(BaseModel):
@@ -199,6 +210,26 @@ def get_campaign(campaign_id: str, request: Request) -> dict[str, Any]:
     try:
         campaign = _resolve_campaign(conn, campaign_id)
         return campaign_detail(conn, campaign)
+    finally:
+        conn.close()
+
+
+@router.post("/campaigns/{campaign_id}/research/deep")
+def deep_research(
+    campaign_id: str,
+    body: CampaignResearchRequest,
+    request: Request,
+) -> dict[str, Any]:
+    conn = open_request_db(request)
+    try:
+        campaign = _resolve_campaign(conn, campaign_id)
+        return campaign_deep_research(
+            conn,
+            campaign,
+            include_web=body.include_web,
+            question=body.question,
+            thinking=body.thinking,
+        )
     finally:
         conn.close()
 

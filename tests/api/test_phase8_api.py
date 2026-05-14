@@ -284,6 +284,19 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     assert detail["research"]["summary"]["ad_count"] == 1
     assert detail["research"]["messaging"]["top_products"][0]["value"] == "Wrangler"
     assert detail["research"]["creative"]["small_print_ads"] == 1
+    deep = client.post(
+        "/api/campaigns/c_test/research/deep",
+        json={"include_web": False, "question": "How should we improve the offer?", "thinking": True},
+    )
+    assert deep.status_code == 200, deep.text
+    deep_json = deep.json()
+    assert deep_json["mode"] == "local"
+    assert deep_json["web_available"] is False
+    assert deep_json["requested_question"] == "How should we improve the offer?"
+    assert deep_json["question_answer"]["question"] == "How should we improve the offer?"
+    assert deep_json["generated_from"]["ad_ids"] == ["ad_campaign"]
+    assert any(item["area"] == "Direction" for item in deep_json["creative_review"])
+    assert deep_json["suggested_edits"]
 
     patched = client.patch("/api/campaigns/c_test", json={"theme": "summer"})
     assert patched.status_code == 200

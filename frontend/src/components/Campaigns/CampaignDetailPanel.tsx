@@ -4,30 +4,43 @@ import { EditIcon, PlusIcon, TrashIcon, XIcon } from "../../lib/icons";
 import type {
   CampaignAd,
   CampaignCount,
+  CampaignDeepResearch,
   CampaignDetail,
   CampaignInsight,
   CampaignResearch
 } from "../../lib/types";
+import { CampaignAgentPanel } from "./CampaignAgentPanel";
+import { buildSignalCards, emptyResearch, formatRange, formatScore } from "./campaignDetailUtils";
+
+const TABS = ["Overview", "Ads", "Research", "Agent"] as const;
+type CampaignTab = (typeof TABS)[number];
 
 export function CampaignDetailPanel({
   detail,
+  deepResearch,
   loading,
+  researchLoading,
   onEdit,
   onDelete,
   onAssign,
   onUnassign,
+  onRunDeepResearch,
   assigning,
   unassigningAdId
 }: {
   detail?: CampaignDetail;
+  deepResearch?: CampaignDeepResearch;
   loading?: boolean;
+  researchLoading?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAssign: (adIds: string[]) => void;
   onUnassign: (adId: string) => void;
+  onRunDeepResearch: (question?: string) => void;
   assigning?: boolean;
   unassigningAdId?: string | null;
 }) {
+  const [tab, setTab] = useState<CampaignTab>("Overview");
   const [adIdsText, setAdIdsText] = useState("");
 
   if (loading) {
@@ -47,6 +60,8 @@ export function CampaignDetailPanel({
   const campaign = detail.campaign;
   const ads = detail.ads ?? [];
   const research = detail.research ?? emptyResearch(ads.length);
+  const signals = buildSignalCards(research);
+
   const submitAssignment = () => {
     const adIds = adIdsText
       .split(/[\s,]+/)
@@ -59,7 +74,7 @@ export function CampaignDetailPanel({
 
   return (
     <section className="campaign-detail-shell">
-      <header className="campaign-detail-head">
+      <header className="campaign-detail-head compact">
         <div>
           <div className="campaign-kicker">
             <span className="badge badge-mono">{campaign.created_by ?? "user"}</span>
@@ -83,31 +98,152 @@ export function CampaignDetailPanel({
         </div>
       </header>
 
-      {campaign.description ? <p className="campaign-description">{campaign.description}</p> : null}
-
-      <div className="campaign-metrics">
+      <div className="campaign-metrics compact">
         <Metric label="Ads" value={String(research.summary.ad_count)} sub={`${research.summary.user_assigned ?? 0} user / ${research.summary.auto_assigned ?? 0} auto`} />
-        <Metric label="Mean sim" value={formatScore(research.summary.mean_similarity)} sub="cluster cohesion" />
-        <Metric label="Confidence" value={formatScore(research.summary.avg_confidence)} sub={research.summary.min_confidence != null ? `min ${formatScore(research.summary.min_confidence)}` : "classification avg"} />
+        <Metric label="Cohesion" value={formatScore(research.summary.mean_similarity)} sub="cluster score" />
+        <Metric label="Confidence" value={formatScore(research.summary.avg_confidence)} sub={research.summary.min_confidence != null ? `min ${formatScore(research.summary.min_confidence)}` : "entity quality"} />
         <Metric label="Span" value={research.summary.span_days != null ? `${research.summary.span_days}d` : "-"} sub={formatRange(research.summary.first_seen, research.summary.last_seen)} />
       </div>
 
-      <section className="campaign-section">
-        <div className="section-title">Research brief</div>
-        <InsightList insights={research.insights} />
-      </section>
+      <div className="campaign-tabs">
+        {TABS.map((label) => (
+          <button key={label} className={tab === label ? "active" : ""} onClick={() => setTab(label)}>
+            {label}
+          </button>
+        ))}
+      </div>
 
+      {tab === "Overview" ? (
+        <OverviewTab
+          insights={research.insights.slice(0, 3)}
+          signals={signals}
+          description={campaign.description}
+        />
+      ) : null}
+
+      {tab === "Ads" ? (
+        <AdsTab
+          ads={ads}
+          adIdsText={adIdsText}
+          assigning={assigning}
+          unassigningAdId={unassigningAdId}
+          onTextChange={setAdIdsText}
+          onSubmit={submitAssignment}
+          onUnassign={onUnassign}
+        />
+      ) : null}
+
+      {tab === "Research" ? <ResearchTab research={research} /> : null}
+
+      {tab === "Agent" ? (
+        <CampaignAgentPanel
+          deepResearch={deepResearch}
+          loading={researchLoading}
+          onRunDeepResearch={onRunDeepResearch}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function OverviewTab({
+  insights,
+  signals,
+  description
+}: {
+  insights: CampaignInsight[];
+  signals: Array<{ label: string; value: string; detail: string }>;
+  description?: string | null;
+}) {
+  return (
+    <div className="campaign-tab-pane">
+      {description ? <p className="campaign-description compact">{description}</p> : null}
+      <section className="campaign-section first">
+        <div className="section-title">Executive read</div>
+        <InsightList insights={insights} compact />
+      </section>
+      <section className="campaign-section">
+        <div className="section-title">Key signals</div>
+        <div className="campaign-signal-grid">
+          {signals.map((signal) => (
+            <div key={signal.label} className="campaign-signal">
+              <span>{signal.label}</span>
+              <strong>{signal.value}</strong>
+              <small>{signal.detail}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AdsTab({
+  ads,
+  adIdsText,
+  assigning,
+  unassigningAdId,
+  onTextChange,
+  onSubmit,
+  onUnassign
+}: {
+  ads: CampaignAd[];
+  adIdsText: string;
+  assigning?: boolean;
+  unassigningAdId?: string | null;
+  onTextChange: (value: string) => void;
+  onSubmit: () => void;
+  onUnassign: (adId: string) => void;
+}) {
+  return (
+    <section className="campaign-tab-pane campaign-section first">
+      <div className="campaign-section-head">
+        <div className="section-title">Assigned ads</div>
+        <div className="campaign-ad-add">
+          <input
+            className="input mono"
+            value={adIdsText}
+            onChange={(event) => onTextChange(event.target.value)}
+            placeholder="ad_id, ad_id"
+          />
+          <button className="btn btn-sm" onClick={onSubmit} disabled={!adIdsText.trim() || assigning}>
+            <PlusIcon size={11} />
+            <span>Add</span>
+          </button>
+        </div>
+      </div>
+      <div className="campaign-ad-table">
+        {ads.length === 0 ? (
+          <div className="obs-empty" style={{ padding: 16 }}>No ads assigned.</div>
+        ) : (
+          ads.map((ad) => (
+            <AdRow
+              key={ad.ad_id}
+              ad={ad}
+              onUnassign={onUnassign}
+              unassigning={unassigningAdId === ad.ad_id}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ResearchTab({ research }: { research: CampaignResearch }) {
+  return (
+    <div className="campaign-tab-pane">
       <div className="campaign-research-grid">
-        <section className="campaign-section">
-          <div className="section-title">Messaging</div>
+        <section className="campaign-section first">
+          <div className="section-title">Message stack</div>
           <CountList title="Products" items={research.messaging.top_products} />
           <CountList title="Offers" items={research.messaging.top_offers} />
           <CountList title="CTAs" items={research.messaging.top_ctas} />
           <CountList title="Campaign language" items={research.messaging.campaign_signals} />
         </section>
 
-        <section className="campaign-section">
-          <div className="section-title">Market read</div>
+        <section className="campaign-section first">
+          <div className="section-title">Creative footprint</div>
           <CountList title="Brands" items={research.summary.brands} />
           <CountList title="Categories" items={research.summary.categories} />
           <CountList title="Observation tags" items={research.watchouts.risk_labels} />
@@ -119,48 +255,7 @@ export function CampaignDetailPanel({
           </div>
         </section>
       </div>
-
-      <section className="campaign-section">
-        <div className="section-title">Analyst questions</div>
-        <div className="prompt-list">
-          {research.research_prompts.map((prompt) => (
-            <span key={prompt}>{prompt}</span>
-          ))}
-        </div>
-      </section>
-
-      <section className="campaign-section">
-        <div className="campaign-section-head">
-          <div className="section-title">Assigned ads</div>
-          <div className="campaign-ad-add">
-            <input
-              className="input mono"
-              value={adIdsText}
-              onChange={(event) => setAdIdsText(event.target.value)}
-              placeholder="ad_id, ad_id"
-            />
-            <button className="btn btn-sm" onClick={submitAssignment} disabled={!adIdsText.trim() || assigning}>
-              <PlusIcon size={11} />
-              <span>Add</span>
-            </button>
-          </div>
-        </div>
-        <div className="campaign-ad-table">
-          {ads.length === 0 ? (
-            <div className="obs-empty" style={{ padding: 16 }}>No ads assigned.</div>
-          ) : (
-            ads.map((ad) => (
-              <AdRow
-                key={ad.ad_id}
-                ad={ad}
-                onUnassign={onUnassign}
-                unassigning={unassigningAdId === ad.ad_id}
-              />
-            ))
-          )}
-        </div>
-      </section>
-    </section>
+    </div>
   );
 }
 
@@ -174,12 +269,12 @@ function Metric({ label, value, sub }: { label: string; value: string; sub: stri
   );
 }
 
-function InsightList({ insights }: { insights: CampaignInsight[] }) {
+function InsightList({ insights, compact }: { insights: CampaignInsight[]; compact?: boolean }) {
   if (!insights.length) {
     return <div className="obs-empty">No strong campaign-level patterns yet.</div>;
   }
   return (
-    <div className="insight-list">
+    <div className={`insight-list ${compact ? "compact" : ""}`}>
       {insights.map((insight) => (
         <div key={`${insight.title}-${insight.detail}`} className="insight-row">
           <span>{insight.title}</span>
@@ -238,60 +333,4 @@ function AdRow({
       </button>
     </div>
   );
-}
-
-function formatScore(value?: number | null) {
-  return value == null ? "-" : value.toFixed(2);
-}
-
-function formatRange(first?: string | null, last?: string | null) {
-  const left = first ? first.slice(0, 10) : "";
-  const right = last ? last.slice(0, 10) : "";
-  if (left && right && left !== right) return `${left} - ${right}`;
-  return left || right || "date range";
-}
-
-function emptyResearch(adCount: number): CampaignResearch {
-  const emptyCounts: CampaignCount[] = [];
-  return {
-    summary: {
-      ad_count: adCount,
-      user_assigned: 0,
-      auto_assigned: 0,
-      mean_similarity: null,
-      avg_confidence: null,
-      min_confidence: null,
-      first_seen: null,
-      last_seen: null,
-      span_days: null,
-      brands: emptyCounts,
-      advertisers: emptyCounts,
-      categories: emptyCounts,
-      subcategories: emptyCounts
-    },
-    messaging: {
-      top_products: emptyCounts,
-      top_offers: emptyCounts,
-      top_ctas: emptyCounts,
-      top_prices: emptyCounts,
-      campaign_signals: emptyCounts
-    },
-    creative: {
-      aspect_ratios: emptyCounts,
-      formats: emptyCounts,
-      voiceover_ads: 0,
-      on_screen_text_ads: 0,
-      disclaimer_ads: 0,
-      small_print_ads: 0,
-      disclaimer_density: emptyCounts
-    },
-    watchouts: {
-      risk_labels: emptyCounts,
-      disclaimer_count: 0,
-      small_print_count: 0,
-      low_confidence_ads: []
-    },
-    insights: [],
-    research_prompts: []
-  };
 }
