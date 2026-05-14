@@ -15,6 +15,7 @@ import httpx
 from ad_classifier._env import resolve_api_key
 from ad_classifier.pipeline.ocr.models import FrameRef
 from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
+from ad_classifier.vlm.http import chat_completion
 
 
 class DocumentParser(ABC):
@@ -153,6 +154,7 @@ class GLMOCRParser(DocumentParser):
         temperature: float = 0.0,
         max_tokens: int = 2048,
         image_max_dim: int = 1024,
+        stream: bool = True,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("GLM-OCR endpoint must be provided")
@@ -167,6 +169,7 @@ class GLMOCRParser(DocumentParser):
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._image_max_dim = image_max_dim
+        self._stream = stream
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         api_key = resolve_api_key(api_key_env)
         if api_key:
@@ -201,7 +204,6 @@ class GLMOCRParser(DocumentParser):
             ],
             "temperature": self._temperature,
             "max_tokens": self._max_tokens,
-            "stream": False,
         }
 
         last_error = "no attempts made"
@@ -209,14 +211,13 @@ class GLMOCRParser(DocumentParser):
             if attempt > 0:
                 time.sleep(self._retry_delay_s)
             try:
-                resp = httpx.post(
-                    self._endpoint,
+                data = chat_completion(
+                    endpoint=self._endpoint,
                     headers=self._headers,
                     json=payload,
-                    timeout=self._timeout_s,
+                    timeout_s=self._timeout_s,
+                    stream=self._stream,
                 )
-                resp.raise_for_status()
-                data = resp.json()
                 raw = _extract_chat_text(data).strip()
                 return PaddleVLOutput(
                     frame_index=frame.frame_index,

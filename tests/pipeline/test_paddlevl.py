@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-import httpx
+from unittest.mock import patch
 
 from ad_classifier.config import AppConfig
 from ad_classifier.pipeline.ocr.models import OCRItem
@@ -68,7 +67,9 @@ def test_any_low_item_confidence_triggers():
         _item("more good", confidence=0.95),
         _item("blurry", confidence=0.3),
     ]
-    config = PaddleVLGatingConfig(mean_confidence_threshold=0.70, min_item_confidence_threshold=0.50)
+    config = PaddleVLGatingConfig(
+        mean_confidence_threshold=0.70, min_item_confidence_threshold=0.50
+    )
     run, reason = should_run_paddlevl(items, config)
     assert run is True
     assert reason == "low_item_confidence"
@@ -127,6 +128,7 @@ def test_mock_parser_returns_fixed_output(tmp_path):
 
     img = tmp_path / "f.png"
     from PIL import Image
+
     Image.new("RGB", (32, 32)).save(img)
 
     payload = {"text": "SALE", "confidence": 0.9}
@@ -146,6 +148,7 @@ def test_mock_parser_can_simulate_parse_failure(tmp_path):
 
     img = tmp_path / "f.png"
     from PIL import Image
+
     Image.new("RGB", (32, 32)).save(img)
 
     parser = MockPaddleVLParser(parse_ok=False)
@@ -155,23 +158,27 @@ def test_mock_parser_can_simulate_parse_failure(tmp_path):
     assert out.parsed is None
 
 
-def test_glm_ocr_parser_calls_openai_compatible_endpoint(tmp_path, monkeypatch):
+def test_glm_ocr_parser_calls_openai_compatible_endpoint(tmp_path):
     from ad_classifier.pipeline.ocr.models import FrameRef
 
     captured: dict = {}
 
-    def fake_post(url, *, headers, json, timeout):
-        captured["url"] = url
+    def fake_chat_completion(*, endpoint, headers, json, timeout_s, stream):
+        captured["endpoint"] = endpoint
         captured["headers"] = headers
         captured["json"] = json
-        captured["timeout"] = timeout
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"content": "SALE\nCall now"}}]},
-            request=httpx.Request("POST", url),
-        )
+        captured["timeout_s"] = timeout_s
+        captured["stream"] = stream
+        return {
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"content": "SALE\nCall now", "role": "assistant"},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
 
-    monkeypatch.setattr("ad_classifier.pipeline.paddlevl.parser.httpx.post", fake_post)
     img = tmp_path / "frame.png"
     img.write_bytes(b"fake image bytes")
 
@@ -181,17 +188,21 @@ def test_glm_ocr_parser_calls_openai_compatible_endpoint(tmp_path, monkeypatch):
         prompt="Text Recognition:",
         timeout_s=12,
         temperature=0,
+        stream=False,
     )
-    out = parser.parse(FrameRef(frame_index=2, time_ms=1000, path=img))
+    with patch(
+        "ad_classifier.pipeline.paddlevl.parser.chat_completion", side_effect=fake_chat_completion
+    ):
+        out = parser.parse(FrameRef(frame_index=2, time_ms=1000, path=img))
 
     assert out.parse_ok is True
     assert out.engine == "glm_ocr"
     assert out.parsed == {"text": "SALE\nCall now"}
-    assert captured["url"] == "http://127.0.0.1:5050/v1/chat/completions"
-    assert captured["timeout"] == 12
+    assert captured["endpoint"] == "http://127.0.0.1:5050/v1/chat/completions"
+    assert captured["timeout_s"] == 12
     assert captured["json"]["model"] == "glm-ocr"
     assert captured["json"]["temperature"] == 0
-    assert captured["json"]["stream"] is False
+    assert captured["stream"] is False
     content = captured["json"]["messages"][0]["content"]
     assert content[0] == {"type": "text", "text": "Text Recognition:"}
     assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")

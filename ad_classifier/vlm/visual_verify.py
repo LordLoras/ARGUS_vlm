@@ -4,10 +4,13 @@ import base64
 import json
 from pathlib import Path
 
-import httpx
+import structlog
 
+from ad_classifier.vlm.http import chat_completion
 from ad_classifier.vlm.models import VLMConflict, VLMVerificationResult
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
+
+_log = structlog.get_logger(__name__)
 
 _VISUAL_VERIFY_PROMPT = """\
 You verify ad-analysis claims against actual video frames. You receive 2-3 key frames and a list of claims.
@@ -32,12 +35,14 @@ class VisualVerificationPass:
         timeout_s: float = 60.0,
         max_tokens: int = 512,
         enable_thinking: bool = False,
+        stream: bool = True,
     ) -> None:
         self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout = timeout_s
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
+        self._stream = stream
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
@@ -71,20 +76,18 @@ class VisualVerificationPass:
             payload["chat_template_kwargs"] = {"enable_thinking": True}
 
         try:
-            resp = httpx.post(
-                self._endpoint,
+            data = chat_completion(
+                endpoint=self._endpoint,
                 headers=self._headers,
                 json=payload,
-                timeout=self._timeout,
+                timeout_s=self._timeout,
+                stream=self._stream,
             )
-            resp.raise_for_status()
-            data = resp.json()
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
             return _apply_visual_corrections(result, raw)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning("visual_verify_failed: %s", exc)
+            _log.warning("visual_verify_failed", error=str(exc)[:300])
             return result
 
 
@@ -138,7 +141,8 @@ def _apply_visual_corrections(result: VLMVerificationResult, raw: str) -> VLMVer
             VLMConflict(
                 description=f"Visual verify: brand_visible=False but VLM extracted brand={me.brand.name!r}",
                 sources=["vlm_verifier", "visual_verify"],
-                resolution=notes or "Visual verify disagrees on brand visibility (preserving VLM extraction with low confidence)",
+                resolution=notes
+                or "Visual verify disagrees on brand visibility (preserving VLM extraction with low confidence)",
             )
         )
 
@@ -156,7 +160,8 @@ def _apply_visual_corrections(result: VLMVerificationResult, raw: str) -> VLMVer
             VLMConflict(
                 description=f"Visual verify: products_visible=False but VLM extracted products={me.products!r}",
                 sources=["vlm_verifier", "visual_verify"],
-                resolution=notes or "Visual verify disagrees on product visibility (preserving VLM extraction)",
+                resolution=notes
+                or "Visual verify disagrees on product visibility (preserving VLM extraction)",
             )
         )
 

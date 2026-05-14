@@ -58,6 +58,7 @@ def test_agent_inherits_vlm_mode_endpoint():
                 "timeout_s": 60,
                 "max_retries": 3,
                 "retry_delay_s": 5,
+                "stream": False,
             },
         },
         "agent": {"inherit_vlm": True},
@@ -70,3 +71,4 @@ def test_agent_inherits_vlm_mode_endpoint():
     assert config.agent.endpoint.timeout_s == 60
     assert config.agent.endpoint.max_retries == 3
     assert config.agent.endpoint.retry_delay_s == 5
+    assert config.agent.endpoint.stream is False

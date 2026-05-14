@@ -50,6 +50,7 @@ def _default_client_factory(config: AgentConfig) -> AgentClient:
         retry_delay_s=config.endpoint.retry_delay_s,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
+        stream=config.endpoint.stream if config.endpoint.stream is not None else True,
     )
 
 

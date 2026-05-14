@@ -117,6 +117,7 @@ class GLMOCREndpointConfig(BaseModel):
     retry_delay_s: float = Field(default=1.0, ge=0.0)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=64)
+    stream: bool = True
 
 
 class GLMOCREndpointDefaults:
@@ -129,6 +130,7 @@ class GLMOCREndpointDefaults:
         retry_delay_s=1.0,
         temperature=0.0,
         max_tokens=2048,
+        stream=True,
     )
     REMOTE = GLMOCREndpointConfig(
         endpoint="https://your-openai-compatible-glm-ocr.example/v1",
@@ -139,6 +141,7 @@ class GLMOCREndpointDefaults:
         retry_delay_s=1.0,
         temperature=0.0,
         max_tokens=2048,
+        stream=True,
     )
 
 
@@ -266,6 +269,7 @@ class VLMEndpointConfig(BaseModel):
     max_tokens: int = Field(default=4096, ge=64)
     enable_thinking: bool = False
     response_format: Literal["json_object", "json_schema"] = "json_object"
+    stream: bool = True
 
 
 class VLMEndpointDefaults:
@@ -280,6 +284,7 @@ class VLMEndpointDefaults:
         max_tokens=8192,
         enable_thinking=False,
         response_format="json_object",
+        stream=True,
     )
     REMOTE = VLMEndpointConfig(
         endpoint="https://api.openai.com/v1",
@@ -292,6 +297,7 @@ class VLMEndpointDefaults:
         max_tokens=4096,
         enable_thinking=False,
         response_format="json_schema",
+        stream=True,
     )
 
 
@@ -329,6 +335,7 @@ class AgentEndpointConfig(BaseModel):
     timeout_s: float | None = None
     max_retries: int | None = None
     retry_delay_s: float | None = None
+    stream: bool | None = None
 
 
 class AgentConfig(BaseModel):
@@ -394,6 +401,8 @@ class AppConfig(BaseModel):
                 a.max_retries = v.max_retries
             if a.retry_delay_s is None:
                 a.retry_delay_s = v.retry_delay_s
+            if a.stream is None:
+                a.stream = v.stream
         else:
             if a.endpoint is None:
                 a.endpoint = "http://127.0.0.1:1234/v1"
@@ -405,6 +414,8 @@ class AppConfig(BaseModel):
                 a.max_retries = 2
             if a.retry_delay_s is None:
                 a.retry_delay_s = 2.0
+            if a.stream is None:
+                a.stream = True
         return self
 
 

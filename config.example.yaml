@@ -100,6 +100,7 @@ glm_ocr:
     retry_delay_s: 1
     temperature: 0
     max_tokens: 2048
+    stream: true
   remote:
     endpoint: "https://your-openai-compatible-glm-ocr.example/v1"
     model: "glm-ocr"
@@ -109,6 +110,7 @@ glm_ocr:
     retry_delay_s: 1
     temperature: 0
     max_tokens: 2048
+    stream: true
   gating:
     force_all: false
     mean_confidence_threshold: 0.70
@@ -147,6 +149,7 @@ vlm:
     # json_object is safer for small/quantized local models that may not
     # support structured output schemas.
     response_format: json_object
+    stream: true
   remote:
     endpoint: "https://api.openai.com/v1"
     model: "gpt-4o-mini"
@@ -160,6 +163,7 @@ vlm:
     # json_schema forces the model to emit output that validates against
     # the Pydantic schema — more accurate for capable remote/VL models.
     response_format: json_schema
+    stream: true
 
 text_embedder:
   model: sentence-transformers/all-MiniLM-L6-v2

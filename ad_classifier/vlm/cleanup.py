@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import httpx
 import structlog
 
-logger = logging.getLogger(__name__)
-_log = structlog.get_logger(__name__)
-
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
+from ad_classifier.vlm.http import chat_completion
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
+
+_logger = structlog.get_logger(__name__)
 
 _CLEANUP_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "ocr_cleanup.txt"
 
@@ -46,12 +45,14 @@ class OCRCleanupPass:
         timeout_s: float = 60.0,
         max_tokens: int = 2048,
         enable_thinking: bool = False,
+        stream: bool = True,
     ) -> None:
         self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout = timeout_s
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
+        self._stream = stream
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
@@ -79,36 +80,47 @@ class OCRCleanupPass:
             payload["chat_template_kwargs"] = {"enable_thinking": True}
 
         try:
-            resp = httpx.post(
-                self._endpoint,
+            data = chat_completion(
+                endpoint=self._endpoint,
                 headers=self._headers,
                 json=payload,
-                timeout=self._timeout,
+                timeout_s=self._timeout,
+                stream=self._stream,
             )
-            resp.raise_for_status()
-            data = resp.json()
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
 
             finish_reason = data.get("choices", [{}])[0].get("finish_reason", "")
             if not raw.strip():
-                _log.warning("ocr_cleanup_empty_response", finish_reason=finish_reason)
+                _logger.warning("ocr_cleanup_empty_response", finish_reason=finish_reason)
                 return ocr_items
             if finish_reason == "length":
-                _log.warning("ocr_cleanup_max_tokens_reached", finish_reason=finish_reason, raw_length=len(raw))
+                _logger.warning(
+                    "ocr_cleanup_max_tokens_reached",
+                    finish_reason=finish_reason,
+                    raw_length=len(raw),
+                )
             elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
-                _log.warning("ocr_cleanup_unexpected_finish", finish_reason=finish_reason, raw_length=len(raw))
+                _logger.warning(
+                    "ocr_cleanup_unexpected_finish",
+                    finish_reason=finish_reason,
+                    raw_length=len(raw),
+                )
 
             return _parse_cleaned(raw, ocr_items)
         except httpx.RequestError as exc:
-            _log.warning("ocr_cleanup_disconnected", error=str(exc)[:300])
+            _logger.warning("ocr_cleanup_disconnected", error=str(exc)[:300])
             return ocr_items
         except httpx.HTTPStatusError as exc:
             body = exc.response.text[:200] if exc.response is not None else ""
-            _log.warning("ocr_cleanup_http_error", status=exc.response.status_code if exc.response is not None else None, body=body)
+            _logger.warning(
+                "ocr_cleanup_http_error",
+                status=exc.response.status_code if exc.response is not None else None,
+                body=body,
+            )
             return ocr_items
         except Exception as exc:
-            logger.warning("ocr_cleanup_failed: %s", exc)
+            _logger.warning("ocr_cleanup_failed", error=str(exc)[:300])
             return ocr_items
 
 

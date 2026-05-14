@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
@@ -11,6 +10,7 @@ import httpx
 
 from ad_classifier._env import resolve_api_key
 from ad_classifier.agent.models import ToolCall
+from ad_classifier.vlm.http import chat_completion
 
 
 class AgentClientError(RuntimeError):
@@ -98,6 +98,7 @@ class HTTPAgentClient(AgentClient):
         retry_delay_s: float = 2.0,
         temperature: float = 0.1,
         max_tokens: int = 1024,
+        stream: bool = True,
     ) -> None:
         self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
@@ -106,6 +107,7 @@ class HTTPAgentClient(AgentClient):
         self._retry_delay_s = retry_delay_s
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._stream = stream
 
         api_key = resolve_api_key(api_key_env)
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -132,14 +134,13 @@ class HTTPAgentClient(AgentClient):
             if attempt > 0:
                 time.sleep(self._retry_delay_s)
             try:
-                response = httpx.post(
-                    self._endpoint,
+                data = chat_completion(
+                    endpoint=self._endpoint,
                     headers=self._headers,
                     json=payload,
-                    timeout=self._timeout_s,
+                    timeout_s=self._timeout_s,
+                    stream=self._stream,
                 )
-                response.raise_for_status()
-                data = response.json()
                 choice = (data.get("choices") or [{}])[0]
                 message = choice.get("message") or {}
                 return AgentMessage(

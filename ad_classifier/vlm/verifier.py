@@ -14,6 +14,7 @@ import structlog
 
 from ad_classifier._env import resolve_api_key
 from ad_classifier.pipeline.evidence.models import EvidenceBundle
+from ad_classifier.vlm.http import chat_completion
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
 from ad_classifier.vlm.prompt import render_verifier_prompt
@@ -47,7 +48,7 @@ _logger = structlog.get_logger(__name__)
 def _extract_json(text: str) -> str:
     fenced = re.search(r"```(?:json)?\s*", text, re.DOTALL)
     if fenced:
-        after = text[fenced.end():]
+        after = text[fenced.end() :]
         close = after.find("```")
         body = after[:close] if close != -1 else after
         start = body.find("{")
@@ -84,12 +85,37 @@ _DOMAIN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _ALLOWED_WEBSITE_TLDS = {
-    "com", "net", "org", "co", "us",
-    "tv", "io", "biz", "info", "edu", "gov",
-    "app", "dev", "ai", "cloud", "me", "pro",
-    "live", "today", "store", "blog", "shop",
-    "online", "site", "tech", "xyz", "club",
-    "media", "news", "world", "social",
+    "com",
+    "net",
+    "org",
+    "co",
+    "us",
+    "tv",
+    "io",
+    "biz",
+    "info",
+    "edu",
+    "gov",
+    "app",
+    "dev",
+    "ai",
+    "cloud",
+    "me",
+    "pro",
+    "live",
+    "today",
+    "store",
+    "blog",
+    "shop",
+    "online",
+    "site",
+    "tech",
+    "xyz",
+    "club",
+    "media",
+    "news",
+    "world",
+    "social",
 }
 
 
@@ -438,6 +464,7 @@ class HTTPVLMVerifier(VLMVerifier):
         enable_thinking: bool = False,
         response_format: str = "json_object",
         image_max_dim: int = 512,
+        stream: bool = True,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("VLM endpoint must be provided")
@@ -453,6 +480,7 @@ class HTTPVLMVerifier(VLMVerifier):
         self._enable_thinking = enable_thinking
         self._response_format = response_format
         self._image_max_dim = image_max_dim
+        self._stream = stream
         self._system_prompt = prompt_override or render_verifier_prompt()
 
         api_key = resolve_api_key(api_key_env)
@@ -483,14 +511,13 @@ class HTTPVLMVerifier(VLMVerifier):
             if attempt > 0:
                 time.sleep(self._retry_delay_s)
             try:
-                resp = httpx.post(
-                    self._endpoint,
+                data = chat_completion(
+                    endpoint=self._endpoint,
                     headers=self._headers,
                     json=payload,
-                    timeout=self._timeout_s,
+                    timeout_s=self._timeout_s,
+                    stream=self._stream,
                 )
-                resp.raise_for_status()
-                data = resp.json()
                 message = data["choices"][0]["message"]
                 raw = message.get("content") or message.get("reasoning_content") or ""
 
@@ -519,7 +546,9 @@ class HTTPVLMVerifier(VLMVerifier):
                         f"VLM returned empty response on attempt {attempt + 1} "
                         f"(finish_reason={finish_reason})"
                     )
-                    _logger.warning("vlm_empty_response", attempt=attempt + 1, finish_reason=finish_reason)
+                    _logger.warning(
+                        "vlm_empty_response", attempt=attempt + 1, finish_reason=finish_reason
+                    )
                     continue
 
                 _logger.info(
@@ -536,7 +565,12 @@ class HTTPVLMVerifier(VLMVerifier):
                     f"status={exc.response.status_code if exc.response is not None else 'unknown'} "
                     f"body={body!r}"
                 )
-                _logger.warning("vlm_http_error", attempt=attempt + 1, status=exc.response.status_code if exc.response is not None else None, body=body[:200])
+                _logger.warning(
+                    "vlm_http_error",
+                    attempt=attempt + 1,
+                    status=exc.response.status_code if exc.response is not None else None,
+                    body=body[:200],
+                )
             except httpx.RequestError as exc:
                 last_error = f"HTTP error on attempt {attempt + 1}: {exc}"
                 _logger.warning("vlm_request_error", attempt=attempt + 1, error=str(exc)[:300])

@@ -29,6 +29,7 @@ def run_glm_ocr(
         temperature=config.glm_ocr.endpoint.temperature,
         max_tokens=config.glm_ocr.endpoint.max_tokens,
         image_max_dim=config.glm_ocr.image_max_dim,
+        stream=config.glm_ocr.endpoint.stream,
     )
     outputs: dict[int, PaddleVLOutput] = {}
     for frame in select_glm_ocr_frames(

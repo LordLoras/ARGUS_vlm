@@ -6,11 +6,12 @@ import logging
 import httpx
 import structlog
 
-logger = logging.getLogger(__name__)
-_log = structlog.get_logger(__name__)
-
+from ad_classifier.vlm.http import chat_completion
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
+
+logger = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 _CORRECTION_PROMPT = """\
 You are an ad-analysis quality checker. You receive an analysis of a TV ad and the raw evidence it was based on.
@@ -47,12 +48,14 @@ class SelfCorrectionPass:
         timeout_s: float = 30.0,
         max_tokens: int = 1024,
         enable_thinking: bool = False,
+        stream: bool = True,
     ) -> None:
         self._endpoint = _normalize_chat_endpoint(endpoint)
         self._model = model
         self._timeout = timeout_s
         self._max_tokens = max_tokens
         self._enable_thinking = enable_thinking
+        self._stream = stream
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"
@@ -84,14 +87,13 @@ class SelfCorrectionPass:
             payload["chat_template_kwargs"] = {"enable_thinking": True}
 
         try:
-            resp = httpx.post(
-                self._endpoint,
+            data = chat_completion(
+                endpoint=self._endpoint,
                 headers=self._headers,
                 json=payload,
-                timeout=self._timeout,
+                timeout_s=self._timeout,
+                stream=self._stream,
             )
-            resp.raise_for_status()
-            data = resp.json()
             message = data["choices"][0]["message"]
             raw = message.get("content") or message.get("reasoning_content") or ""
 
@@ -100,9 +102,17 @@ class SelfCorrectionPass:
                 _log.warning("self_correction_empty_response", finish_reason=finish_reason)
                 return result
             if finish_reason == "length":
-                _log.warning("self_correction_max_tokens_reached", finish_reason=finish_reason, raw_length=len(raw))
+                _log.warning(
+                    "self_correction_max_tokens_reached",
+                    finish_reason=finish_reason,
+                    raw_length=len(raw),
+                )
             elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
-                _log.warning("self_correction_unexpected_finish", finish_reason=finish_reason, raw_length=len(raw))
+                _log.warning(
+                    "self_correction_unexpected_finish",
+                    finish_reason=finish_reason,
+                    raw_length=len(raw),
+                )
 
             return _apply_corrections(result, raw)
         except httpx.RequestError as exc:
@@ -110,7 +120,11 @@ class SelfCorrectionPass:
             return result
         except httpx.HTTPStatusError as exc:
             body = exc.response.text[:200] if exc.response is not None else ""
-            _log.warning("self_correction_http_error", status=exc.response.status_code if exc.response is not None else None, body=body)
+            _log.warning(
+                "self_correction_http_error",
+                status=exc.response.status_code if exc.response is not None else None,
+                body=body,
+            )
             return result
         except Exception as exc:
             logger.warning("self_correction_failed: %s", exc)
@@ -139,15 +153,25 @@ def _apply_corrections(result: VLMVerificationResult, raw: str) -> VLMVerificati
         me.brand.name = corrections["brand_name"]
 
     if "prices_to_remove" in corrections and isinstance(corrections["prices_to_remove"], list):
-        indices = {i for i in corrections["prices_to_remove"] if isinstance(i, int) and 0 <= i < len(me.prices)}
+        indices = {
+            i
+            for i in corrections["prices_to_remove"]
+            if isinstance(i, int) and 0 <= i < len(me.prices)
+        }
         me.prices = [p for i, p in enumerate(me.prices) if i not in indices]
 
     if "offers_to_remove" in corrections and isinstance(corrections["offers_to_remove"], list):
-        indices = {i for i in corrections["offers_to_remove"] if isinstance(i, int) and 0 <= i < len(me.offers)}
+        indices = {
+            i
+            for i in corrections["offers_to_remove"]
+            if isinstance(i, int) and 0 <= i < len(me.offers)
+        }
         me.offers = [o for i, o in enumerate(me.offers) if i not in indices]
 
     if "ctas_to_remove" in corrections and isinstance(corrections["ctas_to_remove"], list):
-        indices = {i for i in corrections["ctas_to_remove"] if isinstance(i, int) and 0 <= i < len(me.ctas)}
+        indices = {
+            i for i in corrections["ctas_to_remove"] if isinstance(i, int) and 0 <= i < len(me.ctas)
+        }
         me.ctas = [c for i, c in enumerate(me.ctas) if i not in indices]
 
     if "parent_company" in corrections:

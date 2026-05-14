@@ -135,10 +135,7 @@ def run_pipeline_for_job(
 
     post_ocr_match = find_post_ocr_duplicate(conn, ad_id, config.dedup.post_ocr)
     if post_ocr_match is not None:
-        if (
-            post_ocr_match.verdict == "exact_duplicate"
-            and config.dedup.post_ocr.skip_on_exact
-        ):
+        if post_ocr_match.verdict == "exact_duplicate" and config.dedup.post_ocr.skip_on_exact:
             ads = AdRepository(conn)
             ads.update_duplicate(
                 ad_id,
@@ -210,12 +207,15 @@ def run_pipeline_for_job(
         enable_thinking=config.vlm.endpoint.enable_thinking,
         response_format=config.vlm.endpoint.response_format,
         image_max_dim=config.vlm.image_max_dim,
+        stream=config.vlm.endpoint.stream,
     )
     vlm_result = vlm.verify(bundle)
 
     if config.vlm.enable_post_validation:
         evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
-        vlm_result = validate_vlm_output(vlm_result, evidence_texts, primary_category=vlm_result.primary_category)
+        vlm_result = validate_vlm_output(
+            vlm_result, evidence_texts, primary_category=vlm_result.primary_category
+        )
 
     if config.vlm.enable_self_correction:
         emit("vlm:correct", 0.72, "self-correction check")
@@ -224,9 +224,7 @@ def run_pipeline_for_job(
 
     if getattr(config.vlm, "enable_visual_verify", False):
         emit("vlm:visual_verify", 0.75, "visual verification")
-        vlm_result = _run_visual_verify(
-            config, vlm_result, preprocess_result.kept_frames
-        )
+        vlm_result = _run_visual_verify(config, vlm_result, preprocess_result.kept_frames)
 
     emit("embeddings", 0.78, "embedding ad")
     search_ocr_for_index = search_ocr_items(ocr_items, glm_ocr_items, config)
@@ -545,6 +543,7 @@ def _run_ocr_cleanup(
         timeout_s=60.0,
         max_tokens=2048,
         enable_thinking=config.vlm.endpoint.enable_thinking,
+        stream=config.vlm.endpoint.stream,
     )
     return cleanup.run(ocr_items, transcript)
 
@@ -562,6 +561,7 @@ def _run_self_correction(
         timeout_s=300.0,
         max_tokens=4096,
         enable_thinking=config.vlm.endpoint.enable_thinking,
+        stream=config.vlm.endpoint.stream,
     )
     return correction.run(result, evidence_texts)
 
@@ -579,6 +579,7 @@ def _run_visual_verify(
         timeout_s=60.0,
         max_tokens=512,
         enable_thinking=config.vlm.endpoint.enable_thinking,
+        stream=config.vlm.endpoint.stream,
     )
     frame_paths = [Path(f.path) for f in kept_frames if f.path]
     return verify.run(result, frame_paths)

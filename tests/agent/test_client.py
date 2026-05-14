@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -62,16 +62,12 @@ def test_coerce_args_handles_invalid_json():
     assert _coerce_args("") == {}
 
 
-def _mock_response(body: dict, status_code: int = 200) -> MagicMock:
-    response = MagicMock()
-    response.status_code = status_code
-    response.json.return_value = body
-    response.raise_for_status = MagicMock()
-    return response
+def _mock_chat_data(body: dict):
+    return body
 
 
 def test_http_client_returns_text_message():
-    body = {
+    data = {
         "choices": [
             {
                 "message": {"content": "Hi", "tool_calls": None},
@@ -79,7 +75,7 @@ def test_http_client_returns_text_message():
             }
         ]
     }
-    with patch("httpx.post", return_value=_mock_response(body)):
+    with patch("ad_classifier.agent.client.chat_completion", return_value=data):
         client = HTTPAgentClient(endpoint="http://mock/v1")
         result = client.complete([{"role": "user", "content": "hi"}])
     assert result.content == "Hi"
@@ -87,7 +83,7 @@ def test_http_client_returns_text_message():
 
 
 def test_http_client_returns_tool_call():
-    body = {
+    data = {
         "choices": [
             {
                 "message": {
@@ -106,7 +102,7 @@ def test_http_client_returns_tool_call():
             }
         ]
     }
-    with patch("httpx.post", return_value=_mock_response(body)):
+    with patch("ad_classifier.agent.client.chat_completion", return_value=data):
         client = HTTPAgentClient(endpoint="http://mock/v1")
         result = client.complete([{"role": "user", "content": "hi"}])
     assert result.tool_calls[0].name == "list_ads"
@@ -116,9 +112,10 @@ def test_http_client_returns_tool_call():
 def test_http_client_retries_then_raises():
     request = httpx.Request("POST", "http://mock/v1/chat/completions")
     response = httpx.Response(500, request=request, text="boom")
-    with patch("httpx.post", return_value=response):
-        client = HTTPAgentClient(
-            endpoint="http://mock/v1", max_retries=1, retry_delay_s=0
-        )
+    with patch(
+        "ad_classifier.agent.client.chat_completion",
+        side_effect=httpx.HTTPStatusError("500", request=request, response=response),
+    ):
+        client = HTTPAgentClient(endpoint="http://mock/v1", max_retries=1, retry_delay_s=0)
         with pytest.raises(AgentClientError):
             client.complete([{"role": "user", "content": "hi"}])

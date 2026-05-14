@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -95,16 +95,20 @@ def test_parse_failure_factory():
 
 
 # ---------------------------------------------------------------------------
-# HTTPVLMVerifier (mocked httpx)
+# HTTPVLMVerifier (mocked chat_completion)
 # ---------------------------------------------------------------------------
 
 
-def _mock_response(payload: dict, status_code: int = 200):
-    resp = MagicMock()
-    resp.status_code = status_code
-    resp.json.return_value = {"choices": [{"message": {"content": json.dumps(payload)}}]}
-    resp.raise_for_status = MagicMock()
-    return resp
+def _mock_chat_data(payload: dict, finish_reason: str = "stop"):
+    return {
+        "choices": [
+            {
+                "index": 0,
+                "message": {"content": json.dumps(payload), "role": "assistant"},
+                "finish_reason": finish_reason,
+            }
+        ]
+    }
 
 
 def _make_http_verifier(**overrides):
@@ -113,6 +117,7 @@ def _make_http_verifier(**overrides):
         "model": "test-vlm",
         "temperature": 0.1,
         "max_tokens": 4096,
+        "stream": False,
     }
     kwargs.update(overrides)
     return HTTPVLMVerifier(**kwargs)
@@ -138,7 +143,7 @@ def test_http_verifier_happy_path():
         "summary": "clean ad",
     }
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=_mock_response(payload)):
+    with patch("ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "allow"
@@ -156,15 +161,17 @@ def test_http_verifier_requests_structured_output():
         "summary": "clean ad",
     }
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=_mock_response(payload)) as post:
+    with patch(
+        "ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)
+    ) as mock_cc:
         verifier = _make_http_verifier()
         verifier.verify(bundle)
 
-    request_payload = post.call_args.kwargs["json"]
-    assert request_payload["model"] == "test-vlm"
-    assert request_payload["temperature"] == 0.1
-    assert request_payload["max_tokens"] == 4096
-    assert request_payload["response_format"]["type"] == "json_object"
+    call_kwargs = mock_cc.call_args.kwargs
+    assert call_kwargs["json"]["model"] == "test-vlm"
+    assert call_kwargs["json"]["temperature"] == 0.1
+    assert call_kwargs["json"]["max_tokens"] == 4096
+    assert call_kwargs["json"]["response_format"]["type"] == "json_object"
 
 
 def test_vlm_response_format_returns_json_object():
@@ -180,13 +187,21 @@ def test_http_verifier_reads_reasoning_content_when_content_empty():
         "needs_human_review": False,
         "summary": "reasoning field only",
     }
-    resp = MagicMock()
-    resp.json.return_value = {
-        "choices": [{"message": {"content": "", "reasoning_content": json.dumps(payload)}}]
+    data = {
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "content": "",
+                    "reasoning_content": json.dumps(payload),
+                    "role": "assistant",
+                },
+                "finish_reason": "stop",
+            }
+        ]
     }
-    resp.raise_for_status = MagicMock()
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=resp):
+    with patch("ad_classifier.vlm.verifier.chat_completion", return_value=data):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.parse_ok is True
@@ -197,7 +212,10 @@ def test_http_verifier_includes_error_body_on_http_failure():
     request = httpx.Request("POST", "http://mock/v1/chat/completions")
     response = httpx.Response(400, request=request, text="Channel Error")
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=response):
+    with patch(
+        "ad_classifier.vlm.verifier.chat_completion",
+        side_effect=httpx.HTTPStatusError("400", request=request, response=response),
+    ):
         verifier = _make_http_verifier(endpoint="http://mock/v1", max_retries=0)
         result = verifier.verify(bundle)
     assert result.parse_ok is False
@@ -213,11 +231,17 @@ def test_http_verifier_parses_fenced_json():
         "summary": "fenced",
     }
     fenced_content = f"```json\n{json.dumps(payload)}\n```"
-    resp = MagicMock()
-    resp.json.return_value = {"choices": [{"message": {"content": fenced_content}}]}
-    resp.raise_for_status = MagicMock()
+    data = {
+        "choices": [
+            {
+                "index": 0,
+                "message": {"content": fenced_content, "role": "assistant"},
+                "finish_reason": "stop",
+            }
+        ]
+    }
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=resp):
+    with patch("ad_classifier.vlm.verifier.chat_completion", return_value=data):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "review"
@@ -233,7 +257,7 @@ def test_http_verifier_ignores_unknown_fields():
         "unknown_future_field": "some value",
     }
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=_mock_response(payload)):
+    with patch("ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
     assert result.decision == "allow"
@@ -248,7 +272,9 @@ def test_http_verifier_uses_generation_settings_from_constructor():
         "summary": "ok",
     }
     bundle = _make_bundle()
-    with patch("httpx.post", return_value=_mock_response(payload)) as post:
+    with patch(
+        "ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)
+    ) as mock_cc:
         verifier = _make_http_verifier(
             model="qwen-test-model",
             temperature=0.0,
@@ -256,10 +282,10 @@ def test_http_verifier_uses_generation_settings_from_constructor():
         )
         verifier.verify(bundle)
 
-    request_payload = post.call_args.kwargs["json"]
-    assert request_payload["model"] == "qwen-test-model"
-    assert request_payload["temperature"] == 0.0
-    assert request_payload["max_tokens"] == 2048
+    call_kwargs = mock_cc.call_args.kwargs
+    assert call_kwargs["json"]["model"] == "qwen-test-model"
+    assert call_kwargs["json"]["temperature"] == 0.0
+    assert call_kwargs["json"]["max_tokens"] == 2048
 
 
 def test_parse_vlm_content_salvages_malformed_nested_json():

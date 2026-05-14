@@ -54,6 +54,7 @@ def _load_loop_for_cli(config_path: Path | None):
         retry_delay_s=config.agent.endpoint.retry_delay_s,
         temperature=config.agent.temperature,
         max_tokens=config.agent.max_tokens,
+        stream=config.agent.endpoint.stream if config.agent.endpoint.stream is not None else True,
     )
     run = AgentRunContext(
         persistence_conn=persistence,
