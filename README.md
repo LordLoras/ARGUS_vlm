@@ -99,6 +99,212 @@ The default deployment does not require Docker or cloud services.
 
 ---
 
+## Technical Pipeline
+
+ARGUS is a staged pipeline. Each stage writes structured artifacts or database
+rows that later stages can reuse, inspect, or search. The worker is the
+orchestrator; individual OCR, VLM, embedding, vector, dedup, and repository
+modules stay behind narrow interfaces so they can be swapped or mocked.
+
+### 1. Upload and Job Creation
+
+`POST /api/ads/upload` writes the incoming video to `data/uploads/`, computes a
+SHA256 `source_hash`, derives the default `ad_id` from that hash, creates an
+`ads` row, and queues a `jobs` row. Job progress is streamed over SSE from
+`/api/jobs/{id}/events`.
+
+The file hash is a byte-level exact duplicate check. Re-encoding the same video
+with different bitrate, chroma, metadata, or container bytes changes this hash,
+so exact dedup only catches identical uploaded files.
+
+### 2. Ingest Artifacts
+
+The ingest stage uses ffmpeg/ffprobe to:
+
+- probe duration, dimensions, and frame rate
+- sample frames at `ingest.frame_interval_ms`
+- extract mono 16 kHz audio
+- run the configured Whisper backend
+- write a chronological manifest sorted by explicit frame index and timestamp
+
+Artifacts live under `data/frames/`, `data/audio/`, `data/whisper/`, and
+`data/out/{ad_id}/`. Existing artifacts are reused unless the job is forced.
+
+### 3. Dedup and Similarity Layers
+
+ARGUS uses three different similarity concepts. They answer different questions
+and should not be treated as interchangeable.
+
+| Layer | Signal | Purpose | Can short-circuit |
+|---|---|---|---|
+| Exact file hash | SHA256 of uploaded bytes | Same uploaded file | Yes, when `dedup.skip_on_exact: true` |
+| Near creative hash | Mean perceptual hash over sampled frames | Visually near-identical creative | Only if `dedup.skip_on_near_duplicate: true` |
+| Semantic related ads | Text and visual embedding cosine similarity | Same campaign, variant, or related creative | No, enriches final result |
+
+Mean pHash is tolerant to compression and small visual changes, but it is a
+single summary of the whole video. If only a few offer/end-card frames differ,
+it may still score as visually close. For that reason the default config records
+near matches but does not skip them. The later semantic layer can then report
+`same_campaign_different_sku` or another related-ad verdict while preserving the
+distinct ad rows.
+
+### 4. Frame Preprocessing
+
+Sampled frames are analyzed for blankness, blur, perceptual hash, near-duplicate
+frames, and scene changes. The worker marks frames as kept or dropped in the
+`frames` table. Kept frames are the input to OCR, visual embeddings, VLM frame
+selection, and visual search.
+
+### 5. OCR and Document OCR
+
+PaddleOCR is the grounded raw OCR source. It writes one row per detected text
+item into `ocr_items`, including:
+
+- frame id
+- engine name (`paddleocr`)
+- raw visible text
+- bounding box JSON when available
+- confidence when available
+
+GLM-OCR is optional. When `glm_ocr.enabled: true`, the worker calls a configured
+local or remote OpenAI-compatible GLM-OCR endpoint only for selected frames:
+
+- low mean PaddleOCR confidence
+- any low-confidence OCR item
+- dense text frames
+- many tiny OCR fragments
+- blurry or low-quality frames
+- frames with at least `glm_ocr.min_ocr_chars` OCR text
+
+GLM-OCR output is stored separately as `ocr_items.engine = "glm_ocr"`. It has no
+Paddle-style bounding boxes or confidence, so it is useful for search recall and
+readable text enrichment, not as the authoritative source for prices, dates,
+APR, or legal terms. Keep `glm_ocr.include_in_search: true` and
+`glm_ocr.include_in_vlm_bundle: false` unless you explicitly want the classifier
+to see GLM text.
+
+### 6. Transcript Alignment and Rules
+
+Whisper segments are aligned to nearby frames using
+`rules.alignment_window_ms`. The rules engine runs deterministic YAML-configured
+patterns over OCR and transcript text. Rule triggers are persisted in
+`rule_triggers` and later become structured evidence for classification,
+marketing extraction, and API evidence views.
+
+Rules are descriptive. ARGUS is categorization-only: rules can add category or
+observation evidence, but they never approve, block, gate, or escalate an ad.
+
+### 7. Evidence Bundle and VLM Verification
+
+The evidence builder selects a compact frame set for the classifier VLM. When
+there are more kept frames than `vlm.max_frames_in_bundle`, selection is
+deterministic:
+
+1. first and last kept frames
+2. rule-trigger frames, ordered by severity
+3. high OCR-density frames
+4. time-distributed frames
+5. frame-index tie-breakers
+
+The VLM receives selected frame images, transcript text, OCR text, optional
+document-OCR text, metadata, and rule triggers. It returns strict structured
+JSON containing category, confidence, observation labels, evidence, OCR quality,
+summary, and marketing entities.
+
+Post-processing then runs deterministic checks:
+
+- schema parsing and fallback handling
+- VLM output validation against observed evidence
+- optional OCR cleanup pass
+- optional self-correction pass
+- optional visual verification pass for brand/logo claims
+- aggregation of VLM and rule evidence into the final classification
+
+### 8. Marketing Entities and Projections
+
+Marketing entities are the structured business output of the pipeline. They
+include brand, advertiser, products, prices, offers, CTAs, social proof,
+disclaimers, landing-page/contact data, creative format, campaign suggestions,
+and tracking fields.
+
+The JSON in `marketing_entities` is the source of truth. Convenience projection
+columns on `ads` such as `brand_name`, `products_text`, `primary_category`,
+`website_domain`, and `phone_number` are updated in the same transaction so list
+views and filters stay fast.
+
+### 9. Embeddings and Vector Storage
+
+ARGUS writes two embedding families:
+
+- Text: one ad-level vector from transcript plus searchable OCR text using
+  `sentence-transformers/all-MiniLM-L6-v2`
+- Visual: one vector per kept keyframe plus a mean-pooled ad-level vector using
+  `google/siglip2-base-patch16-224`
+
+Vectors are stored in SQLite through `sqlite-vec` tables. Per-frame visual
+vectors let a text-to-image visual query return the best matching frame, not
+only a whole-ad score.
+
+### 10. Search and Ranking
+
+The search API supports several retrieval modes:
+
+| Mode | Main signal | Typical use |
+|---|---|---|
+| Keyword | FTS5 over brand, product, category, transcript, OCR, entities | Exact words, brands, offers, phone numbers |
+| Text vector | MiniLM ad-level embedding | Semantic text queries |
+| Visual | SigLIP text-to-image over ad and frame visual vectors | Visual concepts such as vehicles, people, graphics, layouts |
+| Hybrid | FTS + vectors + reciprocal rank fusion | Analyst search when both terms and semantics matter |
+| Visual hybrid | Keyword grounding plus visual expansion | Prevents visual-only noise from dominating specific text queries |
+
+Search adds query expansion for known business aliases, filters low-score FTS
+noise, applies modality-specific score floors, and reranks result snippets using
+database projections, FTS text, OCR, and transcript text. Visual similarities are
+expected to be much lower numerically than text-vector similarities, so visual
+thresholds are intentionally configured separately.
+
+### 11. Related Ads and Campaigns
+
+After embeddings are written, ARGUS compares the new ad against existing text
+and visual vectors. Similar ads are not merged. They are reported as
+`related_ads.semantically_similar` with:
+
+- overall score
+- text score
+- visual score
+- verdict such as `same_campaign_different_sku`
+- structured differences in brand, products, prices, offers, category, and
+  subcategory
+
+Campaign discovery is a separate user-triggered step. It clusters related
+ad-level vectors within brand/campaign boundaries and proposes campaign
+assignments without overwriting user-curated assignments.
+
+### 12. Agent Interface
+
+The natural-language agent is tool-calling, not text-to-SQL by default. It uses
+a fixed catalog of read-only tools for listing ads, counting ads, aggregating
+fields, fetching campaign/ad detail, FTS search, vector similarity, hybrid
+search, and a bounded read-only SQL escape hatch.
+
+The agent database connection is opened read-only with `PRAGMA query_only = ON`.
+Sessions, messages, tool calls, and tool results are audited in
+`agent_sessions` and `agent_messages`.
+
+### 13. Runtime Surfaces
+
+The backend exposes three main surfaces:
+
+- FastAPI JSON endpoints for upload, library views, detail views, search,
+  campaigns, frames, evidence, and similar ads
+- SSE streams for job progress and agent responses
+- a decoupled Vite/React frontend that consumes only the HTTP/SSE API
+
+The frontend is not part of the pipeline contract. The backend owns ingestion,
+persistence, retrieval, and the agent; the UI is a client over JSON and SSE.
+
+---
+
 ## Installation
 
 ### 1. Prerequisites
