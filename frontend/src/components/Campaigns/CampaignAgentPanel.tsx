@@ -23,6 +23,7 @@ export function CampaignAgentPanel({
             <div className="section-title">Research agent</div>
             <div className="campaign-agent-status">
               <span className="badge badge-emerald">Local evidence</span>
+              <span className="badge badge-violet">LLM answer</span>
               <span className="badge badge-mono">Web off</span>
             </div>
           </div>
@@ -57,7 +58,15 @@ export function CampaignAgentPanel({
               <div className="campaign-agent-answer">
                 <strong>{deepResearch.question_answer.question}</strong>
                 <p>{deepResearch.question_answer.answer}</p>
-                <small>{deepResearch.question_answer.limits}</small>
+                <small>
+                  {[
+                    deepResearch.question_answer.source,
+                    deepResearch.question_answer.finish_reason,
+                    deepResearch.question_answer.limits
+                  ]
+                    .filter(Boolean)
+                    .join(" / ")}
+                </small>
               </div>
             </section>
           ) : null}

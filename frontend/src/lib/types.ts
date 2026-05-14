@@ -258,6 +258,9 @@ export type CampaignDeepResearch = {
     answer: string;
     evidence_ad_ids: string[];
     limits: string;
+    source?: "llm" | "local" | "local_fallback" | string;
+    finish_reason?: string | null;
+    error?: string;
   } | null;
   open_questions: string[];
   future_expansion: {

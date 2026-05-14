@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ad_classifier.agent.client import AgentClient
+from ad_classifier.campaigns.research_agent import answer_campaign_question
 from ad_classifier.campaigns.research_helpers import first_count, first_value
 from ad_classifier.models.campaigns import CampaignRecord
 
@@ -13,6 +15,7 @@ def build_deep_research(
     include_web: bool = False,
     question: str | None = None,
     thinking: bool = False,
+    client: AgentClient | None = None,
 ) -> dict[str, Any]:
     research = detail["research"]
     ads = detail["ads"]
@@ -21,6 +24,7 @@ def build_deep_research(
     creative = research["creative"]
     watchouts = research["watchouts"]
     findings = _deep_findings(summary, messaging, creative, watchouts, ads)
+    creative_review = _creative_review(summary, messaging, creative)
     assignment_review = _assignment_review(ads, summary)
     suggested_edits = _suggested_edits(campaign, messaging, findings)
     cleaned_question = question.strip() if question else None
@@ -48,17 +52,18 @@ def build_deep_research(
             ],
         },
         "findings": findings,
-        "creative_review": _creative_review(summary, messaging, creative),
+        "creative_review": creative_review,
         "assignment_review": assignment_review,
         "suggested_edits": suggested_edits,
-        "question_answer": _question_answer(
-            cleaned_question,
-            findings,
-            messaging,
-            creative,
-            watchouts,
-            assignment_review,
-            suggested_edits,
+        "question_answer": answer_campaign_question(
+            client=client,
+            question=cleaned_question,
+            detail=detail,
+            findings=findings,
+            creative_review=creative_review,
+            assignment_review=assignment_review,
+            suggested_edits=suggested_edits,
+            thinking=thinking,
         ),
         "open_questions": _deep_questions(campaign.name, summary, messaging, watchouts),
         "future_expansion": {
@@ -291,73 +296,6 @@ def _suggested_edits(
     return suggestions[:3]
 
 
-def _question_answer(
-    question: str | None,
-    findings: list[dict[str, Any]],
-    messaging: dict[str, Any],
-    creative: dict[str, Any],
-    watchouts: dict[str, Any],
-    assignment_review: dict[str, Any],
-    suggested_edits: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    if not question:
-        return None
-
-    normalized = question.lower()
-    evidence: list[str] = []
-    if any(term in normalized for term in ("outlier", "belong", "cluster", "assignment")):
-        outliers = assignment_review["outliers"]
-        evidence = [item["ad_id"] for item in outliers if item.get("ad_id")]
-        if outliers:
-            answer = (
-                f"{len(outliers)} assigned ads need membership review. "
-                "The report flags low similarity, brand differences, or category differences."
-            )
-        else:
-            answer = "No local assignment outliers were detected from similarity, brand, or category signals."
-    elif any(term in normalized for term in ("improve", "optimize", "edit", "change")):
-        if suggested_edits:
-            edits = "; ".join(
-                f"{item['field']} -> {item['value']}" for item in suggested_edits[:3]
-            )
-            answer = f"Recommended campaign edits from local evidence: {edits}."
-        else:
-            answer = "Local evidence does not support a specific campaign metadata edit yet."
-        evidence = _finding_ad_ids(findings)
-    elif any(term in normalized for term in ("offer", "price", "cta", "message")):
-        offer = first_count(messaging["top_offers"])
-        cta = first_count(messaging["top_ctas"])
-        answer = (
-            f"Top offer: {offer['value']} ({offer['count']} ads). "
-            if offer
-            else "No repeated offer was extracted. "
-        )
-        answer += (
-            f"Top CTA: {cta['value']} ({cta['count']} ads)."
-            if cta
-            else "No repeated CTA was extracted."
-        )
-        evidence = _finding_ad_ids(findings)
-    elif any(term in normalized for term in ("fine", "disclaimer", "small print", "text heavy")):
-        answer = (
-            f"{creative['disclaimer_ads']} ads include disclaimers, "
-            f"{creative['small_print_ads']} include small-print markers, and "
-            f"{watchouts['small_print_count']} disclaimer items were classified as small print."
-        )
-        evidence = _finding_ad_ids(findings)
-    else:
-        lead = findings[0]["detail"] if findings else "No strong campaign-level finding was generated."
-        answer = f"Best local answer: {lead}"
-        evidence = _finding_ad_ids(findings[:1])
-
-    return {
-        "question": question,
-        "answer": answer,
-        "evidence_ad_ids": evidence,
-        "limits": "Local-only answer; no web, landing page, or competitor evidence was used.",
-    }
-
-
 def _deep_questions(
     campaign_name: str,
     summary: dict[str, Any],
@@ -383,14 +321,3 @@ def _ads_with_value(ads: list[dict[str, Any]], key: str, value: Any) -> list[str
         for ad in ads
         if ad.get("ad_id") and str(value) in {str(item) for item in ad.get(key, [])}
     ]
-
-
-def _finding_ad_ids(findings: list[dict[str, Any]]) -> list[str]:
-    seen: set[str] = set()
-    ids: list[str] = []
-    for finding in findings:
-        for ad_id in finding.get("evidence_ad_ids", []):
-            if ad_id and ad_id not in seen:
-                seen.add(ad_id)
-                ids.append(ad_id)
-    return ids

@@ -325,10 +325,12 @@ Campaign detail includes a local-first analyst research mode exposed at
 `POST /api/campaigns/{id}/research/deep`. It does not call the internet. It
 summarizes assigned ads, structured marketing entities, classification tags,
 campaign suggestions, and assignment scores into findings, creative review,
-membership review, suggested campaign edits, and an optional local answer to an
-analyst question. The request shape already carries `include_web`, `question`,
-and `thinking` fields so a later web/LLM-backed research pass can be added
-without changing the frontend contract.
+membership review, and suggested campaign edits. When `question` is provided,
+the endpoint sends that local evidence bundle to the configured
+OpenAI-compatible agent LLM and returns a grounded answer; if the LLM is
+unavailable, it returns a clearly marked local fallback. The request shape
+already carries `include_web`, `question`, and `thinking` fields so a later web
+research pass can be added without changing the frontend contract.
 
 For operational backfills, `POST /api/campaigns/discover?persist=true` and the
 CLI discovery command still persist auto-created campaigns directly. Auto

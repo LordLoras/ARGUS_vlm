@@ -25,6 +25,8 @@ class AgentClient(ABC):
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        enable_thinking: bool = False,
     ) -> AgentMessage: ...
 
 
@@ -118,6 +120,8 @@ class HTTPAgentClient(AgentClient):
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        enable_thinking: bool = False,
     ) -> AgentMessage:
         payload: dict[str, Any] = {
             "model": self._model,
@@ -128,6 +132,8 @@ class HTTPAgentClient(AgentClient):
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        if enable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
 
         last_error: str = "no attempts made"
         for attempt in range(self._max_retries + 1):
@@ -171,8 +177,16 @@ class MockAgentClient(AgentClient):
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        enable_thinking: bool = False,
     ) -> AgentMessage:
-        self.calls.append({"messages": list(messages), "tools": list(tools or [])})
+        self.calls.append(
+            {
+                "messages": list(messages),
+                "tools": list(tools or []),
+                "enable_thinking": enable_thinking,
+            }
+        )
         if self._index >= len(self._responses):
             raise AgentClientError("MockAgentClient exhausted")
         response = self._responses[self._index]

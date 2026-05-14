@@ -2510,6 +2510,47 @@ button.ts-link:hover {
   color: var(--fg-mute);
   font-size: 11px;
 }
+.campaign-signal-details {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.campaign-signal-details summary {
+  cursor: pointer;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.campaign-signal-details div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.campaign-signal-details div span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-2);
+}
+.campaign-signal-details b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+.campaign-signal-details em {
+  color: var(--sky);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-style: normal;
+}
 .campaign-research-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

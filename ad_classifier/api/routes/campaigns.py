@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from ad_classifier.agent.client import AgentClient, HTTPAgentClient
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.campaigns.discover import discover_campaigns
 from ad_classifier.campaigns.research import (
@@ -229,6 +230,7 @@ def deep_research(
             include_web=body.include_web,
             question=body.question,
             thinking=body.thinking,
+            client=_campaign_agent_client(request) if body.question else None,
         )
     finally:
         conn.close()
@@ -334,3 +336,21 @@ def _campaign_id(name: str, brand: str | None) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", raw.casefold()).strip("_") or "campaign"
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
     return f"c_{slug}_{digest}"[:96]
+
+
+def _campaign_agent_client(request: Request) -> AgentClient:
+    config = get_config(request).agent
+    factory = getattr(request.app.state, "agent_client_factory", None)
+    if factory is not None:
+        return factory(config)
+    return HTTPAgentClient(
+        endpoint=config.endpoint.endpoint,
+        model=config.endpoint.model,
+        api_key_env=config.endpoint.api_key_env,
+        timeout_s=config.endpoint.timeout_s,
+        max_retries=config.endpoint.max_retries,
+        retry_delay_s=config.endpoint.retry_delay_s,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        stream=config.endpoint.stream if config.endpoint.stream is not None else True,
+    )

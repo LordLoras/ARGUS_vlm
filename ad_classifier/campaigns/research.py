@@ -4,6 +4,7 @@ import sqlite3
 from collections import Counter
 from typing import Any
 
+from ad_classifier.agent.client import AgentClient
 from ad_classifier.campaigns.research_deep import build_deep_research
 from ad_classifier.campaigns.research_helpers import (
     campaign_suggestion_values,
@@ -68,6 +69,7 @@ def campaign_deep_research(
     include_web: bool = False,
     question: str | None = None,
     thinking: bool = False,
+    client: AgentClient | None = None,
 ) -> dict[str, Any]:
     detail = campaign_detail(conn, campaign)
     return build_deep_research(
@@ -76,6 +78,7 @@ def campaign_deep_research(
         include_web=include_web,
         question=question,
         thinking=thinking,
+        client=client,
     )
 
 
@@ -192,7 +195,10 @@ def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> di
     }
 
     messaging = {
-        "top_products": top_counts(value for ad in ads for value in ad.get("products", [])),
+        "top_products": top_counts(
+            (value for ad in ads for value in ad.get("products", [])),
+            limit=None,
+        ),
         "top_offers": top_counts(value for ad in ads for value in ad.get("offers", [])),
         "top_ctas": top_counts(value for ad in ads for value in ad.get("ctas", [])),
         "top_prices": top_counts(value for ad in ads for value in ad.get("prices", [])),

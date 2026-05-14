@@ -100,7 +100,7 @@ def small_print_count(items: list[Any]) -> int:
     return count
 
 
-def top_counts(values: Any, *, limit: int = 8) -> list[dict[str, Any]]:
+def top_counts(values: Any, *, limit: int | None = 8) -> list[dict[str, Any]]:
     cleaned = [clean(value) for value in values]
     counter = Counter(value for value in cleaned if value)
     total = sum(counter.values())

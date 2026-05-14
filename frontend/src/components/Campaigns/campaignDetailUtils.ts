@@ -9,7 +9,8 @@ export function buildSignalCards(research: CampaignResearch) {
     {
       label: "Product mix",
       value: product?.value ?? "-",
-      detail: product ? `${research.messaging.top_products.length} values detected` : "No product signal"
+      detail: product ? `${research.messaging.top_products.length} values detected` : "No product signal",
+      items: research.messaging.top_products
     },
     {
       label: "Top offer",

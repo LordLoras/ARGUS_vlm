@@ -8,6 +8,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
+from ad_classifier.agent.client import AgentMessage, MockAgentClient
 from ad_classifier.api.app import create_app
 from ad_classifier.db.connection import load_sqlite_vec, open_database
 from ad_classifier.db.repositories import JobRepository
@@ -44,7 +45,25 @@ def config_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def client(config_path: Path) -> TestClient:
-    app = create_app(config_path=config_path, upload_probe=lambda _path: object())
+    def agent_client_factory(_config):
+        return MockAgentClient(
+            [
+                AgentMessage(
+                    content=(
+                        "This campaign answer came from the LLM client and is grounded in "
+                        "ad_campaign."
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                )
+            ]
+        )
+
+    app = create_app(
+        config_path=config_path,
+        upload_probe=lambda _path: object(),
+        agent_client_factory=agent_client_factory,
+    )
     return TestClient(app)
 
 
@@ -294,6 +313,8 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     assert deep_json["web_available"] is False
     assert deep_json["requested_question"] == "How should we improve the offer?"
     assert deep_json["question_answer"]["question"] == "How should we improve the offer?"
+    assert deep_json["question_answer"]["source"] == "llm"
+    assert "LLM client" in deep_json["question_answer"]["answer"]
     assert deep_json["generated_from"]["ad_ids"] == ["ad_campaign"]
     assert any(item["area"] == "Direction" for item in deep_json["creative_review"])
     assert deep_json["suggested_edits"]

@@ -152,7 +152,7 @@ function OverviewTab({
   description
 }: {
   insights: CampaignInsight[];
-  signals: Array<{ label: string; value: string; detail: string }>;
+  signals: Array<{ label: string; value: string; detail: string; items?: CampaignCount[] }>;
   description?: string | null;
 }) {
   return (
@@ -166,11 +166,7 @@ function OverviewTab({
         <div className="section-title">Key signals</div>
         <div className="campaign-signal-grid">
           {signals.map((signal) => (
-            <div key={signal.label} className="campaign-signal">
-              <span>{signal.label}</span>
-              <strong>{signal.value}</strong>
-              <small>{signal.detail}</small>
-            </div>
+            <SignalCard key={signal.label} signal={signal} />
           ))}
         </div>
       </section>
@@ -255,6 +251,34 @@ function ResearchTab({ research }: { research: CampaignResearch }) {
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function SignalCard({
+  signal
+}: {
+  signal: { label: string; value: string; detail: string; items?: CampaignCount[] };
+}) {
+  const expandableItems = signal.items ?? [];
+  return (
+    <div className="campaign-signal">
+      <span>{signal.label}</span>
+      <strong>{signal.value}</strong>
+      <small>{signal.detail}</small>
+      {expandableItems.length > 1 ? (
+        <details className="campaign-signal-details">
+          <summary>All products</summary>
+          <div>
+            {expandableItems.map((item) => (
+              <span key={item.value}>
+                <b>{item.value}</b>
+                <em>{item.count}</em>
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
