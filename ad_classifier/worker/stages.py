@@ -5,6 +5,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
+import structlog
+
 from ad_classifier._env import resolve_api_key
 from ad_classifier.config import AppConfig
 from ad_classifier.db.connection import load_sqlite_vec
@@ -36,6 +38,7 @@ from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.search.fts import fts_update
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 from ad_classifier.vlm.cleanup import OCRCleanupPass
+from ad_classifier.vlm.complexity import VLMComplexity, assess_vlm_complexity, token_budget_for
 from ad_classifier.vlm.correction import SelfCorrectionPass
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.validation import validate_vlm_output
@@ -49,6 +52,7 @@ from ad_classifier.worker.document_ocr import (
 )
 
 ProgressCallback = Callable[[str, float, str], None]
+_logger = structlog.get_logger(__name__)
 
 
 class PipelineComponents:
@@ -158,6 +162,21 @@ def run_pipeline_for_job(
         )
 
     raw_ocr_items = list(ocr_items)
+    vlm_complexity = assess_vlm_complexity(
+        ocr_items=raw_ocr_items,
+        transcript=ingest.transcript,
+        kept_frames=preprocess_result.kept_frames,
+        config=config.vlm.complexity,
+    )
+    _logger.info(
+        "vlm_complexity_assessed",
+        ad_id=ad_id,
+        stage="vlm",
+        level=vlm_complexity.level,
+        score=vlm_complexity.score,
+        reasons=list(vlm_complexity.reasons),
+        metrics=vlm_complexity.metrics,
+    )
 
     if config.vlm.enable_ocr_cleanup_pass and raw_ocr_items:
         raw_ocr_path = config.paths.out / ad_id / "raw_ocr_items.json"
@@ -172,7 +191,7 @@ def run_pipeline_for_job(
 
     if config.vlm.enable_ocr_cleanup_pass:
         emit("vlm:cleanup", 0.50, "cleaning OCR text")
-        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript)
+        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript, vlm_complexity)
 
     emit("rules", 0.55, "running rules")
     rules = RulesEngine(load_rules(config.rules.rules_path)).run(ocr_items, ingest.transcript)
@@ -180,6 +199,11 @@ def run_pipeline_for_job(
     conn.commit()
 
     emit("vlm", 0.64, "verifying classification")
+    vlm_max_tokens = token_budget_for(
+        vlm_complexity,
+        normal_tokens=config.vlm.endpoint.max_tokens,
+        complex_tokens=config.vlm.complexity.verifier_max_tokens,
+    )
     bundle = build_evidence_bundle(
         ad_id=ad_id,
         kept_frames=preprocess_result.kept_frames,
@@ -203,7 +227,7 @@ def run_pipeline_for_job(
         max_retries=config.vlm.endpoint.max_retries,
         retry_delay_s=config.vlm.endpoint.retry_delay_s,
         temperature=config.vlm.endpoint.temperature,
-        max_tokens=config.vlm.endpoint.max_tokens,
+        max_tokens=vlm_max_tokens,
         enable_thinking=config.vlm.endpoint.enable_thinking,
         response_format=config.vlm.endpoint.response_format,
         image_max_dim=config.vlm.image_max_dim,
@@ -220,7 +244,7 @@ def run_pipeline_for_job(
     if config.vlm.enable_self_correction:
         emit("vlm:correct", 0.72, "self-correction check")
         evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
-        vlm_result = _run_self_correction(config, vlm_result, evidence_texts)
+        vlm_result = _run_self_correction(config, vlm_result, evidence_texts, vlm_complexity)
 
     if getattr(config.vlm, "enable_visual_verify", False):
         emit("vlm:visual_verify", 0.75, "visual verification")
@@ -534,14 +558,20 @@ def _run_ocr_cleanup(
     config: AppConfig,
     ocr_items: list[OCRItem],
     transcript: WhisperTranscript,
+    complexity: VLMComplexity,
 ) -> list[OCRItem]:
     api_key = resolve_api_key(config.vlm.endpoint.api_key_env)
+    max_tokens = token_budget_for(
+        complexity,
+        normal_tokens=2048,
+        complex_tokens=config.vlm.complexity.cleanup_max_tokens,
+    )
     cleanup = OCRCleanupPass(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
         api_key=api_key,
         timeout_s=60.0,
-        max_tokens=2048,
+        max_tokens=max_tokens,
         enable_thinking=config.vlm.endpoint.enable_thinking,
         stream=config.vlm.endpoint.stream,
     )
@@ -552,14 +582,20 @@ def _run_self_correction(
     config: AppConfig,
     result: VLMVerificationResult,
     evidence_texts: list[str],
+    complexity: VLMComplexity,
 ) -> VLMVerificationResult:
     api_key = resolve_api_key(config.vlm.endpoint.api_key_env)
+    max_tokens = token_budget_for(
+        complexity,
+        normal_tokens=4096,
+        complex_tokens=config.vlm.complexity.self_correction_max_tokens,
+    )
     correction = SelfCorrectionPass(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
         api_key=api_key,
         timeout_s=300.0,
-        max_tokens=4096,
+        max_tokens=max_tokens,
         enable_thinking=config.vlm.endpoint.enable_thinking,
         stream=config.vlm.endpoint.stream,
     )

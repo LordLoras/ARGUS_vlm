@@ -301,6 +301,20 @@ class VLMEndpointDefaults:
     )
 
 
+class VLMComplexityConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    ocr_item_threshold: int = Field(default=120, ge=1)
+    ocr_char_threshold: int = Field(default=1400, ge=1)
+    max_frame_ocr_chars_threshold: int = Field(default=180, ge=1)
+    transcript_char_threshold: int = Field(default=1200, ge=1)
+    kept_frame_threshold: int = Field(default=24, ge=1)
+    cleanup_max_tokens: int = Field(default=4096, ge=64)
+    verifier_max_tokens: int = Field(default=8192, ge=64)
+    self_correction_max_tokens: int = Field(default=4096, ge=64)
+
+
 class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -311,6 +325,7 @@ class VLMConfig(BaseModel):
     enable_self_correction: bool = True
     enable_post_validation: bool = True
     enable_visual_verify: bool = False
+    complexity: VLMComplexityConfig = Field(default_factory=VLMComplexityConfig)
     local: VLMEndpointConfig = Field(default_factory=lambda: VLMEndpointDefaults.LOCAL.model_copy())
     remote: VLMEndpointConfig = Field(
         default_factory=lambda: VLMEndpointDefaults.REMOTE.model_copy()

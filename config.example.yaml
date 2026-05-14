@@ -136,6 +136,18 @@ vlm:
   enable_self_correction: true        # lightweight text-only consistency check after VLM output
   enable_post_validation: true        # deterministic validation of prices, offers, brands
   enable_visual_verify: false         # second VLM pass: verify brand/logo claims against frames
+  complexity:
+    # Auto-raise generation budgets for OCR-heavy ads. This catches dense
+    # end-card/fine-print creatives that otherwise hit finish_reason=length.
+    enabled: true
+    ocr_item_threshold: 120
+    ocr_char_threshold: 1400
+    max_frame_ocr_chars_threshold: 180
+    transcript_char_threshold: 1200
+    kept_frame_threshold: 24
+    cleanup_max_tokens: 4096
+    verifier_max_tokens: 8192
+    self_correction_max_tokens: 4096
   local:
     endpoint: "http://127.0.0.1:1234/v1"
     model: "Qwen3.6-27B-Q4_K_M"      # vision-capable model for multimodal VLM analysis

@@ -230,6 +230,13 @@ document-OCR text, metadata, and rule triggers. It returns strict structured
 JSON containing category, confidence, observation labels, evidence, OCR quality,
 summary, and marketing entities.
 
+Before cleanup and classification, ARGUS scores ad complexity from observable
+inputs: OCR item count, total OCR text, the densest text frame, transcript
+length, and kept-frame count. OCR-heavy ads automatically receive larger
+generation budgets for OCR cleanup, VLM classification, and self-correction.
+This is meant for dense end cards and fine print where a fixed `max_tokens`
+budget can end with `finish_reason=length`.
+
 Post-processing then runs deterministic checks:
 
 - schema parsing and fallback handling
