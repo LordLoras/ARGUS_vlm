@@ -5,7 +5,66 @@ import re
 from typing import Any
 
 from ad_classifier.agent.client import AgentClient, AgentClientError
+from ad_classifier.campaigns.research_agent_parse import parse_research_report
 from ad_classifier.campaigns.research_helpers import first_count
+
+
+def generate_campaign_research_report(
+    *,
+    client: AgentClient | None,
+    question: str | None,
+    detail: dict[str, Any],
+    findings: list[dict[str, Any]],
+    creative_review: list[dict[str, Any]],
+    assignment_review: dict[str, Any],
+    suggested_edits: list[dict[str, Any]],
+    open_questions: list[str],
+    thinking: bool = False,
+) -> dict[str, Any] | None:
+    if client is None:
+        return None
+
+    evidence = _context_payload(
+        detail,
+        findings,
+        creative_review,
+        assignment_review,
+        suggested_edits,
+        open_questions,
+    )
+    messages = [
+        {"role": "system", "content": _REPORT_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Analyst question: {question or ''}\n\n"
+                "Local campaign evidence JSON:\n"
+                f"{json.dumps(evidence, ensure_ascii=True)}"
+            ),
+        },
+    ]
+    try:
+        response = client.complete(messages, enable_thinking=thinking)
+        raw = (response.content or "").strip()
+        if not raw and response.finish_reason == "length" and thinking:
+            response = client.complete(messages, enable_thinking=False)
+            raw = (response.content or "").strip()
+    except AgentClientError as exc:
+        return {"source": "local_fallback", "error": str(exc)[:240]}
+
+    report = parse_research_report(
+        raw,
+        finish_reason=response.finish_reason,
+        question=question,
+        detail=detail,
+    )
+    if not report:
+        return {
+            "source": "local_fallback",
+            "finish_reason": response.finish_reason,
+            "error": "agent returned non-json research report",
+        }
+    return report
 
 
 def answer_campaign_question(
@@ -31,7 +90,7 @@ def answer_campaign_question(
             "content": (
                 f"Question: {question}\n\n"
                 "Local campaign evidence JSON:\n"
-                f"{json.dumps(_context_payload(detail, findings, creative_review, assignment_review, suggested_edits), ensure_ascii=True)}"
+                f"{json.dumps(_context_payload(detail, findings, creative_review, assignment_review, suggested_edits, []), ensure_ascii=True)}"
             ),
         },
     ]
@@ -85,12 +144,29 @@ Do not invent products, counts, campaign names, or ad_ids. Cite ad_ids when maki
 Keep the answer under 160 words unless the user asks for detail."""
 
 
+_REPORT_SYSTEM_PROMPT = """You are ARGUS, a senior campaign research analyst for a local ad database.
+You receive local evidence only: campaign assignments, key metrics, marketing entities, OCR/GLM-OCR excerpts, transcript excerpts, VLM classification evidence, and deterministic metric signals.
+Generate the visible deep-research report from those metrics and evidence. Do not merely restate every metric; infer the marketing meaning.
+No internet, competitor, landing-page, or current-market claims unless they are in the evidence.
+If the analyst question is off-topic, keep question_answer scoped to campaign research.
+Return one strict JSON object and no markdown:
+{
+  "findings": [{"priority":"high|medium|low","title":"...","detail":"...","evidence_ad_ids":["ad_id"]}],
+  "creative_review": [{"area":"Attention|Branding|Connection|Direction","status":"present|review|missing|unknown","detail":"..."}],
+  "suggested_edits": [{"field":"name|theme|description|assignments|notes","value":"...","reason":"..."}],
+  "open_questions": ["..."],
+  "question_answer": {"question":"...","answer":"...","evidence_ad_ids":["ad_id"],"limits":"..."} | null
+}
+Keep findings to 3-5 items, prioritize commercial strategy, offer/CTA clarity, product architecture, evidence quality, and assignment outliers. Cite real ad_ids only."""
+
+
 def _context_payload(
     detail: dict[str, Any],
     findings: list[dict[str, Any]],
     creative_review: list[dict[str, Any]],
     assignment_review: dict[str, Any],
     suggested_edits: list[dict[str, Any]],
+    open_questions: list[str],
 ) -> dict[str, Any]:
     research = detail["research"]
     return {
@@ -103,6 +179,7 @@ def _context_payload(
         "creative_review": creative_review,
         "assignment_review": assignment_review,
         "suggested_edits": suggested_edits,
+        "open_questions": open_questions,
         "ads": [_ad_context(ad) for ad in detail["ads"][:30]],
     }
 
@@ -124,6 +201,9 @@ def _ad_context(ad: dict[str, Any]) -> dict[str, Any]:
         "risk_labels",
         "disclaimer_count",
         "small_print_count",
+        "ocr_quality",
+        "classification_evidence",
+        "text_evidence",
     ]
     return {key: ad.get(key) for key in keys}
 

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from ad_classifier.agent.client import AgentMessage, MockAgentClient
-from ad_classifier.campaigns.research_agent import answer_campaign_question
+from ad_classifier.campaigns.research_agent import (
+    answer_campaign_question,
+    generate_campaign_research_report,
+)
 
 
 def _detail():
@@ -99,3 +102,38 @@ def test_campaign_question_retries_without_thinking_when_length_empty():
     assert answer["source"] == "llm"
     assert answer["answer"] == "Products are variants in the same Jeep campaign."
     assert [call["enable_thinking"] for call in client.calls] == [True, False]
+
+
+def test_campaign_report_filters_llm_ad_id_citations():
+    client = MockAgentClient(
+        [
+            AgentMessage(
+                content=(
+                    '{"findings":[{"priority":"high","title":"Offer leads",'
+                    '"detail":"The shared offer is the campaign anchor.",'
+                    '"evidence_ad_ids":["ad_a","ad_fake"]}],'
+                    '"creative_review":[],"suggested_edits":[],"open_questions":[],'
+                    '"question_answer":{"question":"what matters","answer":"ad_a has the clearest offer.",'
+                    '"evidence_ad_ids":["ad_fake"],"limits":"local only"}}'
+                ),
+                tool_calls=[],
+                finish_reason="stop",
+            )
+        ]
+    )
+
+    report = generate_campaign_research_report(
+        client=client,
+        question="what matters",
+        detail=_detail(),
+        findings=[],
+        creative_review=[],
+        assignment_review={"outliers": []},
+        suggested_edits=[],
+        open_questions=[],
+    )
+
+    assert report is not None
+    assert report["source"] == "llm"
+    assert report["findings"][0]["evidence_ad_ids"] == ["ad_a"]
+    assert report["question_answer"]["evidence_ad_ids"] == ["ad_a"]

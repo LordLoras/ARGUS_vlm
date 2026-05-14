@@ -323,14 +323,15 @@ rediscovery. Manual campaign creation and per-ad assignment use the same
 
 Campaign detail includes a local-first analyst research mode exposed at
 `POST /api/campaigns/{id}/research/deep`. It does not call the internet. It
-summarizes assigned ads, structured marketing entities, classification tags,
-campaign suggestions, and assignment scores into findings, creative review,
-membership review, and suggested campaign edits. When `question` is provided,
-the endpoint sends that local evidence bundle to the configured
-OpenAI-compatible agent LLM and returns a grounded answer; if the LLM is
-unavailable, it returns a clearly marked local fallback. The request shape
-already carries `include_web`, `question`, and `thinking` fields so a later web
-research pass can be added without changing the frontend contract.
+builds a local evidence bundle from assigned ads, structured marketing
+entities, classification tags, OCR/GLM-OCR excerpts, transcript excerpts,
+campaign suggestions, and assignment scores. The configured OpenAI-compatible
+agent LLM then turns that evidence into the visible findings, creative review,
+suggested edits, open questions, and optional grounded answer. If the LLM is
+unavailable or returns unusable output, the endpoint returns a clearly marked
+local metric fallback. The request shape already carries `include_web`,
+`question`, and `thinking` fields so a later web research pass can be added
+without changing the frontend contract.
 
 For operational backfills, `POST /api/campaigns/discover?persist=true` and the
 CLI discovery command still persist auto-created campaigns directly. Auto
@@ -363,6 +364,22 @@ persistence, retrieval, and the agent; the UI is a client over JSON and SSE.
 
 ## Installation
 
+This is the recommended Windows path for a semi-technical local install. Do the
+steps in order; most setup problems come from replacing the preinstalled torch
+GPU wheel, missing ffmpeg on `PATH`, or starting ARGUS before `config.yaml` and
+frontend dependencies exist.
+
+Quick checklist:
+
+1. Install Git, Python, Node.js, ffmpeg, and a local OpenAI-compatible VLM
+   server.
+2. Create or activate `.venv`, then install ARGUS Python dependencies.
+3. Do not install or upgrade `torch` unless you are intentionally replacing the
+   hardware-specific GPU build.
+4. Copy `config.example.yaml` to `config.yaml` and set the VLM endpoint/model.
+5. Run `python -m ad_classifier init-db`.
+6. Run `.\start.bat`, then open `http://127.0.0.1:5173`.
+
 ### 1. Prerequisites
 
 ARGUS is primarily developed for Windows 11.
@@ -384,12 +401,23 @@ cd ARGUS_vlm
 
 ### 3. Create the Python environment
 
+If this machine already has a working project `.venv`, activate it and do not
+delete it just to reinstall. The environment may contain a manually installed
+GPU PyTorch wheel that pip cannot safely recreate by guessing.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e ".[dev]"
+```
+
+If PowerShell blocks activation for the current terminal session:
+
+```powershell
+Set-ExecutionPolicy -Scope Process RemoteSigned
+.\.venv\Scripts\Activate.ps1
 ```
 
 Install OCR separately on Windows. Installing `paddlepaddle` first usually gives
@@ -407,6 +435,9 @@ python -m pip install -e ".[ocr,dev]"
 ```
 
 ### 4. PyTorch and Embeddings
+
+Important: if you received this project with a working `.venv`, treat that torch
+install as part of the machine setup.
 
 Do not run this in a production ARGUS environment unless you intentionally want
 to replace the existing GPU build:
@@ -569,10 +600,24 @@ advisory unless PaddleOCR, transcript, or another frame corroborates it.
 
 ### 8. Initialize and Run
 
+Install the frontend dependencies once:
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+Initialize the SQLite database, then start the API, worker, and frontend:
+
 ```powershell
 python -m ad_classifier init-db
 .\start.bat
 ```
+
+`start.bat` opens separate command windows for the API, worker, and Vite
+frontend. It also frees the default API/frontend ports first, so do not run it if
+you need to preserve another process on ports `8000` or `5173`.
 
 Default local services:
 
@@ -581,6 +626,15 @@ Default local services:
 | API | `http://localhost:8000` |
 | API docs | `http://localhost:8000/docs` |
 | Frontend | `http://localhost:5173` |
+
+First-run sanity checks:
+
+- `http://127.0.0.1:8000/docs` loads the FastAPI docs.
+- `http://127.0.0.1:5173` loads the ARGUS frontend.
+- The worker window says it launched the SQLite-backed worker.
+- Your VLM server is already running before you upload an ad.
+- For visual search, the torch verification command above reports a usable GPU
+  or you intentionally configured the image embedder for CPU.
 
 ---
 

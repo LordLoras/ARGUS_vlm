@@ -55,6 +55,7 @@ def campaign_rollup(conn: sqlite3.Connection, campaign: CampaignRecord) -> dict[
 def campaign_detail(conn: sqlite3.Connection, campaign: CampaignRecord) -> dict[str, Any]:
     ad_rows = _campaign_ad_rows(conn, campaign.id)
     ads = [_ad_payload(row) for row in ad_rows]
+    _attach_text_evidence(conn, ads)
     return {
         "campaign": campaign_rollup(conn, campaign),
         "ads": ads,
@@ -102,6 +103,8 @@ def _campaign_ad_rows(conn: sqlite3.Connection, campaign_id: str) -> list[dict[s
           ads.subcategory,
           classifications.confidence,
           classifications.risk_labels_json,
+          classifications.ocr_quality_json,
+          classifications.evidence_json,
           marketing_entities.products_json,
           marketing_entities.prices_json,
           marketing_entities.offers_json,
@@ -153,6 +156,8 @@ def _ad_payload(row: dict[str, Any]) -> dict[str, Any]:
         "subcategory": row.get("subcategory"),
         "confidence": row.get("confidence"),
         "risk_labels": string_values(json_value(row.get("risk_labels_json"))),
+        "ocr_quality": json_dict(row.get("ocr_quality_json")),
+        "classification_evidence": _classification_evidence(row.get("evidence_json")),
         "offers": offers,
         "ctas": ctas,
         "prices": prices,
@@ -162,6 +167,74 @@ def _ad_payload(row: dict[str, Any]) -> dict[str, Any]:
         "creative_attributes": creative_attributes,
         "campaign_suggestions": campaign_suggestion_values(campaign_suggestions),
     }
+
+
+def _attach_text_evidence(conn: sqlite3.Connection, ads: list[dict[str, Any]]) -> None:
+    ad_ids = [str(ad["ad_id"]) for ad in ads if ad.get("ad_id")]
+    if not ad_ids:
+        return
+    placeholders = ",".join("?" for _ in ad_ids)
+    transcript_rows = conn.execute(
+        f"""
+        SELECT ad_id, substr(group_concat(text, ' '), 1, 800) AS transcript_excerpt
+        FROM transcript_segments
+        WHERE ad_id IN ({placeholders})
+        GROUP BY ad_id
+        """,
+        ad_ids,
+    ).fetchall()
+    transcripts = {row["ad_id"]: row["transcript_excerpt"] for row in transcript_rows}
+
+    ocr_rows = conn.execute(
+        f"""
+        SELECT
+          f.ad_id,
+          o.engine,
+          COUNT(*) AS item_count,
+          substr(group_concat(o.text, ' | '), 1, 900) AS text_excerpt
+        FROM frames f
+        JOIN ocr_items o ON o.frame_id = f.id
+        WHERE f.ad_id IN ({placeholders})
+        GROUP BY f.ad_id, o.engine
+        ORDER BY f.ad_id, item_count DESC
+        """,
+        ad_ids,
+    ).fetchall()
+    ocr_by_ad: dict[str, list[dict[str, Any]]] = {}
+    for row in ocr_rows:
+        ocr_by_ad.setdefault(row["ad_id"], []).append(
+            {
+                "engine": row["engine"],
+                "items": row["item_count"],
+                "text_excerpt": row["text_excerpt"],
+            }
+        )
+
+    for ad in ads:
+        ad_id = ad.get("ad_id")
+        ocr = ocr_by_ad.get(ad_id, [])
+        ad["text_evidence"] = {
+            "transcript_excerpt": transcripts.get(ad_id),
+            "ocr": ocr[:4],
+            "has_glm_ocr": any("glm" in str(item["engine"]).casefold() for item in ocr),
+            "has_paddleocr": any("paddle" in str(item["engine"]).casefold() for item in ocr),
+        }
+
+
+def _classification_evidence(raw: Any) -> list[dict[str, Any]]:
+    items = json_list(raw)
+    evidence: list[dict[str, Any]] = []
+    for item in items[:8]:
+        if isinstance(item, dict):
+            evidence.append(
+                {
+                    "source": item.get("source"),
+                    "time_ms": item.get("time_ms"),
+                    "frame_index": item.get("frame_index"),
+                    "text": clean(item.get("text")) or clean(item.get("reason")),
+                }
+            )
+    return evidence
 
 
 def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> dict[str, Any]:

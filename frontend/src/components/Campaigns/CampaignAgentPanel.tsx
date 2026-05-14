@@ -73,7 +73,9 @@ export function CampaignAgentPanel({
             </section>
           ) : null}
           <section>
-            <div className="section-title">Findings</div>
+            <div className="section-title">
+              {deepResearch.research_source === "llm" ? "Agent findings" : "Structured signals"}
+            </div>
             <FindingList findings={deepResearch.findings} />
           </section>
           <section>

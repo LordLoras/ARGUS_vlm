@@ -50,8 +50,19 @@ def client(config_path: Path) -> TestClient:
             [
                 AgentMessage(
                     content=(
-                        "This campaign answer came from the LLM client and is grounded in "
-                        "ad_campaign."
+                        '{"findings":[{"priority":"high","title":"LLM offer read",'
+                        '"detail":"The LLM client identifies 0% APR as the main offer.",'
+                        '"evidence_ad_ids":["ad_campaign"]}],'
+                        '"creative_review":[{"area":"Direction","status":"present",'
+                        '"detail":"The LLM client sees a clear Shop now CTA."}],'
+                        '"suggested_edits":[{"field":"description",'
+                        '"value":"Campaign centered on 0% APR.",'
+                        '"reason":"LLM client summarized the offer."}],'
+                        '"open_questions":["Which ad has the clearest offer hierarchy?"],'
+                        '"question_answer":{"question":"How should we improve the offer?",'
+                        '"answer":"The LLM client says to make 0% APR the lead message.",'
+                        '"evidence_ad_ids":["ad_campaign"],'
+                        '"limits":"Local campaign evidence only."}}'
                     ),
                     tool_calls=[],
                     finish_reason="stop",
@@ -313,9 +324,11 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     assert deep_json["web_available"] is False
     assert deep_json["requested_question"] == "How should we improve the offer?"
     assert deep_json["question_answer"]["question"] == "How should we improve the offer?"
+    assert deep_json["research_source"] == "llm"
     assert deep_json["question_answer"]["source"] == "llm"
     assert "LLM client" in deep_json["question_answer"]["answer"]
     assert deep_json["generated_from"]["ad_ids"] == ["ad_campaign"]
+    assert deep_json["findings"][0]["title"] == "LLM offer read"
     assert any(item["area"] == "Direction" for item in deep_json["creative_review"])
     assert deep_json["suggested_edits"]
 

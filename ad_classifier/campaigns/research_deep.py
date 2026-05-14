@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from ad_classifier.agent.client import AgentClient
-from ad_classifier.campaigns.research_agent import answer_campaign_question
+from ad_classifier.campaigns.research_agent import (
+    answer_campaign_question,
+    generate_campaign_research_report,
+)
 from ad_classifier.campaigns.research_helpers import first_count, first_value
 from ad_classifier.models.campaigns import CampaignRecord
 
@@ -27,17 +30,68 @@ def build_deep_research(
     creative_review = _creative_review(summary, messaging, creative)
     assignment_review = _assignment_review(ads, summary)
     suggested_edits = _suggested_edits(campaign, messaging, findings)
+    open_questions = _deep_questions(campaign.name, summary, messaging, watchouts)
     cleaned_question = question.strip() if question else None
+    agent_report = generate_campaign_research_report(
+        client=client,
+        question=cleaned_question,
+        detail=detail,
+        findings=findings,
+        creative_review=creative_review,
+        assignment_review=assignment_review,
+        suggested_edits=suggested_edits,
+        open_questions=open_questions,
+        thinking=thinking,
+    )
+    research_source = "llm" if agent_report and agent_report.get("source") == "llm" else "local"
+    if research_source == "llm":
+        findings = agent_report.get("findings") or findings
+        creative_review = agent_report.get("creative_review") or creative_review
+        suggested_edits = agent_report.get("suggested_edits") or suggested_edits
+        open_questions = agent_report.get("open_questions") or open_questions
+        question_answer = agent_report.get("question_answer")
+        if cleaned_question and not question_answer:
+            question_answer = answer_campaign_question(
+                client=None,
+                question=cleaned_question,
+                detail=detail,
+                findings=findings,
+                creative_review=creative_review,
+                assignment_review=assignment_review,
+                suggested_edits=suggested_edits,
+                thinking=thinking,
+            )
+            if question_answer:
+                question_answer["source"] = "local_fallback"
+    else:
+        question_answer = answer_campaign_question(
+            client=None,
+            question=cleaned_question,
+            detail=detail,
+            findings=findings,
+            creative_review=creative_review,
+            assignment_review=assignment_review,
+            suggested_edits=suggested_edits,
+            thinking=thinking,
+        )
+        if question_answer and agent_report:
+            question_answer["source"] = "local_fallback"
+            if agent_report.get("finish_reason"):
+                question_answer["finish_reason"] = agent_report["finish_reason"]
+            if agent_report.get("error"):
+                question_answer["error"] = agent_report["error"]
+
     return {
         "mode": "local",
         "include_web": False,
         "web_available": False,
         "requested_web": include_web,
         "requested_question": cleaned_question,
-        "analysis_mode": "local_structured_deep" if thinking else "local_structured",
+        "analysis_mode": "agent_deep_research" if research_source == "llm" else "local_structured",
+        "research_source": research_source,
         "scope": (
             "Local evidence only: campaign records, assigned ads, classifications, "
-            "marketing entities, OCR/VLM-derived campaign suggestions, and assignment scores."
+            "marketing entities, OCR/GLM-OCR/VLM evidence, and assignment scores."
         ),
         "campaign": detail["campaign"],
         "generated_from": {
@@ -49,23 +103,17 @@ def build_deep_research(
                 "ads",
                 "classifications",
                 "marketing_entities",
+                "frames",
+                "ocr_items",
+                "transcript_segments",
             ],
         },
         "findings": findings,
         "creative_review": creative_review,
         "assignment_review": assignment_review,
         "suggested_edits": suggested_edits,
-        "question_answer": answer_campaign_question(
-            client=client,
-            question=cleaned_question,
-            detail=detail,
-            findings=findings,
-            creative_review=creative_review,
-            assignment_review=assignment_review,
-            suggested_edits=suggested_edits,
-            thinking=thinking,
-        ),
-        "open_questions": _deep_questions(campaign.name, summary, messaging, watchouts),
+        "question_answer": question_answer,
+        "open_questions": open_questions,
         "future_expansion": {
             "web_research": "disabled",
             "supported_later": [

@@ -230,7 +230,7 @@ def deep_research(
             include_web=body.include_web,
             question=body.question,
             thinking=body.thinking,
-            client=_campaign_agent_client(request) if body.question else None,
+            client=_campaign_agent_client(request),
         )
     finally:
         conn.close()

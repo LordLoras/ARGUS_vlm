@@ -99,10 +99,34 @@ export function CampaignDetailPanel({
       </header>
 
       <div className="campaign-metrics compact">
-        <Metric label="Ads" value={String(research.summary.ad_count)} sub={`${research.summary.user_assigned ?? 0} user / ${research.summary.auto_assigned ?? 0} auto`} />
-        <Metric label="Cohesion" value={formatScore(research.summary.mean_similarity)} sub="cluster score" />
-        <Metric label="Confidence" value={formatScore(research.summary.avg_confidence)} sub={research.summary.min_confidence != null ? `min ${formatScore(research.summary.min_confidence)}` : "entity quality"} />
-        <Metric label="Span" value={research.summary.span_days != null ? `${research.summary.span_days}d` : "-"} sub={formatRange(research.summary.first_seen, research.summary.last_seen)} />
+        <Metric
+          label="Ads"
+          value={String(research.summary.ad_count)}
+          sub={`${research.summary.user_assigned ?? 0} user / ${research.summary.auto_assigned ?? 0} auto`}
+          help="Total assigned ads, split between manual assignments and auto-discovered assignments."
+        />
+        <Metric
+          label="Campaign fit"
+          value={formatScore(research.summary.mean_similarity)}
+          sub="how tightly ads group"
+          help="Mean assignment similarity across ads in this campaign. Higher means the ads look and read more like one campaign."
+        />
+        <Metric
+          label="Evidence trust"
+          value={formatScore(research.summary.avg_confidence)}
+          sub={
+            research.summary.min_confidence != null
+              ? `lowest ${formatScore(research.summary.min_confidence)}`
+              : "entity quality"
+          }
+          help="Average classifier confidence for assigned ads. The sublabel shows the weakest ad when available."
+        />
+        <Metric
+          label="Run window"
+          value={research.summary.span_days != null ? `${research.summary.span_days}d` : "-"}
+          sub={formatRange(research.summary.first_seen, research.summary.last_seen)}
+          help="Date range covered by the ads currently assigned to this campaign."
+        />
       </div>
 
       <div className="campaign-tabs">
@@ -283,9 +307,24 @@ function SignalCard({
   );
 }
 
-function Metric({ label, value, sub }: { label: string; value: string; sub: string }) {
+function Metric({
+  label,
+  value,
+  sub,
+  help
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  help?: string;
+}) {
   return (
-    <div className="campaign-metric">
+    <div
+      className="campaign-metric"
+      title={help}
+      aria-label={help ? `${label}: ${help}` : undefined}
+      tabIndex={help ? 0 : undefined}
+    >
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{sub}</small>

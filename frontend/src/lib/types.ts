@@ -242,6 +242,7 @@ export type CampaignDeepResearch = {
   requested_web?: boolean;
   requested_question?: string | null;
   analysis_mode?: string;
+  research_source?: "llm" | "local" | string;
   scope: string;
   campaign: Campaign;
   generated_from: {
