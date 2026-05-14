@@ -17,7 +17,7 @@ export function CampaignAgentPanel({
 
   return (
     <div className="campaign-tab-pane">
-      <section className="campaign-section first">
+      <section className="campaign-section first" aria-busy={loading}>
         <div className="campaign-agent-head">
           <div>
             <div className="section-title">Research agent</div>
@@ -37,7 +37,7 @@ export function CampaignAgentPanel({
           </button>
         </div>
         <textarea
-          className="input campaign-agent-question"
+          className={`input campaign-agent-question ${loading ? "active" : ""}`}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder="Ask about outliers, offer consistency, fine print, or campaign improvements"
@@ -45,12 +45,14 @@ export function CampaignAgentPanel({
         />
       </section>
 
-      {!deepResearch ? (
+      {loading ? <ResearchProgress question={submittedQuestion} /> : null}
+
+      {!deepResearch && !loading ? (
         <div className="campaign-agent-empty">
           <span>Scope</span>
           <p>Local campaign, ad, classification, and marketing-entity evidence.</p>
         </div>
-      ) : (
+      ) : deepResearch ? (
         <div className="campaign-agent-report">
           {deepResearch.question_answer ? (
             <section>
@@ -103,7 +105,27 @@ export function CampaignAgentPanel({
             </div>
           </section>
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+function ResearchProgress({ question }: { question: string }) {
+  const label = question || "Campaign research scan";
+  return (
+    <div className="campaign-agent-progress" role="status" aria-live="polite">
+      <div className="campaign-agent-progress-head">
+        <span>Research in progress</span>
+        <strong>{label}</strong>
+      </div>
+      <div className="campaign-agent-progress-track" aria-hidden="true">
+        <span />
+      </div>
+      <div className="campaign-agent-progress-steps">
+        <span className="done">Evidence bundle</span>
+        <span className="active">LLM analysis</span>
+        <span>Grounded answer</span>
+      </div>
     </div>
   );
 }

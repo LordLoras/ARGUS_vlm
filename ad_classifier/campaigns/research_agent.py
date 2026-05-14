@@ -74,6 +74,8 @@ def answer_campaign_question(
 
 _SYSTEM_PROMPT = """You are ARGUS, a campaign research analyst for a local ad database.
 Answer using only the provided local campaign evidence JSON.
+If the user's wording is slightly incomplete, infer the likely campaign-analysis intent when the question mentions this campaign, ads, products, offers, CTAs, creative, or evidence.
+If the question asks how products are related, compare product names, brand, category, offers, CTAs, and assigned ad context. Say whether they look like variants/SKUs in one campaign, related products in a broader lineup, unrelated products, or insufficient evidence.
 If the question is not about this campaign, its ads, products, offers, CTAs, creative, evidence quality, or marketing implications, say it is outside this campaign research scope and suggest a campaign-specific question.
 Do not answer general knowledge, philosophy, medical, legal, or web-current questions.
 Do not invent products, counts, campaign names, or ad_ids. Cite ad_ids when making record-specific claims.
@@ -152,6 +154,15 @@ def _local_question_answer(
         else:
             answer = "Local evidence does not support a specific campaign metadata edit yet."
         evidence = _finding_ad_ids(findings)
+    elif any(term in normalized for term in ("product", "products", "sku", "variant")) or (
+        "related" in normalized and any(term in normalized for term in ("campaign", "ad", "ads"))
+    ):
+        answer = _product_relationship_answer(detail)
+        evidence = [
+            ad["ad_id"]
+            for ad in detail["ads"]
+            if ad.get("ad_id") and ad.get("products")
+        ]
     elif any(term in normalized for term in ("offer", "price", "cta", "message")):
         offer = first_count(messaging["top_offers"])
         cta = first_count(messaging["top_ctas"])
@@ -186,6 +197,40 @@ def _local_question_answer(
         "limits": "Local fallback answer; no LLM, web, landing page, or competitor evidence was used.",
         "source": "local",
     }
+
+
+def _product_relationship_answer(detail: dict[str, Any]) -> str:
+    research = detail["research"]
+    products = research["messaging"]["top_products"]
+    brands = research["summary"]["brands"]
+    categories = research["summary"]["categories"]
+    offers = research["messaging"]["top_offers"]
+    if not products:
+        return "No extracted product evidence is available for this campaign."
+
+    product_names = [str(item["value"]) for item in products[:8]]
+    brand = first_count(brands)
+    category = first_count(categories)
+    offer = first_count(offers)
+    if len(product_names) == 1:
+        return (
+            f"The campaign centers on one extracted product: {product_names[0]}. "
+            "There is not enough product variety to compare relationships."
+        )
+
+    context = []
+    if brand:
+        context.append(f"shared brand signal {brand['value']}")
+    if category:
+        context.append(f"shared category {category['value']}")
+    if offer:
+        context.append(f"repeated offer {offer['value']}")
+    context_text = ", ".join(context) if context else "shared campaign assignment"
+    return (
+        f"The extracted products appear related through {context_text}. "
+        f"Product values include: {', '.join(product_names)}. "
+        "Review the assigned ads if you need to separate true SKUs from OCR/entity noise."
+    )
 
 
 def _mentioned_ad_ids(answer: str, detail: dict[str, Any]) -> list[str]:
