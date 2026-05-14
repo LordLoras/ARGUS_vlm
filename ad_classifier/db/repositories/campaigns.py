@@ -33,6 +33,40 @@ class CampaignRepository:
             values,
         )
 
+    def upsert_user(self, campaign: CampaignRecord) -> None:
+        if campaign.created_by != "user":
+            raise ValueError("upsert_user only accepts user-created campaigns")
+
+        self.conn.execute(
+            """
+            INSERT INTO campaigns (
+              id, name, advertiser, brand, theme, start_date, end_date,
+              created_by, description, created_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name,
+              advertiser = excluded.advertiser,
+              brand = excluded.brand,
+              theme = excluded.theme,
+              start_date = excluded.start_date,
+              end_date = excluded.end_date,
+              created_by = 'user',
+              description = excluded.description
+            """,
+            (
+                campaign.id,
+                campaign.name,
+                campaign.advertiser,
+                campaign.brand,
+                campaign.theme,
+                db_value(campaign.start_date),
+                db_value(campaign.end_date),
+                campaign.created_by,
+                campaign.description,
+                db_value(campaign.created_at),
+            ),
+        )
+
     def upsert_auto(self, campaign: CampaignRecord) -> bool:
         """Insert/update an auto campaign unless a user campaign owns the same id."""
         if campaign.created_by != "auto":
@@ -166,6 +200,17 @@ class CampaignRepository:
                 values["description"],
                 campaign_id,
             ),
+        )
+        return self.get(campaign_id)
+
+    def promote_to_user(self, campaign_id: str) -> CampaignRecord | None:
+        self.conn.execute(
+            "UPDATE campaigns SET created_by = 'user' WHERE id = ?",
+            (campaign_id,),
+        )
+        self.conn.execute(
+            "UPDATE ad_campaigns SET assigned_by = 'user' WHERE campaign_id = ?",
+            (campaign_id,),
         )
         return self.get(campaign_id)
 

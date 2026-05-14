@@ -295,13 +295,17 @@ and visual vectors. Similar ads are not merged. They are reported as
 - structured differences in brand, products, prices, offers, category, and
   subcategory
 
-Campaign discovery is a separate user-triggered step. It clusters related
-ad-level vectors within brand/campaign boundaries and proposes campaign
-assignments without overwriting user-curated assignments.
+Campaign discovery is a separate user-triggered step. The default API path scans
+brand-grouped visual vectors and returns reviewable proposals without writing
+campaign rows. Accepting proposals creates user-owned campaign assignments, so
+accepted suggestions become curated truth and are shielded from later automatic
+rediscovery. Manual campaign creation and per-ad assignment use the same
+`campaigns` and `ad_campaigns` tables with `created_by = 'user'` /
+`assigned_by = 'user'`.
 
-The next campaign work should split this into two analyst flows: manual
-campaign assignment/editing for curated truth, and AI-suggested scans that look
-for unassigned or newly ingested ads likely to belong to an existing campaign.
+For operational backfills, `POST /api/campaigns/discover?persist=true` and the
+CLI discovery command still persist auto-created campaigns directly. Auto
+campaigns never overwrite user-created campaigns with the same id.
 
 ### 12. Agent Interface
 
@@ -607,7 +611,9 @@ python -m ad_classifier reindex-visual-frames
 | `GET` | `/api/ads/{id}/evidence` | Fetch evidence and rule triggers |
 | `GET` | `/api/ads/{id}/similar` | Retrieve similar ads |
 | `GET` | `/api/search` | Keyword, text vector, visual, or hybrid search |
-| `POST` | `/api/campaigns/discover` | Discover campaign clusters |
+| `POST` | `/api/campaigns/discover` | Scan campaign suggestions without persistence |
+| `POST` | `/api/campaigns/discover/accept` | Accept selected suggestions as user assignments |
+| `POST` | `/api/campaigns/{id}/ads` | Manually assign ads to a campaign |
 | `GET` | `/api/jobs/{id}/events` | Stream job progress |
 | `GET` | `/api/agent/sessions/{id}/events` | Stream agent responses |
 

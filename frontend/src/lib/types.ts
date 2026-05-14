@@ -19,6 +19,9 @@ export type AdRecord = {
   decision?: string | null;
   source_hash?: string | null;
   phash_mean?: string | null;
+  duplicate_of?: string | null;
+  duplicate_verdict?: string | null;
+  duplicate_score?: number | null;
 };
 
 export type EvidenceItem = {
@@ -115,6 +118,10 @@ export type Campaign = {
   end_date?: string | null;
   description?: string | null;
   created_by?: string | null;
+  ad_count?: number | null;
+  mean_similarity?: number | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
 };
 
 export type AdDetail = {

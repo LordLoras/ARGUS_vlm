@@ -125,14 +125,27 @@ export const api = {
       `/api/search${params(query)}`
     ),
 
-  listCampaigns: () => apiFetch<{ items: Campaign[]; limit: number; offset: number }>("/api/campaigns"),
+  listCampaigns: (query: { brand?: string; created_by?: string; q?: string; limit?: number; offset?: number } = {}) =>
+    apiFetch<{ items: Campaign[]; limit: number; offset: number }>(`/api/campaigns${params(query)}`),
 
-  createCampaign: (body: Campaign) =>
+  createCampaign: (body: Partial<Campaign> & { name: string }) =>
     apiFetch<Campaign>("/api/campaigns", { method: "POST", body: JSON.stringify(body) }),
 
   discoverCampaigns: () =>
-    apiFetch<{ campaigns?: Campaign[]; proposals?: unknown[] }>("/api/campaigns/discover", {
+    apiFetch<{ campaigns?: Campaign[]; discovered?: unknown[]; proposals?: unknown[] }>("/api/campaigns/discover", {
       method: "POST"
+    }),
+
+  acceptCampaignProposals: (body: { campaign_ids?: string[]; proposals?: unknown[] }) =>
+    apiFetch<{ accepted: Campaign[] }>("/api/campaigns/discover/accept", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  assignAdsToCampaign: (campaignId: string, adIds: string[]) =>
+    apiFetch<{ campaign_id: string; assigned: string[] }>(`/api/campaigns/${campaignId}/ads`, {
+      method: "POST",
+      body: JSON.stringify({ ad_ids: adIds })
     }),
 
   listAgentSessions: () =>

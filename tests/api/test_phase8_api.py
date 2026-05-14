@@ -239,6 +239,58 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     assert deleted.json()["deleted"] == "c_test"
 
 
+def test_campaign_discover_accepts_reviewed_proposals(client: TestClient, config_path: Path):
+    conn = _db(config_path)
+    try:
+        load_sqlite_vec(conn)
+        store = SqliteVecStore(conn, text_dim=8, visual_dim=8)
+        store.ensure_tables()
+        for idx, vector in enumerate(([1.0, 0.0], [0.999, 0.001], [0.998, 0.002])):
+            ad_id = f"ad_campaign_scan_{idx}"
+            conn.execute(
+                """
+                INSERT INTO ads (
+                    id, source_path, ingested_at, status, brand_name, products_text
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ad_id,
+                    f"/tmp/{ad_id}.mp4",
+                    datetime.now(UTC).isoformat(),
+                    "completed",
+                    "Jeep",
+                    "Wrangler",
+                ),
+            )
+            store.upsert_visual(ad_id, [*vector, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        conn.commit()
+    finally:
+        conn.close()
+
+    scan = client.post("/api/campaigns/discover")
+    assert scan.status_code == 200, scan.text
+    proposals = scan.json()["proposals"]
+    assert len(proposals) == 1
+
+    before_accept = client.get("/api/campaigns").json()["items"]
+    assert before_accept == []
+
+    proposal = proposals[0]
+    accepted = client.post(
+        "/api/campaigns/discover/accept",
+        json={"campaign_ids": [proposal["id"]], "proposals": proposals},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["accepted"][0]["created_by"] == "user"
+
+    campaigns = client.get("/api/campaigns").json()["items"]
+    assert campaigns[0]["id"] == proposal["id"]
+    assert campaigns[0]["ad_count"] == 3
+    detail = client.get(f"/api/campaigns/{proposal['id']}").json()
+    assert {item["assigned_by"] for item in detail["ads"]} == {"user"}
+
+
 def test_cancel_job_endpoint(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CloseIcon, SparkleIcon } from "../../lib/icons";
 
@@ -6,6 +6,10 @@ export type DiscoverProposal = {
   id: string;
   name: string;
   brand?: string | null;
+  theme?: string | null;
+  description?: string | null;
+  ad_ids?: string[];
+  ad_scores?: Record<string, number>;
   count?: number;
   mean_similarity?: number | null;
 };
@@ -22,6 +26,10 @@ export function DiscoverDialog({
   onAccept: (selectedIds: string[]) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setSelected(new Set(proposals.map((p) => p.id)));
+  }, [proposals]);
 
   const toggle = (id: string) => {
     const next = new Set(selected);
@@ -64,7 +72,7 @@ export function DiscoverDialog({
                     {p.brand ?? "no brand"} · {p.id}
                   </div>
                 </div>
-                <span className="pcount">{p.count ?? 0} ads</span>
+                <span className="pcount">{p.ad_ids?.length ?? p.count ?? 0} ads</span>
                 <span className="pscore">
                   {p.mean_similarity != null ? p.mean_similarity.toFixed(2) : "—"}
                 </span>

@@ -15,6 +15,9 @@ export function CampaignCard({
   range?: string;
 }) {
   const seeds = deriveSeed(campaign.id);
+  const adCount = count ?? campaign.ad_count ?? undefined;
+  const similarity = meanSimilarity ?? campaign.mean_similarity ?? undefined;
+  const dateRange = range ?? formatRange(campaign);
   const cells: CSSProperties[] = Array.from({ length: 4 }).map((_, i) => ({
     "--seed-a": shift(seeds.seedA, i),
     "--seed-b": shift(seeds.seedB, i)
@@ -32,9 +35,9 @@ export function CampaignCard({
       </div>
       <div className="cam-mosaic">
         {cells.map((style, idx) =>
-          idx === 3 && (count ?? 0) > 4 ? (
+          idx === 3 && (adCount ?? 0) > 4 ? (
             <div key={idx} className="cam-mosaic-cell more">
-              +{(count ?? 0) - 3}
+              +{(adCount ?? 0) - 3}
             </div>
           ) : (
             <div key={idx} className="cam-mosaic-cell" style={style} />
@@ -45,15 +48,15 @@ export function CampaignCard({
         <div className="cam-stats">
           <div>
             <div className="label">Ads</div>
-            <div className="val">{count ?? "—"}</div>
+            <div className="val">{adCount ?? "—"}</div>
           </div>
           <div>
             <div className="label">Mean similarity</div>
-            <div className="val">{meanSimilarity != null ? meanSimilarity.toFixed(2) : "—"}</div>
+            <div className="val">{similarity != null ? similarity.toFixed(2) : "—"}</div>
           </div>
           <div>
             <div className="label">Date range</div>
-            <div className="val mono" style={{ fontSize: 11 }}>{range ?? "—"}</div>
+            <div className="val mono" style={{ fontSize: 11 }}>{dateRange ?? "—"}</div>
           </div>
         </div>
         <div className="cam-row">
@@ -70,4 +73,14 @@ function shift(hex: string, i: number) {
   const delta = (i + 1) * 0x080808;
   const next = (n + delta) & 0xffffff;
   return `#${next.toString(16).padStart(6, "0")}`;
+}
+
+function formatRange(campaign: Campaign) {
+  const start = campaign.start_date ?? campaign.first_seen;
+  const end = campaign.end_date ?? campaign.last_seen;
+  if (!start && !end) return undefined;
+  if (start && end && start.slice(0, 10) !== end.slice(0, 10)) {
+    return `${start.slice(0, 10)} - ${end.slice(0, 10)}`;
+  }
+  return (start ?? end)?.slice(0, 10);
 }

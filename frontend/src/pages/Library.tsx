@@ -122,6 +122,11 @@ export function Library() {
     queryFn: () => api.getSimilar(selectedAdId ?? ""),
     enabled: Boolean(selectedAdId)
   });
+  const campaignsQuery = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => api.listCampaigns({ limit: 100 }),
+    enabled: Boolean(selectedAdId)
+  });
 
   const patchMutation = useMutation({
     mutationFn: ({ adId, patch }: { adId: string; patch: Record<string, unknown> }) =>
@@ -150,6 +155,15 @@ export function Library() {
       await queryClient.removeQueries({ queryKey: ["ad-detail", adId] });
       await queryClient.removeQueries({ queryKey: ["frames", adId] });
       await queryClient.removeQueries({ queryKey: ["similar", adId] });
+    }
+  });
+
+  const assignCampaignMutation = useMutation({
+    mutationFn: ({ campaignId, adId }: { campaignId: string; adId: string }) =>
+      api.assignAdsToCampaign(campaignId, [adId]),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["ad-detail", variables.adId] });
     }
   });
 
@@ -264,6 +278,11 @@ export function Library() {
           onSave={(patch) => patchMutation.mutate({ adId: selectedDetail.ad.id, patch })}
           saving={patchMutation.isPending}
           onSelectRelated={(adId) => setSelectedAdId(adId, "related")}
+          campaigns={campaignsQuery.data?.items ?? []}
+          assigningCampaign={assignCampaignMutation.isPending}
+          onAssignCampaign={(campaignId) =>
+            assignCampaignMutation.mutate({ campaignId, adId: selectedDetail.ad.id })
+          }
           onDelete={() => {
             if (
               window.confirm(

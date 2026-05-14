@@ -9,6 +9,7 @@ import pytest
 
 from ad_classifier.campaigns.clustering import agglomerative_cluster_labels
 from ad_classifier.campaigns.discover import discover_campaigns
+from ad_classifier.campaigns.suggestions import scan_campaign_proposals
 from ad_classifier.config import CampaignDiscoveryConfig
 from ad_classifier.db.connection import apply_migrations, open_database
 from ad_classifier.db.repositories.campaigns import AdCampaignRepository, CampaignRepository
@@ -154,3 +155,32 @@ def test_user_assignments_are_shielded_from_auto_discovery(conn):
     assert len(result.discovered) == 1
     assert "ad_jeep_0" not in result.discovered[0].ad_ids
     assert {item.campaign_id for item in assignments.list_for_ad("ad_jeep_0")} == {"c_user"}
+
+
+def test_scan_campaign_proposals_does_not_persist(conn):
+    for idx in range(3):
+        _insert_ad(
+            conn,
+            f"ad_jeep_{idx}",
+            brand="Jeep",
+            products=["Wrangler"],
+            offer="Freedom Days",
+        )
+    conn.commit()
+
+    store = FakeVisualStore(
+        {
+            "ad_jeep_0": [1.0, 0.0],
+            "ad_jeep_1": [0.999, 0.001],
+            "ad_jeep_2": [0.998, 0.002],
+        }
+    )
+
+    result = scan_campaign_proposals(conn, store, config=_discovery_config())
+
+    assert len(result.proposals) == 1
+    proposal = result.proposals[0]
+    assert proposal.name.startswith("Jeep")
+    assert proposal.ad_ids == ["ad_jeep_0", "ad_jeep_1", "ad_jeep_2"]
+    assert CampaignRepository(conn).list() == []
+    assert conn.execute("SELECT COUNT(*) FROM ad_campaigns").fetchone()[0] == 0

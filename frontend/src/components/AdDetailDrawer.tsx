@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { CloseIcon, CopyIcon, EditIcon, PlayIcon, PlusIcon, TrashIcon } from "../lib/icons";
 import { filePathToDataUrl } from "../lib/format";
-import type { AdDetail, FrameRecord, RelatedAds } from "../lib/types";
+import type { AdDetail, Campaign, FrameRecord, RelatedAds } from "../lib/types";
+import { CampaignAssignDialog } from "./Campaigns/CampaignAssignDialog";
 import { EditTab, type EditPatch } from "./library/EditTab";
 import { EvidenceTab } from "./library/EvidenceTab";
 import { OverviewTab } from "./library/OverviewTab";
@@ -19,7 +20,10 @@ export function AdDetailDrawer({
   onSave,
   onDelete,
   onSelectRelated,
+  campaigns = [],
+  onAssignCampaign,
   saving,
+  assigningCampaign,
   initialTab = "Overview"
 }: {
   detail: AdDetail;
@@ -29,10 +33,14 @@ export function AdDetailDrawer({
   onSave: (patch: EditPatch) => void;
   onDelete: () => void;
   onSelectRelated?: (adId: string) => void;
+  campaigns?: Campaign[];
+  onAssignCampaign?: (campaignId: string) => void;
   saving?: boolean;
+  assigningCampaign?: boolean;
   initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [campaignDialogOpen, setCampaignDialogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
@@ -91,7 +99,11 @@ export function AdDetailDrawer({
               <EditIcon size={11} />
               <span>Edit</span>
             </button>
-            <button className="btn btn-sm" disabled title="Phase 9: campaign assignment">
+            <button
+              className="btn btn-sm"
+              onClick={() => setCampaignDialogOpen(true)}
+              title="Add to campaign"
+            >
               <PlusIcon size={11} />
               <span>Add to campaign</span>
             </button>
@@ -160,6 +172,17 @@ export function AdDetailDrawer({
           </div>
         </div>
       </aside>
+      <CampaignAssignDialog
+        open={campaignDialogOpen}
+        campaigns={campaigns}
+        adId={detail.ad.id}
+        onClose={() => setCampaignDialogOpen(false)}
+        assigning={assigningCampaign}
+        onAssign={(campaignId) => {
+          onAssignCampaign?.(campaignId);
+          setCampaignDialogOpen(false);
+        }}
+      />
     </>
   );
 }

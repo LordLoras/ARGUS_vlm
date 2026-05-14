@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.campaigns.discover import discover_campaigns
+from ad_classifier.campaigns.suggestions import CampaignProposal, scan_campaign_proposals
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdCampaignRepository, CampaignRepository
-from ad_classifier.models.campaigns import CampaignRecord
+from ad_classifier.models.campaigns import AdCampaignRecord, CampaignRecord
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 router = APIRouter(tags=["campaigns"])
 
 
 class CampaignCreate(BaseModel):
-    id: str
+    id: str | None = None
     name: str
     advertiser: str | None = None
     brand: str | None = None
@@ -41,8 +44,23 @@ class AssignAdsRequest(BaseModel):
     ad_ids: list[str]
 
 
+class CampaignProposalInput(BaseModel):
+    id: str
+    name: str
+    advertiser: str | None = None
+    brand: str | None = None
+    theme: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    description: str | None = None
+    ad_ids: list[str]
+    mean_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    ad_scores: dict[str, float] | None = None
+
+
 class AcceptDiscoveryRequest(BaseModel):
     campaign_ids: list[str] | None = None
+    proposals: list[CampaignProposalInput] | None = None
 
 
 @router.get("/campaigns")
@@ -63,7 +81,11 @@ def list_campaigns(
             limit=limit,
             offset=offset,
         )
-        return {"items": [_dump(item) for item in items], "limit": limit, "offset": offset}
+        return {
+            "items": [_campaign_payload(conn, item) for item in items],
+            "limit": limit,
+            "offset": offset,
+        }
     finally:
         conn.close()
 
@@ -72,16 +94,23 @@ def list_campaigns(
 def create_campaign(body: CampaignCreate, request: Request) -> dict[str, Any]:
     conn = open_request_db(request)
     try:
-        campaign = CampaignRecord(**body.model_dump(), created_by="user")
+        body_data = body.model_dump()
+        campaign_id = body_data.pop("id") or _campaign_id(body.name, body.brand)
+        if CampaignRepository(conn).get(campaign_id) is not None:
+            raise HTTPException(status_code=409, detail="campaign id already exists")
+        campaign = CampaignRecord(id=campaign_id, **body_data, created_by="user")
         CampaignRepository(conn).create(campaign)
         conn.commit()
-        return _dump(campaign)
+        return _campaign_payload(conn, campaign)
     finally:
         conn.close()
 
 
 @router.post("/campaigns/discover")
-def discover(request: Request) -> dict[str, Any]:
+def discover(
+    request: Request,
+    persist: bool = Query(default=False),
+) -> dict[str, Any]:
     config = get_config(request)
     conn = open_request_db(request)
     try:
@@ -92,8 +121,16 @@ def discover(request: Request) -> dict[str, Any]:
             visual_dim=config.vector_store.visual_dim,
         )
         store.ensure_tables()
-        result = discover_campaigns(conn, store, config=config.campaigns.discover)
-        conn.commit()
+        if persist:
+            result = discover_campaigns(conn, store, config=config.campaigns.discover)
+            conn.commit()
+            proposals = [_proposal_from_discovered(item) for item in result.discovered]
+            return {
+                **result.model_dump(mode="json"),
+                "proposals": [proposal.model_dump(mode="json") for proposal in proposals],
+            }
+
+        result = scan_campaign_proposals(conn, store, config=config.campaigns.discover)
         return result.model_dump(mode="json")
     finally:
         conn.close()
@@ -104,12 +141,53 @@ def accept_discovered(body: AcceptDiscoveryRequest, request: Request) -> dict[st
     conn = open_request_db(request)
     try:
         repo = CampaignRepository(conn)
-        campaigns = repo.list(created_by="auto", limit=100)
-        if body.campaign_ids is not None:
-            campaigns = [
-                campaign for campaign in campaigns if campaign.id in set(body.campaign_ids)
+        assignment_repo = AdCampaignRepository(conn)
+        accepted: list[dict[str, Any]] = []
+        selected_ids = set(body.campaign_ids or [])
+
+        if body.proposals:
+            proposals = [
+                proposal
+                for proposal in body.proposals
+                if not selected_ids or proposal.id in selected_ids
             ]
-        return {"accepted": [_dump(campaign) for campaign in campaigns]}
+            for proposal in proposals:
+                campaign = CampaignRecord(
+                    id=proposal.id,
+                    name=proposal.name,
+                    advertiser=proposal.advertiser,
+                    brand=proposal.brand,
+                    theme=proposal.theme,
+                    start_date=proposal.start_date,
+                    end_date=proposal.end_date,
+                    created_by="user",
+                    description=proposal.description,
+                )
+                repo.upsert_user(campaign)
+                for ad_id in proposal.ad_ids:
+                    assignment_repo.assign(
+                        AdCampaignRecord(
+                            ad_id=ad_id,
+                            campaign_id=proposal.id,
+                            similarity_score=(
+                                (proposal.ad_scores or {}).get(ad_id)
+                                or proposal.mean_similarity
+                            ),
+                            assigned_by="user",
+                        )
+                    )
+                accepted.append(_campaign_payload(conn, campaign))
+        else:
+            campaigns = repo.list(created_by="auto", limit=100)
+            if selected_ids:
+                campaigns = [campaign for campaign in campaigns if campaign.id in selected_ids]
+            for campaign in campaigns:
+                promoted = repo.promote_to_user(campaign.id)
+                if promoted is not None:
+                    accepted.append(_campaign_payload(conn, promoted))
+
+        conn.commit()
+        return {"accepted": accepted}
     finally:
         conn.close()
 
@@ -120,7 +198,10 @@ def get_campaign(campaign_id: str, request: Request) -> dict[str, Any]:
     try:
         campaign = _resolve_campaign(conn, campaign_id)
         assignments = AdCampaignRepository(conn).list_for_campaign(campaign.id)
-        return {"campaign": _dump(campaign), "ads": [_dump(item) for item in assignments]}
+        return {
+            "campaign": _campaign_payload(conn, campaign),
+            "ads": [_dump(item) for item in assignments],
+        }
     finally:
         conn.close()
 
@@ -181,6 +262,51 @@ def _resolve_campaign(conn, campaign_id_or_name: str) -> CampaignRecord:
     if campaign is None:
         raise HTTPException(status_code=404, detail="campaign not found")
     return campaign
+
+
+def _campaign_payload(conn, campaign: CampaignRecord) -> dict[str, Any]:
+    payload = _dump(campaign)
+    row = conn.execute(
+        """
+        SELECT
+          COUNT(*) AS ad_count,
+          AVG(similarity_score) AS mean_similarity,
+          MIN(ads.ingested_at) AS first_seen,
+          MAX(ads.ingested_at) AS last_seen
+        FROM ad_campaigns
+        LEFT JOIN ads ON ads.id = ad_campaigns.ad_id
+        WHERE ad_campaigns.campaign_id = ?
+        """,
+        (campaign.id,),
+    ).fetchone()
+    payload["ad_count"] = int(row["ad_count"] or 0)
+    payload["mean_similarity"] = row["mean_similarity"]
+    payload["first_seen"] = row["first_seen"]
+    payload["last_seen"] = row["last_seen"]
+    return payload
+
+
+def _proposal_from_discovered(item) -> CampaignProposal:
+    campaign = item.campaign
+    return CampaignProposal(
+        id=campaign.id,
+        name=campaign.name,
+        advertiser=campaign.advertiser,
+        brand=campaign.brand,
+        theme=campaign.theme,
+        start_date=campaign.start_date.isoformat() if campaign.start_date else None,
+        end_date=campaign.end_date.isoformat() if campaign.end_date else None,
+        description=campaign.description,
+        ad_ids=item.ad_ids,
+        mean_similarity=item.mean_similarity,
+    )
+
+
+def _campaign_id(name: str, brand: str | None) -> str:
+    raw = "_".join(part for part in [brand, name] if part)
+    slug = re.sub(r"[^a-z0-9]+", "_", raw.casefold()).strip("_") or "campaign"
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
+    return f"c_{slug}_{digest}"[:96]
 
 
 def _dump(value):
