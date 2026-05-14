@@ -35,6 +35,9 @@ class AdRecord(StrictModel):
     decision: str | None = None
     source_hash: str | None = None
     phash_mean: str | None = None
+    duplicate_of: str | None = None
+    duplicate_verdict: str | None = None
+    duplicate_score: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class FrameRecord(StrictModel):

@@ -39,6 +39,9 @@ class AdRepository:
             "status",
             "source_hash",
             "phash_mean",
+            "duplicate_of",
+            "duplicate_verdict",
+            "duplicate_score",
         ]
         assignments = ", ".join(f"{column} = excluded.{column}" for column in update_columns)
         values = [db_value(value) for value in data.values()]
@@ -111,6 +114,25 @@ class AdRepository:
 
     def update_status(self, ad_id: str, status: str) -> None:
         self.conn.execute("UPDATE ads SET status = ? WHERE id = ?", (status, ad_id))
+
+    def update_duplicate(
+        self,
+        ad_id: str,
+        *,
+        duplicate_of: str | None,
+        duplicate_verdict: str | None,
+        duplicate_score: float | None,
+    ) -> None:
+        self.conn.execute(
+            """
+            UPDATE ads
+            SET duplicate_of = ?,
+                duplicate_verdict = ?,
+                duplicate_score = ?
+            WHERE id = ?
+            """,
+            (duplicate_of, duplicate_verdict, duplicate_score, ad_id),
+        )
 
     def update_source_path(self, ad_id: str, source_path: Path | str) -> None:
         self.conn.execute(

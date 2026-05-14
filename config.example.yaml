@@ -39,6 +39,21 @@ dedup:
   skip_on_exact: true
   skip_on_near_duplicate: false
   phash_distance_threshold: 8
+  post_ocr:
+    # Cheap duplicate classifier after OCR and before VLM. It catches
+    # re-encoded copies whose file hash changed while preserving near-identical
+    # campaign variants with different offer/product text.
+    enabled: true
+    skip_on_exact: true
+    candidate_phash_distance: 16
+    per_frame_phash_distance: 6
+    duration_tolerance_ms: 1500
+    min_frame_match_ratio: 0.90
+    min_text_similarity: 0.90
+    min_transcript_similarity: 0.88
+    min_signature_similarity: 0.82
+    min_text_chars: 80
+    max_candidates: 25
 
 ocr:
   # Raw OCR engine. Only local PaddleOCR is supported here for now.

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from ad_classifier.models.common import StrictModel
+
+PostOCRDuplicateVerdict = Literal[
+    "exact_duplicate",
+    "near_duplicate",
+    "same_campaign_different_offer",
+    "related",
+]
 
 
 class ExactDuplicateMatch(StrictModel):
@@ -14,6 +23,17 @@ class NearDuplicateMatch(StrictModel):
     ad_id: str
     phash_mean: str
     distance: int = Field(ge=0)
+
+
+class PostOCRDuplicateMatch(StrictModel):
+    ad_id: str
+    verdict: PostOCRDuplicateVerdict
+    overall_score: float = Field(ge=0.0, le=1.0)
+    frame_match_ratio: float = Field(ge=0.0, le=1.0)
+    ocr_text_similarity: float = Field(ge=0.0, le=1.0)
+    transcript_similarity: float = Field(ge=0.0, le=1.0)
+    signature_similarity: float = Field(ge=0.0, le=1.0)
+    phash_distance: int | None = Field(default=None, ge=0)
 
 
 class DedupResult(StrictModel):

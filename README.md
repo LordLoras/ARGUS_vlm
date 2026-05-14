@@ -68,6 +68,7 @@ Video upload
   -> whisper transcript
   -> frame preprocessing and keyframe selection
   -> OCR and optional hard-frame parsing
+  -> post-OCR duplicate check
   -> deterministic rules
   -> evidence bundle
   -> VLM verification and marketing-entity extraction
@@ -139,6 +140,7 @@ and should not be treated as interchangeable.
 |---|---|---|---|
 | Exact file hash | SHA256 of uploaded bytes | Same uploaded file | Yes, when `dedup.skip_on_exact: true` |
 | Near creative hash | Mean perceptual hash over sampled frames | Visually near-identical creative | Only if `dedup.skip_on_near_duplicate: true` |
+| Post-OCR duplicate | Frame pHashes plus raw OCR/transcript/offer signatures | Re-encoded exact same creative | Yes, when `dedup.post_ocr.skip_on_exact: true` |
 | Semantic related ads | Text and visual embedding cosine similarity | Same campaign, variant, or related creative | No, enriches final result |
 
 Mean pHash is tolerant to compression and small visual changes, but it is a
@@ -147,6 +149,23 @@ it may still score as visually close. For that reason the default config records
 near matches but does not skip them. The later semantic layer can then report
 `same_campaign_different_sku` or another related-ad verdict while preserving the
 distinct ad rows.
+
+The post-OCR duplicate check runs after PaddleOCR and optional GLM-OCR have
+written `ocr_items`, but before OCR cleanup, rules, VLM verification, and
+embeddings. It first narrows candidates by duration and mean pHash distance,
+then compares per-frame pHashes, normalized OCR text, transcript text, and a
+commercial signature made from offer-like numbers and terms such as APR,
+monthly payments, lease, tax, discount, and due-at-signing language. Only a
+high frame match plus high text/transcript similarity plus high commercial
+signature similarity becomes `exact_duplicate`. If the visuals are nearly the
+same but the offer signature changes, the worker continues so the ads remain
+separate rows and can later become campaign variants.
+
+When an exact post-OCR match is found, ARGUS sets `ads.status = 'duplicate'`
+and writes `ads.duplicate_of`, `ads.duplicate_verdict`, and
+`ads.duplicate_score`. This catches re-encoded copies where SHA256 differs, but
+it should not collapse cases such as two Jeep creatives with the same footage
+and different offer/product end cards.
 
 ### 4. Frame Preprocessing
 
@@ -279,6 +298,10 @@ and visual vectors. Similar ads are not merged. They are reported as
 Campaign discovery is a separate user-triggered step. It clusters related
 ad-level vectors within brand/campaign boundaries and proposes campaign
 assignments without overwriting user-curated assignments.
+
+The next campaign work should split this into two analyst flows: manual
+campaign assignment/editing for curated truth, and AI-suggested scans that look
+for unassigned or newly ingested ads likely to belong to an existing campaign.
 
 ### 12. Agent Interface
 

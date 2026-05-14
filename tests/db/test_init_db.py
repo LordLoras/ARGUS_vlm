@@ -23,7 +23,14 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
     assert result.db_path == db_path.resolve()
     assert result.journal_mode == "wal"
     assert result.sqlite_vec_version is not None
-    assert result.migrations_applied == ["001_initial", "002_marketing_tracking", "003_subcategory", "004_campaign_suggestions", "005_flag_to_review"]
+    assert result.migrations_applied == [
+        "001_initial",
+        "002_marketing_tracking",
+        "003_subcategory",
+        "004_campaign_suggestions",
+        "005_flag_to_review",
+        "006_duplicate_metadata",
+    ]
 
     conn = open_database(db_path)
     try:
@@ -53,6 +60,9 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "phone_number",
             "landing_page_domain",
             "subcategory",
+            "duplicate_of",
+            "duplicate_verdict",
+            "duplicate_score",
         }.issubset(ad_columns)
         marketing_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(marketing_entities)").fetchall()

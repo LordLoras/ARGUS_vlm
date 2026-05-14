@@ -11,6 +11,7 @@ from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
+from ad_classifier.dedup.post_ocr import find_post_ocr_duplicate
 from ad_classifier.dedup.similarity import enrich_related_ads
 from ad_classifier.embeddings.image.base import ImageEmbedder
 from ad_classifier.embeddings.image.siglip2 import SigLIP2ImageEmbedder
@@ -131,6 +132,33 @@ def run_pipeline_for_job(
     if glm_ocr_items:
         _replace_ocr_items(conn, ad_id, ocr_items + glm_ocr_items)
         conn.commit()
+
+    post_ocr_match = find_post_ocr_duplicate(conn, ad_id, config.dedup.post_ocr)
+    if post_ocr_match is not None:
+        if (
+            post_ocr_match.verdict == "exact_duplicate"
+            and config.dedup.post_ocr.skip_on_exact
+        ):
+            ads = AdRepository(conn)
+            ads.update_duplicate(
+                ad_id,
+                duplicate_of=post_ocr_match.ad_id,
+                duplicate_verdict=post_ocr_match.verdict,
+                duplicate_score=post_ocr_match.overall_score,
+            )
+            ads.update_status(ad_id, "duplicate")
+            conn.commit()
+            emit(
+                "dedup:post_ocr",
+                1.0,
+                f"post-OCR exact duplicate of {post_ocr_match.ad_id}",
+            )
+            return
+        emit(
+            "dedup:post_ocr",
+            0.49,
+            f"{post_ocr_match.verdict} candidate {post_ocr_match.ad_id}; continuing",
+        )
 
     raw_ocr_items = list(ocr_items)
 

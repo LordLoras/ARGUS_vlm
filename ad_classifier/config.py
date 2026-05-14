@@ -50,12 +50,29 @@ class WhisperConfig(BaseModel):
     whisper_cpp: WhisperCppConfig = Field(default_factory=WhisperCppConfig)
 
 
+class PostOCRDedupConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    skip_on_exact: bool = True
+    candidate_phash_distance: int = Field(default=16, ge=0)
+    per_frame_phash_distance: int = Field(default=6, ge=0)
+    duration_tolerance_ms: int = Field(default=1500, ge=0)
+    min_frame_match_ratio: float = Field(default=0.90, ge=0.0, le=1.0)
+    min_text_similarity: float = Field(default=0.90, ge=0.0, le=1.0)
+    min_transcript_similarity: float = Field(default=0.88, ge=0.0, le=1.0)
+    min_signature_similarity: float = Field(default=0.82, ge=0.0, le=1.0)
+    min_text_chars: int = Field(default=80, ge=0)
+    max_candidates: int = Field(default=25, ge=1)
+
+
 class DedupConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     skip_on_exact: bool = True
     skip_on_near_duplicate: bool = False
     phash_distance_threshold: int = Field(default=4, ge=0)
+    post_ocr: PostOCRDedupConfig = Field(default_factory=PostOCRDedupConfig)
 
 
 class OCRConfig(BaseModel):
