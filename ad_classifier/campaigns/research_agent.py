@@ -138,6 +138,7 @@ _SYSTEM_PROMPT = """You are ARGUS, a campaign research analyst for a local ad da
 Answer using only the provided local campaign evidence JSON.
 If the user's wording is slightly incomplete, infer the likely campaign-analysis intent when the question mentions this campaign, ads, products, offers, CTAs, creative, or evidence.
 If the question asks how products are related, compare product names, brand, category, offers, CTAs, and assigned ad context. Say whether they look like variants/SKUs in one campaign, related products in a broader lineup, unrelated products, or insufficient evidence.
+Treat named sale events, slogans, recurring creative platforms, partnership/sponsor badges, commemorative marks, end-card badges, disclosures, and fine-print patterns as campaign evidence when they appear in the local JSON.
 If the question is not about this campaign, its ads, products, offers, CTAs, creative, evidence quality, or marketing implications, say it is outside this campaign research scope and suggest a campaign-specific question.
 Do not answer general knowledge, philosophy, medical, legal, or web-current questions.
 Do not invent products, counts, campaign names, or ad_ids. Cite ad_ids when making record-specific claims.
@@ -147,6 +148,7 @@ Keep the answer under 160 words unless the user asks for detail."""
 _REPORT_SYSTEM_PROMPT = """You are ARGUS, a senior campaign research analyst for a local ad database.
 You receive local evidence only: campaign assignments, key metrics, marketing entities, OCR/GLM-OCR excerpts, transcript excerpts, VLM classification evidence, and deterministic metric signals.
 Generate the visible deep-research report from those metrics and evidence. Do not merely restate every metric; infer the marketing meaning.
+Use campaign/title language, product architecture, offer mechanics, CTAs, badges/partnerships, disclosure burden, OCR/GLM-OCR quality, and assignment outliers as the core research lenses.
 No internet, competitor, landing-page, or current-market claims unless they are in the evidence.
 If the analyst question is off-topic, keep question_answer scoped to campaign research.
 Return one strict JSON object and no markdown:
@@ -157,7 +159,7 @@ Return one strict JSON object and no markdown:
   "open_questions": ["..."],
   "question_answer": {"question":"...","answer":"...","evidence_ad_ids":["ad_id"],"limits":"..."} | null
 }
-Keep findings to 3-5 items, prioritize commercial strategy, offer/CTA clarity, product architecture, evidence quality, and assignment outliers. Cite real ad_ids only."""
+Keep findings to 3-5 items, prioritize commercial strategy, offer/CTA clarity, product architecture, campaign/partnership signals, evidence quality, and assignment outliers. Cite real ad_ids only."""
 
 
 def _context_payload(
@@ -198,6 +200,7 @@ def _ad_context(ad: dict[str, Any]) -> dict[str, Any]:
         "offers",
         "ctas",
         "prices",
+        "badges",
         "risk_labels",
         "disclaimer_count",
         "small_print_count",
@@ -263,6 +266,17 @@ def _local_question_answer(
             else "No repeated CTA was extracted."
         )
         evidence = _finding_ad_ids(findings)
+    elif any(
+        term in normalized
+        for term in ("badge", "badges", "partner", "partnership", "sponsor", "america 250", "event mark")
+    ):
+        badge = first_count(messaging.get("top_badges", []))
+        if badge:
+            answer = f"Top badge/partnership signal: {badge['value']} appears in {badge['count']} assigned ads."
+            evidence = [ad["ad_id"] for ad in detail["ads"] if badge["value"] in ad.get("badges", [])]
+        else:
+            answer = "No badge, partnership, sponsorship, or event-mark signal was extracted for this campaign."
+            evidence = _finding_ad_ids(findings)
     elif any(term in normalized for term in ("fine", "disclaimer", "small print", "text heavy")):
         answer = (
             f"{creative['disclaimer_ads']} ads include disclaimers, "

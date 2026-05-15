@@ -23,15 +23,16 @@ def campaign_suggestions_from_row(
 ) -> tuple[CampaignSignal, ...]:
     if not config.use_campaign_suggestions:
         return ()
-    raw = row["campaign_suggestions_json"]
+    raw = _row_value(row, "campaign_suggestions_json")
     if not raw:
-        return ()
-    try:
-        values = json.loads(raw)
-    except json.JSONDecodeError:
-        return ()
-    if not isinstance(values, list):
-        return ()
+        values = []
+    else:
+        try:
+            values = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            values = []
+        if not isinstance(values, list):
+            values = []
 
     signals: list[CampaignSignal] = []
     for value in values:
@@ -53,6 +54,23 @@ def campaign_suggestions_from_row(
                 name=clean_display_text(name),
                 key=key,
                 confidence=confidence,
+            )
+        )
+
+    existing_keys = {signal.key for signal in signals}
+    badge_confidence = 0.9
+    if badge_confidence < config.min_campaign_signal_confidence:
+        return tuple(signals)
+    for name in _campaign_badges_from_row(row):
+        key = campaign_signal_key(name, brand)
+        if not key or key in existing_keys:
+            continue
+        existing_keys.add(key)
+        signals.append(
+            CampaignSignal(
+                name=clean_display_text(name),
+                key=key,
+                confidence=badge_confidence,
             )
         )
     return tuple(signals)
@@ -112,6 +130,57 @@ def canonical_text(value: str) -> str:
 
 def clean_display_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip(" -_\t\r\n")
+
+
+def _campaign_badges_from_row(row: sqlite3.Row) -> list[str]:
+    raw = _row_value(row, "social_proof_json")
+    if not raw:
+        return []
+    try:
+        social = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(social, dict):
+        return []
+    badges = social.get("badges")
+    if not isinstance(badges, list):
+        return []
+
+    names: list[str] = []
+    for badge in badges:
+        text = clean_display_text(str(badge or ""))
+        if not text or not _is_campaign_like_badge(text):
+            continue
+        names.append(_badge_campaign_name(text))
+    return names
+
+
+def _is_campaign_like_badge(text: str) -> bool:
+    lowered = canonical_text(text)
+    return bool(
+        re.search(
+            r"\b(partner|sponsor|presented|official|anniversary|centennial|bicentennial|america 250)\b",
+            lowered,
+        )
+    )
+
+
+def _badge_campaign_name(text: str) -> str:
+    match = re.search(
+        r"(?:proud\s+)?(?:official\s+)?(?:partner|sponsor)\s+(?:of|for|with)\s+(.+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return clean_display_text(match.group(1)) or text
+    return text
+
+
+def _row_value(row: sqlite3.Row, key: str) -> object | None:
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
 
 
 def _coerce_confidence(value: object, *, default: float) -> float:

@@ -38,3 +38,10 @@ def test_prompt_restricts_campaign_suggestion_names():
     prompt = render_verifier_prompt()
     assert "Campaign suggestions" in prompt
     assert "Do NOT invent generic campaign buckets" in prompt
+
+
+def test_prompt_extracts_partnership_badges_and_disclosures():
+    prompt = render_verifier_prompt()
+    assert "America 250" in prompt
+    assert "partnership marks" in prompt
+    assert "AI-generated performers" in prompt

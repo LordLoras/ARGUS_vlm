@@ -44,7 +44,8 @@ def load_ad_vectors(
           ads.ingested_at,
           marketing_entities.products_json,
           marketing_entities.offers_json,
-          marketing_entities.campaign_suggestions_json
+          marketing_entities.campaign_suggestions_json,
+          marketing_entities.social_proof_json
         FROM ads
         LEFT JOIN marketing_entities ON marketing_entities.ad_id = ads.id
         WHERE ads.brand_name IS NOT NULL

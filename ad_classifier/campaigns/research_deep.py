@@ -176,6 +176,17 @@ def _deep_findings(
             }
         )
 
+    top_badge = first_count(messaging.get("top_badges", []))
+    if top_badge:
+        findings.append(
+            {
+                "priority": "medium",
+                "title": "Partnership or event badge is measurable",
+                "detail": f"{top_badge['value']} appears in {top_badge['count']} of {ad_count} assigned ads.",
+                "evidence_ad_ids": _ads_with_value(ads, "badges", top_badge["value"]),
+            }
+        )
+
     if len(messaging["top_products"]) >= 2:
         findings.append(
             {
@@ -233,6 +244,7 @@ def _creative_review(
     ad_count = max(int(summary["ad_count"] or 0), 1)
     top_brand = first_count(summary["brands"])
     top_cta = first_count(messaging["top_ctas"])
+    top_badge = first_count(messaging.get("top_badges", []))
     top_format = first_count(creative["formats"])
     return [
         {
@@ -254,8 +266,11 @@ def _creative_review(
         },
         {
             "area": "Connection",
-            "status": "present" if top_format or messaging["top_products"] else "unknown",
+            "status": "present" if top_format or messaging["top_products"] or top_badge else "unknown",
             "detail": (
+                f"Partnership/event badge signal: {top_badge['value']}."
+                if top_badge
+                else
                 f"Creative format signal: {top_format['value']}."
                 if top_format
                 else "Review product/demo/story evidence manually; local structured signals are thin."
@@ -354,6 +369,8 @@ def _deep_questions(
         f"Which assigned ads best represent {campaign_name}, and which look like outliers?",
         f"What should change in {campaign_name}'s offer, CTA, or product emphasis?",
     ]
+    if messaging.get("top_badges"):
+        questions.append("Are partnership, sponsorship, or event badges part of the campaign identity or just end-card support?")
     if messaging["top_products"]:
         questions.append("Do product variants map to clearly different creative treatments?")
     if watchouts["risk_labels"]:

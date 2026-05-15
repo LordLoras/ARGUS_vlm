@@ -109,6 +109,7 @@ def _campaign_ad_rows(conn: sqlite3.Connection, campaign_id: str) -> list[dict[s
           marketing_entities.prices_json,
           marketing_entities.offers_json,
           marketing_entities.ctas_json,
+          marketing_entities.social_proof_json,
           marketing_entities.disclaimers_json,
           marketing_entities.creative_format_json,
           marketing_entities.creative_attributes_json,
@@ -133,6 +134,8 @@ def _ad_payload(row: dict[str, Any]) -> dict[str, Any]:
     offers = text_values(json_value(row.get("offers_json")))
     ctas = text_values(json_value(row.get("ctas_json")))
     prices = price_values(json_value(row.get("prices_json")))
+    social_proof = json_dict(row.get("social_proof_json"))
+    badges = string_values(social_proof.get("badges"))
     disclaimers = json_list(row.get("disclaimers_json"))
     creative_format = json_dict(row.get("creative_format_json"))
     creative_attributes = json_dict(row.get("creative_attributes_json"))
@@ -161,6 +164,7 @@ def _ad_payload(row: dict[str, Any]) -> dict[str, Any]:
         "offers": offers,
         "ctas": ctas,
         "prices": prices,
+        "badges": badges,
         "disclaimer_count": len(disclaimers),
         "small_print_count": small_print_count(disclaimers),
         "creative_format": creative_format,
@@ -275,6 +279,7 @@ def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> di
         "top_offers": top_counts(value for ad in ads for value in ad.get("offers", [])),
         "top_ctas": top_counts(value for ad in ads for value in ad.get("ctas", [])),
         "top_prices": top_counts(value for ad in ads for value in ad.get("prices", [])),
+        "top_badges": top_counts(value for ad in ads for value in ad.get("badges", [])),
         "campaign_signals": top_counts(
             value for ad in ads for value in ad.get("campaign_suggestions", [])
         ),
@@ -343,6 +348,16 @@ def _insights(
                 "kind": "campaign_signal",
                 "title": "Repeated campaign language",
                 "detail": f"{top_signal} appears as an extracted campaign signal across assigned ads.",
+            }
+        )
+
+    top_badge = first_count(messaging["top_badges"])
+    if top_badge:
+        insights.append(
+            {
+                "kind": "badge",
+                "title": "Partnership or badge signal",
+                "detail": f"{top_badge['value']} appears in {top_badge['count']} assigned ads.",
             }
         )
 
@@ -421,6 +436,8 @@ def _research_prompts(
         f"Compare the ads in {name} by product, offer, and CTA.",
         f"Which ads in {name} have the strongest fine-print or disclaimer burden?",
     ]
+    if messaging.get("top_badges"):
+        prompts.append(f"Which badges, partnerships, or event marks appear across {name}?")
     if messaging["top_products"]:
         prompts.append(f"Which {name} variants mention different products or SKUs?")
     if watchouts["risk_labels"]:

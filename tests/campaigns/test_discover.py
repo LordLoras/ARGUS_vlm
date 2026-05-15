@@ -40,6 +40,7 @@ def _insert_ad(
     products: list[str] | None = None,
     offer: str | None = None,
     campaign_suggestions: list[dict] | None = None,
+    social_badges: list[str] | None = None,
 ) -> None:
     conn.execute(
         """
@@ -57,15 +58,16 @@ def _insert_ad(
     conn.execute(
         """
         INSERT INTO marketing_entities (
-            ad_id, products_json, offers_json, campaign_suggestions_json
+            ad_id, products_json, offers_json, campaign_suggestions_json, social_proof_json
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             ad_id,
             json.dumps(products or []),
             json.dumps([{"text": offer}] if offer else []),
             json.dumps(campaign_suggestions or []),
+            json.dumps({"badges": social_badges or []}),
         ),
     )
 
@@ -229,6 +231,33 @@ def test_scan_campaign_proposals_uses_repeated_campaign_suggestions(conn):
     assert proposal.theme == "Declaration of Deals"
     assert proposal.ad_ids == ["ad_deals_0", "ad_deals_1", "ad_deals_2"]
     assert "extracted campaign signal" in (proposal.description or "")
+
+
+def test_scan_campaign_proposals_uses_campaign_like_partner_badges(conn):
+    for idx in range(3):
+        _insert_ad(
+            conn,
+            f"ad_america_{idx}",
+            brand="Jeep",
+            products=["Wrangler"],
+            social_badges=["Proud partner of America 250"],
+        )
+    conn.commit()
+
+    store = FakeVisualStore(
+        {
+            "ad_america_0": [1.0, 0.0],
+            "ad_america_1": [0.999, 0.001],
+            "ad_america_2": [0.998, 0.002],
+        }
+    )
+
+    result = scan_campaign_proposals(conn, store, config=_discovery_config())
+
+    proposal = next(p for p in result.proposals if "America 250" in p.name)
+    assert proposal.name == "Jeep America 250"
+    assert proposal.theme == "America 250"
+    assert proposal.ad_ids == ["ad_america_0", "ad_america_1", "ad_america_2"]
 
 
 def test_discover_campaigns_persists_campaign_suggestion_groups(conn):
