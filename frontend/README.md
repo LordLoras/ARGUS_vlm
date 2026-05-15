@@ -12,6 +12,22 @@ The app uses same-origin API requests by default. During local development,
 Vite proxies `/api` and `/data` to `http://127.0.0.1:8000`, so a temporary
 frontend tunnel is enough for remote testing.
 
+For a temporary public demo domain, enable Basic Auth with an ignored local env
+file before starting Vite:
+
+```powershell
+Set-Content .env.local @"
+ARGUS_BASIC_AUTH_ENABLED=true
+ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+"@
+npm run dev
+```
+
+Add users by adding comma-separated `username:password` pairs to
+`ARGUS_BASIC_AUTH_USERS`, then restart Vite. Keep `ARGUS_BASIC_AUTH_ENABLED=false`
+or unset for normal local-only development.
+
 Override the proxy target only when your FastAPI server is on a different host:
 
 ```powershell

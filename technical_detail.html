@@ -563,6 +563,15 @@
             <code>/api</code> and <code>/data</code> to
             <code>http://127.0.0.1:8000</code>.
           </p>
+          <p>
+            The Vite edge can also enforce optional Basic Auth before serving
+            the UI, proxied API, or media files. It is controlled by
+            <code>ARGUS_BASIC_AUTH_ENABLED</code> and
+            <code>ARGUS_BASIC_AUTH_USERS</code> in
+            <code>frontend\.env.local</code>. Users are comma-separated
+            <code>username:password</code> pairs. This is meant for temporary
+            HTTPS demos while the FastAPI port stays private.
+          </p>
         </div>
       </section>
 
@@ -940,7 +949,7 @@
               <tr><td><code>vector_store</code></td><td><code>backend</code>, <code>text_dim</code>, <code>visual_dim</code></td><td>Selects sqlite-vec dimensions and backend.</td></tr>
               <tr><td><code>campaigns.discover</code></td><td><code>lookback_days</code>, <code>min_cluster_size</code>, <code>min_mean_similarity</code>, <code>use_campaign_suggestions</code>, <code>min_campaign_signal_confidence</code>, <code>clusterer</code>, <code>name_template</code></td><td>Controls auto-discovery proposal sensitivity.</td></tr>
               <tr><td><code>api</code></td><td><code>host</code>, <code>port</code>, <code>cors_origins</code>, upload limits</td><td>Controls FastAPI bind address, browser CORS, and upload safety.</td></tr>
-              <tr><td><code>frontend env</code></td><td><code>VITE_API_BASE_URL</code>, <code>VITE_API_PROXY_TARGET</code>, <code>VITE_ALLOWED_HOSTS</code>, <code>VITE_DEV_HOST</code>, <code>VITE_DEV_PORT</code></td><td>Controls same-origin API mode, local proxy target, tunnel/LAN host access, and Vite bind settings.</td></tr>
+              <tr><td><code>frontend env</code></td><td><code>VITE_API_BASE_URL</code>, <code>VITE_API_PROXY_TARGET</code>, <code>VITE_ALLOWED_HOSTS</code>, <code>VITE_DEV_HOST</code>, <code>VITE_DEV_PORT</code>, <code>ARGUS_BASIC_AUTH_ENABLED</code>, <code>ARGUS_BASIC_AUTH_USERS</code></td><td>Controls same-origin API mode, local proxy target, tunnel/LAN host access, Vite bind settings, and optional demo Basic Auth.</td></tr>
               <tr><td><code>worker</code></td><td><code>poll_interval_ms</code>, <code>concurrency</code></td><td>Controls background job polling and parallelism.</td></tr>
               <tr><td><code>agent</code></td><td><code>inherit_vlm</code>, endpoint override, <code>max_iterations</code>, row limits, SQL timeout, <code>temperature</code>, <code>max_tokens</code></td><td>Controls read-only NL agent routing and answer budget.</td></tr>
               <tr><td><code>search</code></td><td><code>text_min_score</code>, <code>visual_min_score</code>, <code>visual_hybrid_min_score</code></td><td>Controls vector result score floors and recall/precision tradeoffs.</td></tr>

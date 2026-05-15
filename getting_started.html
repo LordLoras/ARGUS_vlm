@@ -773,6 +773,24 @@ cd ..</code></pre>
               <code>VITE_API_PROXY_TARGET</code> if the API is running on a
               different local host or port.
             </p>
+            <h3>Basic Auth for a demo domain</h3>
+            <p>
+              Basic Auth is disabled by default. For a temporary public demo
+              domain, enable it in <code>frontend\.env.local</code> before
+              starting Vite. The file is ignored by git.
+            </p>
+            <pre><code>cd frontend
+Set-Content .env.local @"
+ARGUS_BASIC_AUTH_ENABLED=true
+ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+"@
+npm run dev</code></pre>
+            <p>
+              Add users by adding comma-separated
+              <code>username:password</code> pairs, then restart Vite. Use HTTPS
+              on the public domain and keep the FastAPI port private.
+            </p>
           </div>
         </section>
 

@@ -646,6 +646,24 @@ that same frontend origin, and Vite forwards them to the local API at
 `VITE_API_PROXY_TARGET` only if your API is running on a different local port or
 host.
 
+For a public demo domain, enable Vite Basic Auth in `frontend/.env.local`
+before starting the frontend. The file is ignored by git:
+
+```powershell
+cd frontend
+Set-Content .env.local @"
+ARGUS_BASIC_AUTH_ENABLED=true
+ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+"@
+npm run dev
+```
+
+Add users by adding comma-separated `username:password` pairs to
+`ARGUS_BASIC_AUTH_USERS`, then restart Vite. Basic Auth is disabled by default.
+Use HTTPS on the domain and keep the FastAPI port private; this is suitable for
+short demos, not as a long-term public authentication system.
+
 First-run sanity checks:
 
 - `http://127.0.0.1:8000/docs` loads the FastAPI docs.
