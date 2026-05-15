@@ -14,6 +14,13 @@ The app defaults to `http://localhost:8000` for the API. Override with:
 $env:VITE_API_BASE_URL = "http://localhost:8000"
 ```
 
+If you are testing over your LAN, bind Vite to all interfaces:
+
+```powershell
+$env:VITE_DEV_HOST = "0.0.0.0"
+npm run dev
+```
+
 All network access is routed through `src/lib/api-client.ts`. The generated OpenAPI client can be refreshed once the backend is running with `npm run codegen`.
 
 ## Pages
