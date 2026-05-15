@@ -646,23 +646,46 @@ that same frontend origin, and Vite forwards them to the local API at
 `VITE_API_PROXY_TARGET` only if your API is running on a different local port or
 host.
 
-For a public demo domain, enable Vite Basic Auth in `frontend/.env.local`
-before starting the frontend. The file is ignored by git:
+For Cloudflare Tunnel on `argus.rest`, point the public hostname to the Vite
+service at `http://127.0.0.1:5173` and allow that host in `frontend/.env.local`:
 
 ```powershell
 cd frontend
 Set-Content .env.local @"
-ARGUS_BASIC_AUTH_ENABLED=true
-ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
-ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+VITE_ALLOWED_HOSTS=.argus.rest
+ARGUS_AUTH_ENABLED=true
+ARGUS_AUTH_MODE=login
+ARGUS_AUTH_USERS=h-tech:change-this-password
+ARGUS_AUTH_REALM=ARGUS Demo
+"@
+npm run dev
+```
+
+The leading dot in `.argus.rest` allows both the apex domain and subdomains.
+Do not expose `http://127.0.0.1:8000` as a second public hostname unless you are
+intentionally doing a split-origin deployment.
+
+For a public demo domain, enable the ARGUS login gate in
+`frontend/.env.local` before starting the frontend. The file is ignored by git:
+
+```powershell
+cd frontend
+Set-Content .env.local @"
+ARGUS_AUTH_ENABLED=true
+ARGUS_AUTH_MODE=login
+ARGUS_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_AUTH_REALM=ARGUS Demo
+ARGUS_AUTH_SESSION_TTL_HOURS=12
 "@
 npm run dev
 ```
 
 Add users by adding comma-separated `username:password` pairs to
-`ARGUS_BASIC_AUTH_USERS`, then restart Vite. Basic Auth is disabled by default.
-Use HTTPS on the domain and keep the FastAPI port private; this is suitable for
-short demos, not as a long-term public authentication system.
+`ARGUS_AUTH_USERS`, then restart Vite. Auth is disabled by default. Use HTTPS on
+the domain and keep the FastAPI port private; this is suitable for short demos,
+not as a long-term public authentication system. Set `ARGUS_AUTH_MODE=basic`
+only if you want the browser-native Basic Auth prompt instead of the themed
+login page.
 
 First-run sanity checks:
 

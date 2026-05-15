@@ -12,21 +12,42 @@ The app uses same-origin API requests by default. During local development,
 Vite proxies `/api` and `/data` to `http://127.0.0.1:8000`, so a temporary
 frontend tunnel is enough for remote testing.
 
-For a temporary public demo domain, enable Basic Auth with an ignored local env
-file before starting Vite:
+For Cloudflare Tunnel on a custom domain, keep the tunnel pointed at the Vite
+service and allow the public hostname through Vite:
 
 ```powershell
 Set-Content .env.local @"
-ARGUS_BASIC_AUTH_ENABLED=true
-ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
-ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+VITE_ALLOWED_HOSTS=.argus.rest
+ARGUS_AUTH_ENABLED=true
+ARGUS_AUTH_MODE=login
+ARGUS_AUTH_USERS=h-tech:change-this-password
+ARGUS_AUTH_REALM=ARGUS Demo
+"@
+npm run dev
+```
+
+Use `.argus.rest` instead of `argus.rest` if you want both `argus.rest` and
+subdomains such as `demo.argus.rest` to work. The Cloudflare service target
+should stay `http://127.0.0.1:5173`; do not expose the FastAPI port separately.
+
+For a temporary public demo domain, enable the ARGUS login gate with an ignored
+local env file before starting Vite:
+
+```powershell
+Set-Content .env.local @"
+ARGUS_AUTH_ENABLED=true
+ARGUS_AUTH_MODE=login
+ARGUS_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_AUTH_REALM=ARGUS Demo
+ARGUS_AUTH_SESSION_TTL_HOURS=12
 "@
 npm run dev
 ```
 
 Add users by adding comma-separated `username:password` pairs to
-`ARGUS_BASIC_AUTH_USERS`, then restart Vite. Keep `ARGUS_BASIC_AUTH_ENABLED=false`
-or unset for normal local-only development.
+`ARGUS_AUTH_USERS`, then restart Vite. Keep `ARGUS_AUTH_ENABLED=false` or unset
+for normal local-only development. Set `ARGUS_AUTH_MODE=basic` only if you want
+the browser-native Basic Auth prompt instead of the ARGUS-themed login page.
 
 Override the proxy target only when your FastAPI server is on a different host:
 

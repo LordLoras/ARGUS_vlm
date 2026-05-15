@@ -773,23 +773,35 @@ cd ..</code></pre>
               <code>VITE_API_PROXY_TARGET</code> if the API is running on a
               different local host or port.
             </p>
-            <h3>Basic Auth for a demo domain</h3>
             <p>
-              Basic Auth is disabled by default. For a temporary public demo
-              domain, enable it in <code>frontend\.env.local</code> before
-              starting Vite. The file is ignored by git.
+              For Cloudflare Tunnel on <code>argus.rest</code>, point the
+              public hostname to <code>http://127.0.0.1:5173</code> and set
+              <code>VITE_ALLOWED_HOSTS=.argus.rest</code> in
+              <code>frontend\.env.local</code>. The leading dot allows the apex
+              domain and subdomains.
+            </p>
+            <h3>ARGUS login for a demo domain</h3>
+            <p>
+              Demo auth is disabled by default. For a temporary public demo
+              domain, enable the ARGUS-themed login page in
+              <code>frontend\.env.local</code> before starting Vite. The file
+              is ignored by git.
             </p>
             <pre><code>cd frontend
 Set-Content .env.local @"
-ARGUS_BASIC_AUTH_ENABLED=true
-ARGUS_BASIC_AUTH_USERS=h-tech:change-this-password,analyst:another-password
-ARGUS_BASIC_AUTH_REALM=ARGUS Demo
+ARGUS_AUTH_ENABLED=true
+ARGUS_AUTH_MODE=login
+ARGUS_AUTH_USERS=h-tech:change-this-password,analyst:another-password
+ARGUS_AUTH_REALM=ARGUS Demo
+ARGUS_AUTH_SESSION_TTL_HOURS=12
 "@
 npm run dev</code></pre>
             <p>
               Add users by adding comma-separated
               <code>username:password</code> pairs, then restart Vite. Use HTTPS
-              on the public domain and keep the FastAPI port private.
+              on the public domain and keep the FastAPI port private. Set
+              <code>ARGUS_AUTH_MODE=basic</code> only if you want the
+              browser-native Basic Auth prompt instead.
             </p>
           </div>
         </section>
