@@ -561,6 +561,10 @@ Configure ARGUS:
 Copy-Item .\config.example.yaml .\config.yaml
 ```
 
+`config.example.yaml` is intentionally commented with valid choices and tuning
+notes. After copying it, use `config.yaml` as the local setup reference and edit
+the values there.
+
 ```yaml
 vlm:
   mode: local

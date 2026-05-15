@@ -1,4 +1,11 @@
+# ARGUS runtime configuration.
+#
+# Copy this file to config.yaml and edit config.yaml for your machine.
+# Choices are documented inline so setup does not require jumping between docs.
+
 paths:
+  # Local artifact roots. Relative paths resolve from the repo/config location.
+  # Move data_root/sqlite_path to a larger drive if you ingest many videos.
   data_root: ./data
   uploads: ./data/uploads
   frames: ./data/frames
@@ -9,9 +16,12 @@ paths:
   qdrant_path: ./qdrant_db
 
 ingest:
+  # ffmpeg/ffprobe can be command names on PATH or absolute .exe paths.
   ffmpeg_path: ffmpeg
   ffprobe_path: ffprobe
+  # Frame cadence for pipeline evidence. Lower = more frames/slower/bigger DB.
   frame_interval_ms: 500
+  # Whisper expects mono 16 kHz audio; only change for a custom transcriber.
   audio_sample_rate: 16000
 
 whisper:
@@ -36,8 +46,12 @@ whisper:
     extra_args: []
 
 dedup:
+  # Exact duplicate = same source file bytes / SHA256. Usually safe to skip.
   skip_on_exact: true
+  # Near duplicate = mean pHash before OCR. Keep false if variants differ by
+  # only a few offer/product frames and you still want them processed separately.
   skip_on_near_duplicate: false
+  # Hamming distance for pre-OCR pHash; lower = stricter, higher = more tolerant.
   phash_distance_threshold: 8
   post_ocr:
     # Cheap duplicate classifier after OCR and before VLM. It catches
@@ -58,11 +72,16 @@ dedup:
 ocr:
   # Raw OCR engine. Only local PaddleOCR is supported here for now.
   enabled: true
+  # Choices: paddleocr
   backend: paddleocr
+  # Choices depend on your Paddle install. Use cpu by default; gpu/cuda only
+  # if your local Paddle build supports it.
   device: cpu
+  # Paddle language code. en is the tested default.
   lang: en
 
 paddlevl:
+  # Legacy local document-OCR path. Prefer glm_ocr for OpenAI-compatible OCR-VL.
   enabled: false
   command: "paddlex --pipeline PaddleOCR-VL-native.yaml --input {image_path} --output {output_dir}"
   timeout_s: 60
@@ -83,14 +102,23 @@ glm_ocr:
   # for normal local ingestion when an OpenAI-compatible GLM-OCR engine is
   # listening on port 5050.
   enabled: false
+  # Choices: local | remote. The selected preset below is copied to
+  # glm_ocr.endpoint at runtime.
   mode: local                 # local | remote
   prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
   image_max_dim: 1024
+  # include_in_search: add GLM-OCR text to keyword/vector text search.
   include_in_search: true
+  # include_in_vlm_bundle: feed GLM-OCR text to the classifier. Keep false
+  # unless you trust the OCR-VL output for fine print/legal text.
   include_in_vlm_bundle: false # keep false for finance/legal fine print unless reviewed
+  # run_on_text_frames: allow automatic gated calls when PaddleOCR sees enough text.
   run_on_text_frames: true
+  # min_ocr_chars: frame must have this many raw OCR chars before gated GLM-OCR.
   min_ocr_chars: 100
+  # run_when_ocr_disabled: still call GLM-OCR if PaddleOCR is disabled.
   run_when_ocr_disabled: true
+  # max_frames_per_ad: cap cost/latency per ad even when many frames are text-heavy.
   max_frames_per_ad: 12
   local:
     endpoint: "http://127.0.0.1:5050/v1"
@@ -113,7 +141,12 @@ glm_ocr:
     max_tokens: 2048
     stream: true
   gating:
+    # force_all: true calls GLM-OCR on every kept frame up to max_frames_per_ad.
+    # Use only for diagnostics; normal mode should stay false.
     force_all: false
+    # Thresholds below decide what "hard frame" means. Higher dense/fragment
+    # thresholds call GLM-OCR less often; higher confidence thresholds call it
+    # more often because more frames count as low-confidence.
     mean_confidence_threshold: 0.70
     min_item_confidence_threshold: 0.50
     dense_text_char_threshold: 500
@@ -121,7 +154,10 @@ glm_ocr:
     short_fragment_max_len: 3
 
 rules:
+  # null = built-in ad_classifier/pipeline/rules/default_rules.yaml.
+  # Set to a YAML path to use project/customer-specific deterministic rules.
   rules_path: null                # null = built-in ad_classifier/pipeline/rules/default_rules.yaml
+  # Transcript segments within this window are attached to nearby frames.
   alignment_window_ms: 1500
 
 vlm:
@@ -131,8 +167,11 @@ vlm:
   # The agent inherits the active preset when agent.inherit_vlm is true.
   # Flip the flag to switch all VLM calls + agent between local and remote.
   mode: local
+  # Max selected frames in the classifier evidence bundle. More frames improve
+  # recall but increase latency/token pressure.
   max_frames_in_bundle: 12
   image_max_dim: 512       # max pixel dimension for VLM frames; bump to 768 for text-heavy ads
+  # Reliability passes. Disable only when debugging latency or endpoint issues.
   enable_ocr_cleanup_pass: true       # text-only VLM pass to clean garbled OCR before classification
   enable_self_correction: true        # lightweight text-only consistency check after VLM output
   enable_post_validation: true        # deterministic validation of prices, offers, brands
@@ -150,6 +189,7 @@ vlm:
     verifier_max_tokens: 8192
     self_correction_max_tokens: 4096
   local:
+    # OpenAI-compatible base URL ending in /v1.
     endpoint: "http://127.0.0.1:1234/v1"
     model: "Qwen3.6-27B-Q4_K_M"      # vision-capable model for multimodal VLM analysis
     api_key_env: null                 # set to env var name if the engine uses auth
@@ -158,12 +198,16 @@ vlm:
     retry_delay_s: 2
     temperature: 0.1
     max_tokens: 8192
+    # enable_thinking: true only for endpoints/models that support a thinking
+    # mode and still return valid JSON.
     enable_thinking: false
     # json_object is safer for small/quantized local models that may not
     # support structured output schemas.
     response_format: json_object
     stream: true
   remote:
+    # Any hosted OpenAI-compatible endpoint. Set api_key_env to the environment
+    # variable that holds the key; do not put secrets directly in config.yaml.
     endpoint: "https://api.openai.com/v1"
     model: "gpt-4o-mini"
     api_key_env: "OPENAI_API_KEY"
@@ -179,7 +223,10 @@ vlm:
     stream: true
 
 text_embedder:
+  # Text vectors for semantic search. Keep dim aligned with vector_store.text_dim.
   model: sentence-transformers/all-MiniLM-L6-v2
+  # Choices commonly used by torch stacks: cpu or cuda. Use cpu until the local
+  # torch/GPU install is verified.
   device: cpu
   batch_size: 32
   dim: 384
@@ -191,28 +238,41 @@ image_embedder:
   # sentence-transformers; use mock embeddings for no-torch test runs.
   enabled: true
   model: google/siglip2-base-patch16-224
+  # Choices commonly used by torch stacks: cpu or cuda. For AMD ROCm builds,
+  # torch still usually exposes the backend through cuda.
   device: cpu
   batch_size: 8
   dim: 768
 
 vector_store:
+  # Choices: sqlite-vec. Qdrant path exists for future backend work, but the
+  # current API/worker path expects sqlite-vec.
   backend: sqlite-vec
   text_dim: 384
   visual_dim: 768
 
 campaigns:
   discover:
+    # Auto-discovery only proposes campaigns; user-curated assignments remain editable.
     lookback_days: 90
+    # min_cluster_size: fewer ads = more proposals/noise; more ads = stricter.
     min_cluster_size: 3
+    # Similarity floor for auto-cluster cohesion. Higher = fewer/tighter campaigns.
     min_mean_similarity: 0.75
     use_campaign_suggestions: true
     min_campaign_signal_confidence: 0.80
+    # Choices: hdbscan | agglomerative. hdbscan finds variable-sized clusters;
+    # agglomerative is deterministic and easier to reason about on small sets.
     clusterer: hdbscan            # hdbscan | agglomerative
     name_template: "{brand} {month} {year}"
 
 api:
+  # FastAPI bind address. 127.0.0.1 keeps the API local-only.
   host: 127.0.0.1
   port: 8000
+  # Browser CORS allowlist for split-origin deployments. In normal Vite dev
+  # mode, the frontend uses same-origin /api and /data proxying, so random
+  # tunnel URLs do not need to be added here.
   cors_origins:
     - http://localhost:5173
   upload:
@@ -223,7 +283,9 @@ api:
       - video/webm
 
 worker:
+  # Polling interval for queued jobs. Lower reacts faster; higher is quieter.
   poll_interval_ms: 1000
+  # Pipeline concurrency. Keep 1 for local GPU/VLM stability.
   concurrency: 1
 
 agent:
@@ -232,7 +294,10 @@ agent:
   # "local" it uses the local one.  Override agent.endpoint fields below
   # to pin the agent to a specific backend regardless of vlm.mode.
   inherit_vlm: true
+  # endpoint: leave {} to inherit from vlm when inherit_vlm is true. Fill
+  # endpoint/model/api_key_env here only to pin the agent to a different model.
   endpoint: {}
+  # max_iterations limits tool-call loops for one agent answer.
   max_iterations: 8
   list_max_rows: 50
   sql_readonly_max_rows: 50

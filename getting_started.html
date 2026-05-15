@@ -461,7 +461,6 @@
         <a href="#torch">Torch for NVIDIA / AMD</a>
         <a href="#inference-engine">Inference Engine</a>
         <a href="#ocr-whisper">OCR and Whisper</a>
-        <a href="#advanced-config">Advanced Config</a>
         <a href="#run">Run ARGUS</a>
         <a href="#sanity-checks">Sanity Checks</a>
         <a href="#troubleshooting">Troubleshooting</a>
@@ -658,6 +657,11 @@ print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else
               <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code>.</li>
               <li>Set <code>vlm.local.endpoint</code> and <code>vlm.local.model</code>.</li>
             </ol>
+            <p>
+              The copied config is intentionally commented with the selectable
+              values and tuning notes. Use <code>config.yaml</code> as the
+              setup reference after copying it.
+            </p>
             <pre><code>Copy-Item .\config.example.yaml .\config.yaml</code></pre>
             <pre><code>vlm:
   mode: local
@@ -729,59 +733,9 @@ python -m pip install -e ".[ocr,dev]"</code></pre>
           </div>
         </section>
 
-        <section id="advanced-config">
-          <div class="section-head">
-            <span>07</span>
-            <h2>Advanced Configuration Reference</h2>
-          </div>
-          <div class="content">
-            <p>
-              These are the settings most likely to matter during setup. Edit
-              <code>config.yaml</code>, not <code>config.example.yaml</code>.
-            </p>
-            <table>
-              <thead>
-                <tr><th>Area</th><th>Settings</th><th>What to change</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>paths</td><td><code>data_root</code>, <code>sqlite_path</code></td><td>Move data or the SQLite DB to another drive.</td></tr>
-                <tr><td>ingest</td><td><code>ffmpeg_path</code>, <code>ffprobe_path</code>, <code>frame_interval_ms</code></td><td>Use custom ffmpeg paths or sample frames more/less often.</td></tr>
-                <tr><td>whisper</td><td><code>backend</code>, <code>model_path</code>, <code>use_gpu</code>, <code>threads</code></td><td>Point at a GGML model and choose GPU or CPU transcription.</td></tr>
-                <tr><td>ocr</td><td><code>enabled</code>, <code>backend</code>, <code>device</code>, <code>lang</code></td><td>Enable local PaddleOCR and select CPU/GPU/language.</td></tr>
-                <tr><td>glm_ocr</td><td><code>enabled</code>, <code>mode</code>, <code>include_in_search</code>, <code>include_in_vlm_bundle</code>, <code>max_frames_per_ad</code></td><td>Enable optional OCR-VL for hard text frames.</td></tr>
-                <tr><td>glm_ocr.local / remote</td><td><code>endpoint</code>, <code>model</code>, <code>api_key_env</code>, <code>timeout_s</code>, <code>max_retries</code>, <code>retry_delay_s</code>, <code>temperature</code>, <code>max_tokens</code>, <code>stream</code></td><td>Point optional GLM-OCR at local or remote OpenAI-compatible endpoints.</td></tr>
-                <tr><td>glm_ocr.gating</td><td><code>force_all</code>, confidence thresholds, dense text threshold, short fragment thresholds</td><td>Choose when GLM-OCR is called automatically. Keep <code>force_all: false</code> for normal use.</td></tr>
-                <tr><td>vlm</td><td><code>mode</code>, <code>max_frames_in_bundle</code>, <code>image_max_dim</code>, cleanup/self-correction/post-validation/visual-verify flags</td><td>Control what evidence reaches the classifier and which reliability passes run.</td></tr>
-                <tr><td>vlm.local / remote</td><td><code>endpoint</code>, <code>model</code>, <code>api_key_env</code>, <code>timeout_s</code>, <code>max_retries</code>, <code>retry_delay_s</code>, <code>temperature</code>, <code>max_tokens</code>, <code>enable_thinking</code>, <code>response_format</code>, <code>stream</code></td><td>Point ARGUS at the inference engine and tune JSON reliability, latency, retry behavior, and output budget.</td></tr>
-                <tr><td>dedup.post_ocr</td><td>candidate pHash, per-frame pHash, duration, text, transcript, signature thresholds</td><td>Controls conservative re-encoded duplicate detection after OCR.</td></tr>
-                <tr><td>api.upload</td><td><code>max_bytes</code>, <code>allowed_mime</code></td><td>Set upload size and file type limits.</td></tr>
-                <tr><td>frontend env</td><td><code>VITE_API_BASE_URL</code>, <code>VITE_API_PROXY_TARGET</code>, <code>VITE_ALLOWED_HOSTS</code>, <code>VITE_DEV_HOST</code>, <code>VITE_DEV_PORT</code></td><td>Keep API requests same-origin by default, choose the local proxy target, and control tunnel/LAN access.</td></tr>
-                <tr><td>vlm.complexity</td><td><code>enabled</code>, OCR/transcript thresholds, cleanup/verifier/self-correction token budgets</td><td>Auto-raise budgets for dense fine-print ads.</td></tr>
-                <tr><td>embedders</td><td><code>text_embedder.device</code>, <code>image_embedder.enabled</code>, <code>image_embedder.device</code>, batch sizes</td><td>Use GPU for MiniLM/SigLIP or disable visual embeddings for setup.</td></tr>
-                <tr><td>campaigns</td><td><code>min_cluster_size</code>, <code>min_mean_similarity</code>, <code>clusterer</code></td><td>Control auto-discovery sensitivity.</td></tr>
-                <tr><td>agent</td><td><code>inherit_vlm</code>, <code>max_iterations</code>, row limits, <code>max_tokens</code></td><td>Pin the agent to the VLM endpoint or tune answer budget.</td></tr>
-                <tr><td>search</td><td><code>text_min_score</code>, <code>visual_min_score</code>, <code>visual_hybrid_min_score</code></td><td>Balance recall and precision for vector retrieval.</td></tr>
-              </tbody>
-            </table>
-            <h3>Response format guidance</h3>
-            <pre><code>vlm:
-  local:
-    response_format: json_object  # most compatible local mode
-  remote:
-    response_format: json_schema  # stricter if the endpoint supports schema validation</code></pre>
-            <p>
-              <code>json_object</code> asks the engine to return valid JSON.
-              <code>json_schema</code> asks capable engines to validate output
-              against the expected schema. If a local engine returns empty
-              content, ignores schemas, or errors on schema mode, use
-              <code>json_object</code>.
-            </p>
-          </div>
-        </section>
-
         <section id="run">
           <div class="section-head">
-            <span>08</span>
+            <span>07</span>
             <h2>Initialize and Run</h2>
           </div>
           <div class="content">
@@ -824,7 +778,7 @@ cd ..</code></pre>
 
         <section id="sanity-checks">
           <div class="section-head">
-            <span>09</span>
+            <span>08</span>
             <h2>First-Run Sanity Checks</h2>
           </div>
           <div class="content">
@@ -863,7 +817,7 @@ cd ..</code></pre>
 
         <section id="troubleshooting">
           <div class="section-head">
-            <span>10</span>
+            <span>09</span>
             <h2>Troubleshooting</h2>
           </div>
           <div class="content">
