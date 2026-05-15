@@ -16,7 +16,7 @@ import type {
   SearchHit
 } from "./types";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -54,7 +54,7 @@ function params(values: Record<string, string | number | boolean | undefined | n
 }
 
 export const api = {
-  health: () => apiFetch<{ status: string }>("/"),
+  health: () => apiFetch<{ status: string; service: string }>("/api/health"),
 
   listAds: (query: { brand?: string; category?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export function formatDuration(ms?: number | null) {
   if (!ms) return "-";
@@ -36,10 +36,14 @@ export function filePathToDataUrl(path?: string | null) {
   const normalized = path.replace(/\\/g, "/");
   if (/^(https?:|blob:|data:)/i.test(normalized)) return normalized;
   const dataIndex = normalized.lastIndexOf("/data/");
-  if (dataIndex >= 0) return new URL(normalized.slice(dataIndex), API_BASE_URL).toString();
-  if (normalized.startsWith("/data/")) return new URL(normalized, API_BASE_URL).toString();
-  if (normalized.startsWith("data/")) return new URL(`/${normalized}`, API_BASE_URL).toString();
+  if (dataIndex >= 0) return formatApiUrl(normalized.slice(dataIndex));
+  if (normalized.startsWith("/data/")) return formatApiUrl(normalized);
+  if (normalized.startsWith("data/")) return formatApiUrl(`/${normalized}`);
   return normalized;
+}
+
+function formatApiUrl(path: string) {
+  return API_BASE_URL ? new URL(path, API_BASE_URL).toString() : path;
 }
 
 export function formatPercent(value?: number | null) {

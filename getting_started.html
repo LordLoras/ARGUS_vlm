@@ -755,6 +755,7 @@ python -m pip install -e ".[ocr,dev]"</code></pre>
                 <tr><td>vlm.local / remote</td><td><code>endpoint</code>, <code>model</code>, <code>api_key_env</code>, <code>timeout_s</code>, <code>max_retries</code>, <code>retry_delay_s</code>, <code>temperature</code>, <code>max_tokens</code>, <code>enable_thinking</code>, <code>response_format</code>, <code>stream</code></td><td>Point ARGUS at the inference engine and tune JSON reliability, latency, retry behavior, and output budget.</td></tr>
                 <tr><td>dedup.post_ocr</td><td>candidate pHash, per-frame pHash, duration, text, transcript, signature thresholds</td><td>Controls conservative re-encoded duplicate detection after OCR.</td></tr>
                 <tr><td>api.upload</td><td><code>max_bytes</code>, <code>allowed_mime</code></td><td>Set upload size and file type limits.</td></tr>
+                <tr><td>frontend env</td><td><code>VITE_API_BASE_URL</code>, <code>VITE_API_PROXY_TARGET</code>, <code>VITE_ALLOWED_HOSTS</code>, <code>VITE_DEV_HOST</code>, <code>VITE_DEV_PORT</code></td><td>Keep API requests same-origin by default, choose the local proxy target, and control tunnel/LAN access.</td></tr>
                 <tr><td>vlm.complexity</td><td><code>enabled</code>, OCR/transcript thresholds, cleanup/verifier/self-correction token budgets</td><td>Auto-raise budgets for dense fine-print ads.</td></tr>
                 <tr><td>embedders</td><td><code>text_embedder.device</code>, <code>image_embedder.enabled</code>, <code>image_embedder.device</code>, batch sizes</td><td>Use GPU for MiniLM/SigLIP or disable visual embeddings for setup.</td></tr>
                 <tr><td>campaigns</td><td><code>min_cluster_size</code>, <code>min_mean_similarity</code>, <code>clusterer</code></td><td>Control auto-discovery sensitivity.</td></tr>
@@ -805,6 +806,19 @@ cd ..</code></pre>
                 <strong>http://127.0.0.1:5173</strong>
               </div>
             </div>
+            <h3>Remote viewer testing</h3>
+            <p>
+              If you expose ARGUS through a temporary tunnel for another person
+              to test, expose only the frontend on port <code>5173</code>.
+              The browser will keep API and media requests on that same origin,
+              and Vite forwards <code>/api</code> and <code>/data</code> to the
+              local FastAPI service at <code>http://127.0.0.1:8000</code>.
+            </p>
+            <p>
+              Leave <code>VITE_API_BASE_URL</code> blank for this mode. Only set
+              <code>VITE_API_PROXY_TARGET</code> if the API is running on a
+              different local host or port.
+            </p>
           </div>
         </section>
 

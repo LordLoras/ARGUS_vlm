@@ -83,6 +83,13 @@ def _db(config_path: Path) -> sqlite3.Connection:
     return open_database(Path(data["paths"]["sqlite_path"]))
 
 
+def test_api_health_alias_supports_frontend_proxy(client: TestClient):
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "ad-classifier"}
+
+
 def test_upload_queues_job_and_lists_ad(client: TestClient):
     response = client.post(
         "/api/ads/upload",

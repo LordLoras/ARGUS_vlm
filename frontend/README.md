@@ -8,10 +8,21 @@ npm run codegen
 npm run dev
 ```
 
-The app defaults to `http://localhost:8000` for the API. Override with:
+The app uses same-origin API requests by default. During local development,
+Vite proxies `/api` and `/data` to `http://127.0.0.1:8000`, so a temporary
+frontend tunnel is enough for remote testing.
+
+Override the proxy target only when your FastAPI server is on a different host:
 
 ```powershell
-$env:VITE_API_BASE_URL = "http://localhost:8000"
+$env:VITE_API_PROXY_TARGET = "http://127.0.0.1:8001"
+```
+
+If you intentionally want the browser to call a separate API origin directly,
+set:
+
+```powershell
+$env:VITE_API_BASE_URL = "https://api.example.test"
 ```
 
 If you are testing over your LAN, bind Vite to all interfaces:

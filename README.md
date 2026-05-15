@@ -357,6 +357,11 @@ The backend exposes three main surfaces:
 - SSE streams for job progress and agent responses
 - a decoupled Vite/React frontend that consumes only the HTTP/SSE API
 
+During local development, the frontend uses same-origin requests by default.
+Vite proxies `/api` and `/data` to the local FastAPI service, so a temporary
+remote test only needs the frontend port exposed. `VITE_API_BASE_URL` remains
+available for intentional split-origin deployments.
+
 The frontend is not part of the pipeline contract. The backend owns ingestion,
 persistence, retrieval, and the agent; the UI is a client over JSON and SSE.
 
@@ -629,6 +634,13 @@ Default local services:
 | API | `http://localhost:8000` |
 | API docs | `http://localhost:8000/docs` |
 | Frontend | `http://localhost:5173` |
+
+For coworker or client testing through a temporary tunnel, expose only the
+frontend service on port `5173`. Browser requests to `/api` and `/data` stay on
+that same frontend origin, and Vite forwards them to the local API at
+`http://127.0.0.1:8000`. Leave `VITE_API_BASE_URL` blank for this mode; set
+`VITE_API_PROXY_TARGET` only if your API is running on a different local port or
+host.
 
 First-run sanity checks:
 
