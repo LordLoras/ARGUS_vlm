@@ -95,7 +95,7 @@ The default deployment does not require Docker or cloud services.
 | Visual embeddings | `google/siglip2-base-patch16-224` |
 | OCR | PaddleOCR by default |
 | Transcript | bundled whisper.cpp CLI, faster-whisper, or mock backend |
-| VLM | OpenAI-compatible local or remote endpoint |
+| VLM | OpenAI-compatible inference engine endpoint |
 | Frontend | Vite, React, TypeScript, Tailwind-style CSS |
 
 ---
@@ -371,8 +371,8 @@ frontend dependencies exist.
 
 Quick checklist:
 
-1. Install Git, Python, Node.js, ffmpeg, and a local OpenAI-compatible VLM
-   server.
+1. Install Git, Python, Node.js, ffmpeg, and an OpenAI-compatible inference
+   engine for the VLM.
 2. Create or activate `.venv`, then install ARGUS Python dependencies.
 3. Do not install or upgrade `torch` unless you are intentionally replacing the
    hardware-specific GPU build.
@@ -390,7 +390,8 @@ Install or verify:
 - Python 3.11+ (`python --version`)
 - Node.js 18+ (`node --version`)
 - ffmpeg and ffprobe on `PATH` (`ffmpeg -version`)
-- LM Studio, llama.cpp server, vLLM, or another OpenAI-compatible VLM endpoint
+- an inference engine that exposes an OpenAI-compatible chat completions
+  endpoint for the VLM
 
 ### 2. Clone ARGUS
 
@@ -540,13 +541,14 @@ first to confirm the model path and audio extraction are correct.
 ### 7. VLM Setup
 
 ARGUS expects an OpenAI-compatible chat completion endpoint for VLM
-classification and marketing-entity extraction. LM Studio is the easiest local
-option:
+classification and marketing-entity extraction. Run any local or remote
+inference engine that exposes an OpenAI-compatible chat completions API and has
+access to a vision-capable model.
 
-1. Open LM Studio.
-2. Download a vision-capable model.
-3. Start the local server.
-4. Confirm it is listening on `http://127.0.0.1:1234/v1`.
+1. Start the inference engine.
+2. Load or select a vision-capable model.
+3. Confirm the engine exposes `/v1/chat/completions`.
+4. Note the base endpoint URL and model name.
 
 Configure ARGUS:
 
@@ -563,8 +565,8 @@ vlm:
     response_format: json_object
 ```
 
-When `agent.inherit_vlm` is enabled, the NL agent uses the same active VLM
-endpoint as the classifier.
+When `agent.inherit_vlm` is enabled, the NL agent uses the same active
+OpenAI-compatible endpoint as the classifier.
 
 ### Optional GLM-OCR
 
@@ -573,15 +575,16 @@ PaddleOCR remains the grounded raw OCR engine. You can turn it off with
 PaddleOCR.
 
 GLM-OCR is intended for text-heavy frames, end cards, article graphics, and CTA
-screens. If you keep a local GLM-OCR server running, enable it for normal local
-ingestion; the worker calls it on demand only for frames selected by the gating
-rules. It is stored separately with engine `glm_ocr` in `ocr_items` and included
-in search text when `glm_ocr.include_in_search: true`. It is not included in the
-classifier VLM bundle unless `glm_ocr.include_in_vlm_bundle: true`.
+screens. If you keep a local GLM-OCR inference endpoint running, enable it for
+normal local ingestion; the worker calls it on demand only for frames selected
+by the gating rules. It is stored separately with engine `glm_ocr` in
+`ocr_items` and included in search text when `glm_ocr.include_in_search: true`.
+It is not included in the classifier VLM bundle unless
+`glm_ocr.include_in_vlm_bundle: true`.
 
 The template leaves `glm_ocr.enabled: false` so a fresh install does not depend
-on a second local model server. For this local setup, where llama.cpp serves
-GLM-OCR on port `5050`, use:
+on a second inference endpoint. If an OpenAI-compatible GLM-OCR engine is
+listening on port `5050`, use:
 
 ```yaml
 glm_ocr:
@@ -632,7 +635,8 @@ First-run sanity checks:
 - `http://127.0.0.1:8000/docs` loads the FastAPI docs.
 - `http://127.0.0.1:5173` loads the ARGUS frontend.
 - The worker window says it launched the SQLite-backed worker.
-- Your VLM server is already running before you upload an ad.
+- Your OpenAI-compatible VLM inference engine is already running before you
+  upload an ad.
 - For visual search, the torch verification command above reports a usable GPU
   or you intentionally configured the image embedder for CPU.
 
@@ -644,8 +648,8 @@ Different parts of ARGUS use different acceleration paths:
 
 | Component | Uses GPU when |
 |---|---|
-| VLM classification | Your LM Studio / llama.cpp / vLLM server is configured for GPU |
-| GLM-OCR | Your configured local/remote GLM-OCR server is configured for GPU |
+| VLM classification | Your OpenAI-compatible inference engine is configured for GPU |
+| GLM-OCR | Your configured local/remote GLM-OCR inference engine is configured for GPU |
 | Whisper transcript | `whisper.whisper_cpp.use_gpu: true` and the bundled CLI works with your driver |
 | PaddleOCR | Usually CPU by default in this project |
 | MiniLM text embeddings | `text_embedder.device: cuda` and torch GPU is available |

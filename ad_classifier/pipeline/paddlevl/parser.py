@@ -133,8 +133,8 @@ class PaddleVLParser(DocumentParser):
 
 class GLMOCRParser(DocumentParser):
     """
-    OpenAI-compatible adapter for GLM-OCR served by llama.cpp/Ollama-compatible
-    gateways or a remote OpenAI-style endpoint.
+    OpenAI-compatible adapter for GLM-OCR served by a local or remote inference
+    gateway.
 
     GLM-OCR does not provide Paddle-style boxes/confidence here; callers should
     store its text under engine="glm_ocr" and keep raw PaddleOCR as the

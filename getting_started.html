@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARGUS Getting Started</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08090b;
+      --bg-1: #0c0e12;
+      --bg-2: #10131a;
+      --panel: #121620;
+      --panel-2: #151a24;
+      --border: #242936;
+      --border-strong: #333947;
+      --fg: #e6e8ec;
+      --muted: #a1a7b3;
+      --dim: #6f7786;
+      --quiet: #4d5563;
+      --accent: #7c3aed;
+      --accent-2: #a78bfa;
+      --sky: #0ea5e9;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --shadow: 0 18px 50px #00000066, 0 1px 0 #ffffff08 inset;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--fg);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    code, pre { font-family: var(--mono); }
+    code {
+      color: #d7ccff;
+      background: #7c3aed18;
+      border: 1px solid #7c3aed30;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+
+    .shell {
+      min-height: 100vh;
+      background: var(--bg);
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 58px;
+      padding: 12px clamp(18px, 4vw, 54px);
+      background: #08090be6;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand img {
+      width: 30px;
+      height: 30px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 16px #0ea5e955);
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+    }
+
+    .brand span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 1px;
+    }
+
+    .top-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .top-links a {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: #11151d;
+      border-radius: 6px;
+      padding: 7px 9px;
+    }
+
+    .top-links a:hover { color: var(--fg); border-color: var(--border-strong); }
+
+    .hero {
+      position: relative;
+      min-height: 410px;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background: #050608 url("frontend/banner.png") center / cover no-repeat;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 9, 11, 0.68);
+    }
+
+    .hero-inner {
+      position: relative;
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 78px 0 42px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 16px #10b981aa;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 820px;
+      font-size: clamp(42px, 7vw, 78px);
+      line-height: 0.94;
+      letter-spacing: -0.045em;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: clamp(16px, 2vw, 20px);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: #121722;
+      color: var(--fg);
+      font-weight: 650;
+    }
+
+    .button.primary {
+      border-color: #7c3aed70;
+      background: var(--accent);
+      box-shadow: 0 0 24px #7c3aed30;
+    }
+
+    .layout {
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 28px;
+      padding: 32px 0 72px;
+    }
+
+    aside {
+      position: sticky;
+      top: 78px;
+      align-self: start;
+      border: 1px solid var(--border);
+      background: #0d1016cc;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    aside a {
+      display: block;
+      padding: 11px 14px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    aside a:last-child { border-bottom: 0; }
+    aside a:hover { color: var(--fg); background: #151a24; }
+
+    main { min-width: 0; }
+
+    section {
+      scroll-margin-top: 86px;
+      margin-bottom: 22px;
+      border: 1px solid var(--border);
+      background: #0d1016e6;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      background: #11151d;
+    }
+
+    .section-head span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--dim);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .content { padding: 18px 20px 22px; }
+    .content p { margin: 0 0 13px; color: var(--muted); }
+    .content p:last-child { margin-bottom: 0; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      background: #11151d;
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
+    .card p {
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .callout {
+      border: 1px solid #f59e0b55;
+      background: #f59e0b12;
+      color: #fde68a;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 14px 0;
+    }
+
+    .callout strong { color: #fff7d6; }
+
+    ol, ul {
+      margin: 12px 0 0;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+
+    li { margin: 8px 0; }
+
+    pre {
+      margin: 14px 0;
+      padding: 14px;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid #263044;
+      background: #070a10;
+      color: #d8deea;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    th {
+      color: var(--fg);
+      background: #121722;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .status-line {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .status {
+      border: 1px solid var(--border);
+      background: #11151d;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .status span {
+      display: block;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .status strong {
+      color: var(--fg);
+      font-size: 15px;
+    }
+
+    footer {
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 0 0 34px;
+      color: var(--quiet);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; }
+      .grid, .status-line { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .hero { min-height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="ARGUS getting started">
+        <img src="frontend/logo-mark.png" alt="" />
+        <span>
+          <strong>ARGUS</strong>
+          <span>Local multimodal ad intelligence</span>
+        </span>
+      </a>
+      <nav class="top-links" aria-label="Related documents">
+        <a href="technical_detail.html">Technical Detail</a>
+        <a href="README.md">README</a>
+        <a href="http://127.0.0.1:5173">Frontend</a>
+      </nav>
+    </header>
+
+    <div class="hero" id="top">
+      <div class="hero-inner">
+        <div class="eyebrow">Standalone setup guide</div>
+        <h1>ARGUS Getting Started</h1>
+        <p>
+          Use this when you received the ARGUS project folder directly. It walks
+          through the local Windows setup without requiring access to the
+          private repository.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#quick-start">Start Setup</a>
+          <a class="button" href="#inference-engine">Configure Inference</a>
+          <a class="button" href="#sanity-checks">Run Checks</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <aside aria-label="Page sections">
+        <a href="#quick-start">Quick Start</a>
+        <a href="#requirements">Requirements</a>
+        <a href="#python-env">Python Environment</a>
+        <a href="#torch">Torch for NVIDIA / AMD</a>
+        <a href="#inference-engine">Inference Engine</a>
+        <a href="#ocr-whisper">OCR and Whisper</a>
+        <a href="#advanced-config">Advanced Config</a>
+        <a href="#run">Run ARGUS</a>
+        <a href="#sanity-checks">Sanity Checks</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+      </aside>
+
+      <main>
+        <section id="quick-start">
+          <div class="section-head">
+            <span>01</span>
+            <h2>Quick Start for a Delivered Folder</h2>
+          </div>
+          <div class="content">
+            <p>
+              Extract or copy the ARGUS folder to a local path such as
+              <code>C:\Users\you\Desktop\ads_classification</code>. Open
+              PowerShell inside that folder. You should see
+              <code>pyproject.toml</code>, <code>config.example.yaml</code>,
+              <code>start.bat</code>, <code>frontend\</code>, and
+              <code>ad_classifier\</code>.
+            </p>
+            <div class="callout">
+              <strong>Assumption for this guide:</strong> the delivered folder
+              does not include a working <code>.venv</code>. You will create a
+              fresh environment and install the correct torch build for your
+              GPU before installing the embedding packages.
+            </div>
+            <ol>
+              <li>Install or verify Python, Node.js, ffmpeg, and an OpenAI-compatible inference engine.</li>
+              <li>Create and activate <code>.venv</code>.</li>
+              <li>Install ARGUS core dependencies.</li>
+              <li>Install the correct torch build for NVIDIA, AMD, or CPU.</li>
+              <li>Install embedding libraries without asking pip to replace torch.</li>
+              <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code> and set endpoints.</li>
+              <li>Install OCR and frontend dependencies.</li>
+              <li>Initialize SQLite and run <code>start.bat</code>.</li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="requirements">
+          <div class="section-head">
+            <span>02</span>
+            <h2>What Must Be Installed</h2>
+          </div>
+          <div class="content">
+            <div class="grid">
+              <div class="card">
+                <strong>Python 3.11 or newer</strong>
+                <p>Runs the FastAPI backend, worker, pipeline, CLI, tests, OCR, and vector code.</p>
+              </div>
+              <div class="card">
+                <strong>Node.js 18 or newer</strong>
+                <p>Runs the Vite React frontend at <code>http://127.0.0.1:5173</code>.</p>
+              </div>
+              <div class="card">
+                <strong>ffmpeg and ffprobe</strong>
+                <p>Required for video probing, frame sampling, and audio extraction.</p>
+              </div>
+              <div class="card">
+                <strong>OpenAI-compatible inference engine</strong>
+                <p>Provides <code>/v1/chat/completions</code> for the VLM, agent, and optional GLM-OCR.</p>
+              </div>
+              <div class="card">
+                <strong>Git is optional for delivered folders</strong>
+                <p>Only needed if you will pull updates from a remote repository. It is not required to run a copied project folder.</p>
+              </div>
+              <div class="card">
+                <strong>Python build tools</strong>
+                <p><code>pip</code>, <code>setuptools</code>, and <code>wheel</code> are upgraded inside the venv before package install.</p>
+              </div>
+            </div>
+            <pre><code>python --version
+node --version
+ffmpeg -version
+ffprobe -version</code></pre>
+          </div>
+        </section>
+
+        <section id="python-env">
+          <div class="section-head">
+            <span>03</span>
+            <h2>Python Environment</h2>
+          </div>
+          <div class="content">
+            <p>
+              Create a clean local Python environment from the ARGUS project
+              root. This keeps package installs contained inside the project
+              folder.
+            </p>
+            <p>If activation is blocked in the current PowerShell session:</p>
+            <pre><code>Set-ExecutionPolicy -Scope Process RemoteSigned</code></pre>
+            <p>Create and activate the environment:</p>
+            <pre><code>python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e ".[dev,clustering]"</code></pre>
+            <table>
+              <thead>
+                <tr><th>Package group</th><th>Install command</th><th>Needed for</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Core + developer tools</td><td><code>python -m pip install -e ".[dev]"</code></td><td>API, worker, SQLite, tests, CLI.</td></tr>
+                <tr><td>Campaign clustering</td><td><code>python -m pip install -e ".[clustering]"</code></td><td>HDBSCAN/scikit-learn campaign discovery.</td></tr>
+                <tr><td>OCR</td><td><code>python -m pip install paddlepaddle paddleocr</code></td><td>Local PaddleOCR text extraction.</td></tr>
+                <tr><td>Embeddings</td><td><code>python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1</code></td><td>MiniLM text vectors and SigLIP visual vectors.</td></tr>
+                <tr><td>Qdrant client</td><td><code>python -m pip install -e ".[qdrant]"</code></td><td>Optional future vector backend; not required for sqlite-vec.</td></tr>
+              </tbody>
+            </table>
+            <div class="callout">
+              <strong>Torch is installed separately.</strong> ARGUS
+              intentionally omits <code>torch</code>, <code>torchvision</code>,
+              and <code>torchaudio</code> from <code>pyproject.toml</code>
+              because the correct Windows build depends on your hardware.
+            </div>
+          </div>
+        </section>
+
+        <section id="torch">
+          <div class="section-head">
+            <span>04</span>
+            <h2>Torch for NVIDIA, AMD, or CPU</h2>
+          </div>
+          <div class="content">
+            <p>
+              Install torch before the embedding libraries. Use the current
+              official command for your GPU and Python version; wheel URLs
+              change over time, so treat the examples below as the shape of the
+              command and verify them against the official pages.
+            </p>
+
+            <h3>NVIDIA CUDA</h3>
+            <p>
+              Use the PyTorch selector at
+              <a href="https://pytorch.org/get-started/locally/">pytorch.org/get-started/locally</a>.
+              Choose Windows, Pip, Python, and the CUDA runtime that matches the
+              selector recommendation for your driver.
+            </p>
+            <pre><code># Example shape only: use the exact CUDA index URL from the PyTorch selector.
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126</code></pre>
+
+            <h3>AMD Radeon / ROCm on Windows</h3>
+            <p>
+              Use AMD's official Radeon and Ryzen ROCm documentation:
+              <a href="https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html">PyTorch via PIP installation</a>.
+              AMD Windows wheels are tied to driver, Python, GPU generation, and
+              ROCm release. Follow the AMD page exactly, including any required
+              Python version and runtime packages.
+            </p>
+            <pre><code># Example shape only: copy the current wheel command from AMD's ROCm page.
+python -m pip install --no-cache-dir https://repo.radeon.com/rocm/windows/.../torch-...-win_amd64.whl</code></pre>
+
+            <h3>CPU fallback</h3>
+            <p>
+              CPU torch works for tests and small demos but visual search and
+              embedding backfills will be slow. Use this only when GPU setup is
+              unavailable.
+            </p>
+            <pre><code>python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu</code></pre>
+
+            <h3>Verify torch before continuing</h3>
+            <pre><code>@'
+import torch
+
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu")
+'@ | python -</code></pre>
+
+            <h3>Install embedding libraries after torch</h3>
+            <p>
+              Use <code>--no-deps</code> here so these libraries do not replace
+              the torch wheel you just installed.
+            </p>
+            <pre><code>python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1</code></pre>
+          </div>
+        </section>
+
+        <section id="inference-engine">
+          <div class="section-head">
+            <span>05</span>
+            <h2>Inference Engine Configuration</h2>
+          </div>
+          <div class="content">
+            <p>
+              ARGUS is engine-agnostic. Use any local or hosted inference engine
+              that exposes the OpenAI-compatible chat completions API. The VLM
+              must be vision-capable for classification and marketing entity
+              extraction.
+            </p>
+            <ol>
+              <li>Start the inference engine.</li>
+              <li>Load or select a vision-capable model.</li>
+              <li>Confirm the endpoint accepts <code>POST /v1/chat/completions</code>.</li>
+              <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code>.</li>
+              <li>Set <code>vlm.local.endpoint</code> and <code>vlm.local.model</code>.</li>
+            </ol>
+            <pre><code>Copy-Item .\config.example.yaml .\config.yaml</code></pre>
+            <pre><code>vlm:
+  mode: local
+  local:
+    endpoint: "http://127.0.0.1:1234/v1"
+    model: "your-vision-model"
+    response_format: json_object</code></pre>
+            <p>
+              When <code>agent.inherit_vlm: true</code>, the campaign research
+              agent and natural-language agent use the same active
+              OpenAI-compatible endpoint as the classifier.
+            </p>
+            <h3>JSON response format</h3>
+            <table>
+              <thead>
+                <tr><th>Format</th><th>Use when</th><th>Tradeoff</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>json_object</code></td>
+                  <td>Most local or quantized engines.</td>
+                  <td>Requires prompt discipline but is broadly compatible.</td>
+                </tr>
+                <tr>
+                  <td><code>json_schema</code></td>
+                  <td>The engine supports OpenAI Structured Outputs.</td>
+                  <td>Stronger validation, but unsupported engines may fail or ignore it.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="ocr-whisper">
+          <div class="section-head">
+            <span>06</span>
+            <h2>OCR, GLM-OCR, and Whisper</h2>
+          </div>
+          <div class="content">
+            <h3>PaddleOCR</h3>
+            <p>PaddleOCR is the grounded local OCR engine. It stores raw text, boxes, confidence, engine, frame, and timestamp.</p>
+            <pre><code>python -m pip install paddlepaddle
+python -m pip install paddleocr
+python -m pip install -e ".[ocr,dev]"</code></pre>
+
+            <h3>Optional GLM-OCR</h3>
+            <p>
+              GLM-OCR is optional and is called only for gated hard frames:
+              dense text, low confidence OCR, tiny fragments, or difficult end
+              cards. It should be served by an OpenAI-compatible endpoint.
+            </p>
+            <pre><code>glm_ocr:
+  enabled: true
+  mode: local
+  include_in_search: true
+  include_in_vlm_bundle: false
+  local:
+    endpoint: "http://127.0.0.1:5050/v1"
+    model: "glm-ocr"</code></pre>
+
+            <h3>Whisper</h3>
+            <p>
+              The repository includes <code>tools\whisper.cpp\whisper-cli.exe</code>.
+              The model file is not included. Place a GGML model under
+              <code>models\whisper\</code> and point <code>config.yaml</code>
+              at it.
+            </p>
+            <pre><code>New-Item -ItemType Directory -Force .\models\whisper</code></pre>
+          </div>
+        </section>
+
+        <section id="advanced-config">
+          <div class="section-head">
+            <span>07</span>
+            <h2>Advanced Configuration Reference</h2>
+          </div>
+          <div class="content">
+            <p>
+              These are the settings most likely to matter during setup. Edit
+              <code>config.yaml</code>, not <code>config.example.yaml</code>.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Area</th><th>Settings</th><th>What to change</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>paths</td><td><code>data_root</code>, <code>sqlite_path</code></td><td>Move data or the SQLite DB to another drive.</td></tr>
+                <tr><td>ingest</td><td><code>ffmpeg_path</code>, <code>ffprobe_path</code>, <code>frame_interval_ms</code></td><td>Use custom ffmpeg paths or sample frames more/less often.</td></tr>
+                <tr><td>whisper</td><td><code>backend</code>, <code>model_path</code>, <code>use_gpu</code>, <code>threads</code></td><td>Point at a GGML model and choose GPU or CPU transcription.</td></tr>
+                <tr><td>ocr</td><td><code>enabled</code>, <code>backend</code>, <code>device</code>, <code>lang</code></td><td>Enable local PaddleOCR and select CPU/GPU/language.</td></tr>
+                <tr><td>glm_ocr</td><td><code>enabled</code>, <code>mode</code>, <code>include_in_search</code>, <code>include_in_vlm_bundle</code>, <code>max_frames_per_ad</code></td><td>Enable optional OCR-VL for hard text frames.</td></tr>
+                <tr><td>glm_ocr.local / remote</td><td><code>endpoint</code>, <code>model</code>, <code>api_key_env</code>, <code>timeout_s</code>, <code>max_retries</code>, <code>retry_delay_s</code>, <code>temperature</code>, <code>max_tokens</code>, <code>stream</code></td><td>Point optional GLM-OCR at local or remote OpenAI-compatible endpoints.</td></tr>
+                <tr><td>glm_ocr.gating</td><td><code>force_all</code>, confidence thresholds, dense text threshold, short fragment thresholds</td><td>Choose when GLM-OCR is called automatically. Keep <code>force_all: false</code> for normal use.</td></tr>
+                <tr><td>vlm</td><td><code>mode</code>, <code>max_frames_in_bundle</code>, <code>image_max_dim</code>, cleanup/self-correction/post-validation/visual-verify flags</td><td>Control what evidence reaches the classifier and which reliability passes run.</td></tr>
+                <tr><td>vlm.local / remote</td><td><code>endpoint</code>, <code>model</code>, <code>api_key_env</code>, <code>timeout_s</code>, <code>max_retries</code>, <code>retry_delay_s</code>, <code>temperature</code>, <code>max_tokens</code>, <code>enable_thinking</code>, <code>response_format</code>, <code>stream</code></td><td>Point ARGUS at the inference engine and tune JSON reliability, latency, retry behavior, and output budget.</td></tr>
+                <tr><td>dedup.post_ocr</td><td>candidate pHash, per-frame pHash, duration, text, transcript, signature thresholds</td><td>Controls conservative re-encoded duplicate detection after OCR.</td></tr>
+                <tr><td>api.upload</td><td><code>max_bytes</code>, <code>allowed_mime</code></td><td>Set upload size and file type limits.</td></tr>
+                <tr><td>vlm.complexity</td><td><code>enabled</code>, OCR/transcript thresholds, cleanup/verifier/self-correction token budgets</td><td>Auto-raise budgets for dense fine-print ads.</td></tr>
+                <tr><td>embedders</td><td><code>text_embedder.device</code>, <code>image_embedder.enabled</code>, <code>image_embedder.device</code>, batch sizes</td><td>Use GPU for MiniLM/SigLIP or disable visual embeddings for setup.</td></tr>
+                <tr><td>campaigns</td><td><code>min_cluster_size</code>, <code>min_mean_similarity</code>, <code>clusterer</code></td><td>Control auto-discovery sensitivity.</td></tr>
+                <tr><td>agent</td><td><code>inherit_vlm</code>, <code>max_iterations</code>, row limits, <code>max_tokens</code></td><td>Pin the agent to the VLM endpoint or tune answer budget.</td></tr>
+                <tr><td>search</td><td><code>text_min_score</code>, <code>visual_min_score</code>, <code>visual_hybrid_min_score</code></td><td>Balance recall and precision for vector retrieval.</td></tr>
+              </tbody>
+            </table>
+            <h3>Response format guidance</h3>
+            <pre><code>vlm:
+  local:
+    response_format: json_object  # most compatible local mode
+  remote:
+    response_format: json_schema  # stricter if the endpoint supports schema validation</code></pre>
+            <p>
+              <code>json_object</code> asks the engine to return valid JSON.
+              <code>json_schema</code> asks capable engines to validate output
+              against the expected schema. If a local engine returns empty
+              content, ignores schemas, or errors on schema mode, use
+              <code>json_object</code>.
+            </p>
+          </div>
+        </section>
+
+        <section id="run">
+          <div class="section-head">
+            <span>08</span>
+            <h2>Initialize and Run</h2>
+          </div>
+          <div class="content">
+            <p>Install frontend dependencies once:</p>
+            <pre><code>cd frontend
+npm install
+cd ..</code></pre>
+            <p>Initialize SQLite, then start the API, worker, and frontend:</p>
+            <pre><code>python -m ad_classifier init-db
+.\start.bat</code></pre>
+            <div class="status-line">
+              <div class="status">
+                <span>API</span>
+                <strong>http://127.0.0.1:8000</strong>
+              </div>
+              <div class="status">
+                <span>API docs</span>
+                <strong>http://127.0.0.1:8000/docs</strong>
+              </div>
+              <div class="status">
+                <span>Frontend</span>
+                <strong>http://127.0.0.1:5173</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="sanity-checks">
+          <div class="section-head">
+            <span>09</span>
+            <h2>First-Run Sanity Checks</h2>
+          </div>
+          <div class="content">
+            <table>
+              <thead>
+                <tr>
+                  <th>Check</th>
+                  <th>Expected Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>http://127.0.0.1:8000/docs</code></td>
+                  <td>FastAPI documentation loads.</td>
+                </tr>
+                <tr>
+                  <td><code>http://127.0.0.1:5173</code></td>
+                  <td>ARGUS frontend loads.</td>
+                </tr>
+                <tr>
+                  <td>Worker window</td>
+                  <td>Shows that the SQLite-backed worker launched.</td>
+                </tr>
+                <tr>
+                  <td>Inference engine</td>
+                  <td>Running before you upload an ad.</td>
+                </tr>
+                <tr>
+                  <td>Visual search</td>
+                  <td>Torch and transformers are installed, or image embeddings are disabled.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="troubleshooting">
+          <div class="section-head">
+            <span>10</span>
+            <h2>Troubleshooting</h2>
+          </div>
+          <div class="content">
+            <div class="grid">
+              <div class="card">
+                <strong>The app starts but upload fails</strong>
+                <p>Confirm the inference engine is running and the configured VLM model supports images.</p>
+              </div>
+              <div class="card">
+                <strong>Visual search is empty</strong>
+                <p>Install the embedding packages without changing torch, then run <code>python -m ad_classifier reindex-visual-frames</code> for old ads.</p>
+              </div>
+              <div class="card">
+                <strong>PaddleOCR import fails</strong>
+                <p>Install <code>paddlepaddle</code> first, then <code>paddleocr</code>, then reinstall the OCR extra.</p>
+              </div>
+              <div class="card">
+                <strong>Slow VLM responses</strong>
+                <p>Use streaming on the inference endpoint and raise endpoint timeouts for remote engines with long time-to-first-token.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer>
+      ARGUS local setup guide. For implementation details, open technical_detail.html.
+    </footer>
+  </div>
+</body>
+</html>

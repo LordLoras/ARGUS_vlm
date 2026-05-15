@@ -130,7 +130,7 @@ def _parse_vlm_content(raw: str) -> VLMVerificationResult:
 
 
 def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
-    """Recover usable fields when LM Studio emits one malformed nested JSON block."""
+    """Recover usable fields when the inference engine emits malformed nested JSON."""
     data: dict[str, object] = {}
     for key in (
         "primary_category",

@@ -8,7 +8,7 @@ from ad_classifier.models.common import StrictModel
 
 
 class ToolSpec(StrictModel):
-    """OpenAI/LM Studio compatible function spec."""
+    """OpenAI-compatible function spec."""
 
     name: str
     description: str

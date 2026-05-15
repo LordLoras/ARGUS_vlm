@@ -18,7 +18,7 @@ class AgentClientError(RuntimeError):
 
 
 class AgentClient(ABC):
-    """Abstract LM Studio / OpenAI-compatible chat completion client."""
+    """Abstract OpenAI-compatible chat completion client."""
 
     @abstractmethod
     def complete(

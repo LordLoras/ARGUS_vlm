@@ -14,7 +14,7 @@ agent_app = typer.Typer(
 
 
 def _load_loop_for_cli(config_path: Path | None):
-    """Build an AgentLoop with a real LM Studio client. Used by `ask` and `repl`."""
+    """Build an AgentLoop with an OpenAI-compatible client. Used by `ask` and `repl`."""
     from ad_classifier.agent.catalog import ToolCatalog  # noqa: PLC0415
     from ad_classifier.agent.client import HTTPAgentClient  # noqa: PLC0415
     from ad_classifier.agent.loop import AgentLoop, AgentRunContext  # noqa: PLC0415

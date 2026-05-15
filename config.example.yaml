@@ -79,8 +79,9 @@ glm_ocr:
   # separately as ocr_items.engine = "glm_ocr" and included in search text
   # when include_in_search is true. It is not used as grounded OCR evidence
   # for rules/marketing unless you explicitly wire that downstream. Keep false
-  # in the template so fresh installs do not require a GLM-OCR server; enable
-  # for normal local ingestion when llama.cpp serves GLM-OCR on port 5050.
+  # in the template so fresh installs do not require a GLM-OCR endpoint; enable
+  # for normal local ingestion when an OpenAI-compatible GLM-OCR engine is
+  # listening on port 5050.
   enabled: false
   mode: local                 # local | remote
   prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
@@ -125,7 +126,7 @@ rules:
 
 vlm:
   # mode: local | remote — selects which endpoint preset is active.
-  #   "local"  → vlm.local is used (LM Studio on this machine)
+  #   "local"  → vlm.local is used (OpenAI-compatible engine on this machine)
   #   "remote" → vlm.remote is used (cloud / hosted endpoint)
   # The agent inherits the active preset when agent.inherit_vlm is true.
   # Flip the flag to switch all VLM calls + agent between local and remote.
@@ -151,7 +152,7 @@ vlm:
   local:
     endpoint: "http://127.0.0.1:1234/v1"
     model: "Qwen3.6-27B-Q4_K_M"      # vision-capable model for multimodal VLM analysis
-    api_key_env: null                 # set to env var name if LM Studio uses auth
+    api_key_env: null                 # set to env var name if the engine uses auth
     timeout_s: 600
     max_retries: 2
     retry_delay_s: 2
