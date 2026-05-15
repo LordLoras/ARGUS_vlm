@@ -15,7 +15,7 @@ export function TimestampChip({
       type="button"
       className="ts-link"
       onClick={() => onSeek(timeMs)}
-      title={`Jump video to ${label}`}
+      title={`Show paused video at ${label}`}
     >
       {label}
     </button>

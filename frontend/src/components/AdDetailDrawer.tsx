@@ -42,6 +42,7 @@ export function AdDetailDrawer({
   const [tab, setTab] = useState<Tab>(initialTab);
   const [campaignDialogOpen, setCampaignDialogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoStageRef = useRef<HTMLDivElement | null>(null);
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
@@ -62,13 +63,13 @@ export function AdDetailDrawer({
 
   const seekVideo = (timeMs: number) => {
     const video = videoRef.current;
+    videoStageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (!video) return;
     const seekSeconds = Math.max(0, timeMs / 1000);
+    video.pause();
     video.currentTime = seekSeconds;
     video.dataset.seekMs = String(timeMs);
-    void video.play().catch(() => {
-      // Browser autoplay rules can still block playback; the seek itself is the important action.
-    });
+    window.requestAnimationFrame(() => video.pause());
   };
 
   return (
@@ -117,7 +118,7 @@ export function AdDetailDrawer({
         </header>
 
         <div className="drawer-body">
-          <div className="video-stage" style={{ aspectRatio: videoAspect }}>
+          <div ref={videoStageRef} className="video-stage" style={{ aspectRatio: videoAspect }}>
             {videoSrc ? (
               <video
                 ref={videoRef}
