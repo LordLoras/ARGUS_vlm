@@ -5,6 +5,7 @@ import { Topbar } from "./components/Topbar";
 import { EmptyState } from "./components/shared/EmptyState";
 import { Agent } from "./pages/Agent";
 import { Campaigns } from "./pages/Campaigns";
+import { DebatePanel } from "./pages/DebatePanel";
 import { Library } from "./pages/Library";
 import { SearchPage } from "./pages/SearchPage";
 import { Upload } from "./pages/Upload";
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/agent" element={<Agent />} />
+        <Route path="/debate" element={<DebatePanel />} />
         <Route path="/pipelines" element={<Placeholder title="Pipelines" />} />
         <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />

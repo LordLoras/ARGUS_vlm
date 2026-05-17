@@ -92,36 +92,12 @@ def build_creative_panel(
     source_model: str | None = None,
     thinking: bool = False,
 ) -> CreativePanelReport:
-    ad = AdRepository(conn).get(ad_id)
-    if ad is None:
-        raise ValueError("ad not found")
-
     selected = persona_ids or DEFAULT_PERSONAS
     unknown = [persona_id for persona_id in selected if persona_id not in PERSONAS]
     if unknown:
         raise ValueError(f"unknown persona ids: {', '.join(unknown)}")
 
-    classification = ClassificationRepository(conn).get(ad_id)
-    marketing = MarketingEntityRepository(conn).get(ad_id) or MarketingEntities()
-    transcript_text = _transcript_text(conn, ad_id)
-    ocr_items = _ocr_items(conn, ad_id)
-    context = _PanelContext(
-        ad_id=ad_id,
-        brand=ad.brand_name or marketing.brand.name,
-        category=ad.primary_category
-        or (classification.primary_category if classification else None),
-        products=_products(ad.products_text, marketing),
-        offers=[offer.text for offer in marketing.offers],
-        prices=[price.text for price in marketing.prices],
-        ctas=[cta.text for cta in marketing.ctas],
-        disclaimers=[disclaimer.text for disclaimer in marketing.disclaimers],
-        risk_labels=classification.risk_labels if classification else [],
-        classification=classification,
-        marketing=marketing,
-        transcript_text=transcript_text,
-        ocr_texts=[item.text for item in ocr_items],
-        citations=_collect_citations(ad_id, classification, marketing, ocr_items, transcript_text),
-    )
+    context = _build_context(conn, ad_id)
 
     reactions = [_reaction(PERSONAS[persona_id], context) for persona_id in selected]
     moderator_summary = _moderator_summary(context, reactions)
@@ -198,6 +174,34 @@ class _PanelContext:
     transcript_text: str
     ocr_texts: list[str]
     citations: list[PanelCitation]
+
+
+def _build_context(conn: sqlite3.Connection, ad_id: str) -> _PanelContext:
+    ad = AdRepository(conn).get(ad_id)
+    if ad is None:
+        raise ValueError("ad not found")
+
+    classification = ClassificationRepository(conn).get(ad_id)
+    marketing = MarketingEntityRepository(conn).get(ad_id) or MarketingEntities()
+    transcript_text = _transcript_text(conn, ad_id)
+    ocr_items = _ocr_items(conn, ad_id)
+    return _PanelContext(
+        ad_id=ad_id,
+        brand=ad.brand_name or marketing.brand.name,
+        category=ad.primary_category
+        or (classification.primary_category if classification else None),
+        products=_products(ad.products_text, marketing),
+        offers=[offer.text for offer in marketing.offers],
+        prices=[price.text for price in marketing.prices],
+        ctas=[cta.text for cta in marketing.ctas],
+        disclaimers=[disclaimer.text for disclaimer in marketing.disclaimers],
+        risk_labels=classification.risk_labels if classification else [],
+        classification=classification,
+        marketing=marketing,
+        transcript_text=transcript_text,
+        ocr_texts=[item.text for item in ocr_items],
+        citations=_collect_citations(ad_id, classification, marketing, ocr_items, transcript_text),
+    )
 
 
 def _run_vlm_panel(

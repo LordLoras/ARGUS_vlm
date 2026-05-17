@@ -351,6 +351,24 @@ def test_creative_panel_endpoint_creates_simulated_report(client: TestClient, co
     assert "not a real focus group" in payload["caveat"]
     assert Path(data["paths"]["out"], "ad_panel_api", "creative_panel.json").exists()
 
+    debate = client.post(
+        "/api/ads/ad_panel_api/creative-panel/debate",
+        json={
+            "persona_ids": ["budget_parent", "skeptical_buyer"],
+            "topic": "Should the ad lead with offer or proof?",
+            "use_vlm": False,
+        },
+    )
+
+    assert debate.status_code == 200, debate.text
+    debate_payload = debate.json()
+    assert debate_payload["report_type"] == "simulated_creative_debate"
+    assert debate_payload["topic"] == "Should the ad lead with offer or proof?"
+    assert debate_payload["opening_statements"]
+    assert debate_payload["cross_examination"]
+    assert debate_payload["scorecard"]["recommended_tests"]
+    assert Path(data["paths"]["out"], "ad_panel_api", "creative_debate.json").exists()
+
 
 def test_delete_ad_can_cleanup_database_and_local_artifacts(client: TestClient, config_path: Path):
     data = yaml.safe_load(config_path.read_text(encoding="utf-8"))

@@ -32,7 +32,8 @@ const workspace: NavEntry[] = [
 ];
 
 const intelligence: NavEntry[] = [
-  { to: "/agent", label: "Agent", icon: ChatIcon, badge: "●", accentBadge: true }
+  { to: "/agent", label: "Agent", icon: ChatIcon, badge: "●", accentBadge: true },
+  { to: "/debate", label: "Debate", icon: FlowIcon, badge: "new", accentBadge: true }
 ];
 
 const disabledIntelligence: { label: string; icon: IconComponent }[] = [

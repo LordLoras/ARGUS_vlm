@@ -9,6 +9,7 @@ import type {
   Campaign,
   CampaignDeepResearch,
   CampaignDetail,
+  CreativeDebateReport,
   CreativePanelPersona,
   CreativePanelReport,
   FrameRecord,
@@ -106,6 +107,25 @@ export const api = {
         persona_ids: personaIds,
         use_vlm: useVlm,
         enable_reasoning: enableReasoning
+      })
+    }),
+
+  createCreativeDebate: (
+    adId: string,
+    body: {
+      personaIds?: string[];
+      topic?: string;
+      useVlm?: boolean;
+      enableReasoning?: boolean;
+    } = {}
+  ) =>
+    apiFetch<CreativeDebateReport>(`/api/ads/${adId}/creative-panel/debate`, {
+      method: "POST",
+      body: JSON.stringify({
+        persona_ids: body.personaIds,
+        topic: body.topic,
+        use_vlm: body.useVlm ?? true,
+        enable_reasoning: body.enableReasoning ?? true
       })
     }),
 

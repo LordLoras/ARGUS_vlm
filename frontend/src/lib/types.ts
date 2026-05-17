@@ -384,6 +384,34 @@ export type ModeratorSummary = {
   suggested_ab_variants: string[];
 };
 
+export type DebateTurn = {
+  round_index: number;
+  phase: "opening" | "challenge" | "rebuttal" | "closing" | string;
+  speaker_persona_id: string;
+  speaker_label: string;
+  stance: "advocate" | "skeptic" | "moderator" | "explorer" | string;
+  target_persona_id?: string | null;
+  claim: string;
+  evidence_read: string;
+  pressure_test: string;
+  citations: PanelCitation[];
+};
+
+export type DebateTension = {
+  axis: string;
+  advocate: string;
+  skeptic: string;
+  moderator_take: string;
+};
+
+export type DebateScorecard = {
+  moderator_verdict: string;
+  strongest_argument: string;
+  weakest_argument: string;
+  unresolved_questions: string[];
+  recommended_tests: string[];
+};
+
 export type CreativePanelReport = {
   ad_id: string;
   generated_at: string;
@@ -394,6 +422,26 @@ export type CreativePanelReport = {
   fallback_error?: string | null;
   caveat: string;
   personas: PersonaReaction[];
+  moderator_summary: ModeratorSummary;
+  evidence_sources: string[];
+};
+
+export type CreativeDebateReport = {
+  ad_id: string;
+  generated_at: string;
+  json_path: string;
+  report_type: string;
+  analysis_source: "vlm" | "vlm_with_fallback" | "deterministic_fallback" | string;
+  source_model?: string | null;
+  fallback_error?: string | null;
+  topic: string;
+  caveat: string;
+  participants: PersonaReaction[];
+  opening_statements: DebateTurn[];
+  cross_examination: DebateTurn[];
+  closing_statements: DebateTurn[];
+  tensions: DebateTension[];
+  scorecard: DebateScorecard;
   moderator_summary: ModeratorSummary;
   evidence_sources: string[];
 };
