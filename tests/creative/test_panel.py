@@ -127,7 +127,7 @@ def test_creative_panel_uses_vlm_when_client_is_provided(tmp_path: Path):
             [
                 AgentMessage(
                     content=(
-                        '{"personas":[{"persona_id":"budget_parent",'
+                        '{"persona_id":"budget_parent",'
                         '"first_impression":"The VLM sees the offer first.",'
                         '"understood_product_or_offer":"Wrangler financing.",'
                         '"emotional_reaction":"Value interest.",'
@@ -136,15 +136,21 @@ def test_creative_panel_uses_vlm_when_client_is_provided(tmp_path: Path):
                         '"likely_objection":"What is the full cost?",'
                         '"memorable_moment":"0% APR",'
                         '"cta_likelihood":"Would consider clicking; not a forecast.",'
-                        '"citation_ids":["c0"]}],'
-                        '"moderator_summary":{"consensus":["Offer leads."],'
-                        '"disagreements":[],"message_clarity_issues":["Need terms."],'
-                        '"strongest_hooks":["0% APR"],'
-                        '"suggested_ab_variants":["Test offer-first opening."]}}'
+                        '"citation_ids":["c0"]}'
                     ),
                     tool_calls=[],
                     finish_reason="stop",
-                )
+                ),
+                AgentMessage(
+                    content=(
+                        '{"consensus":["Offer leads."],'
+                        '"disagreements":[],"message_clarity_issues":["Need terms."],'
+                        '"strongest_hooks":["0% APR"],'
+                        '"suggested_ab_variants":["Test offer-first opening."]}'
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                ),
             ]
         )
 
@@ -163,5 +169,68 @@ def test_creative_panel_uses_vlm_when_client_is_provided(tmp_path: Path):
         assert report.personas[0].first_impression == "The VLM sees the offer first."
         assert report.personas[0].citations[0].text == "0% APR"
         assert client.calls[0]["enable_thinking"] is False
+        assert len(client.calls) == 2
+    finally:
+        conn.close()
+
+
+def test_creative_panel_falls_back_when_vlm_hits_length(tmp_path: Path):
+    conn = _conn(tmp_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_panel_length",
+                "/tmp/panel.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Wrangler",
+                "automotive",
+            ),
+        )
+        evidence = EvidenceItem(time_ms=500, frame_index=1, source="ocr", text="0% APR")
+        MarketingEntityRepository(conn).upsert(
+            "ad_panel_length",
+            MarketingEntities(
+                products=["Wrangler"],
+                offers=[OfferEntity(text="0% APR", evidence=[evidence])],
+            ),
+        )
+        conn.commit()
+        client = MockAgentClient(
+            [
+                AgentMessage(
+                    content='{"persona_id":"budget_parent","first_impression":"unfinished"',
+                    tool_calls=[],
+                    finish_reason="length",
+                ),
+                AgentMessage(
+                    content='{"consensus":["fallback summary not enough"]}',
+                    tool_calls=[],
+                    finish_reason="stop",
+                ),
+            ]
+        )
+
+        report = build_creative_panel(
+            conn,
+            "ad_panel_length",
+            tmp_path / "out",
+            persona_ids=["budget_parent"],
+            use_vlm=True,
+            llm_client=client,
+            source_model="mock-vlm",
+        )
+
+        assert report.analysis_source == "vlm_with_fallback"
+        assert report.personas[0].first_impression.startswith("The ad reads as")
+        assert report.moderator_summary.consensus == ["fallback summary not enough"]
     finally:
         conn.close()

@@ -209,36 +209,23 @@ def _run_vlm_panel(
     fallback_summary: ModeratorSummary,
     thinking: bool,
 ) -> tuple[list[PersonaReaction], ModeratorSummary, bool]:
-    message = client.complete(
-        _panel_messages(selected, context),
-        enable_thinking=thinking,
-    )
-    raw = message.content or ""
-    if not raw.strip():
-        raise ValueError("VLM returned empty creative panel response")
-    payload = _extract_json_object(raw)
-    parsed = json.loads(payload)
-    if not isinstance(parsed, dict):
-        raise ValueError("VLM creative panel response must be a JSON object")
-
     fallback_by_id = {reaction.persona_id: reaction for reaction in fallback_reactions}
-    returned_personas = {
-        str(item.get("persona_id")): item
-        for item in parsed.get("personas", [])
-        if isinstance(item, dict) and item.get("persona_id")
-    }
     reactions: list[PersonaReaction] = []
     used_fallback = False
+    used_vlm = False
+
     for persona_id in selected:
         persona = PERSONAS[persona_id]
-        item = returned_personas.get(persona_id)
-        if item is None:
-            reactions.append(fallback_by_id[persona_id])
-            used_fallback = True
-            continue
         try:
+            item = _complete_json(
+                client,
+                _persona_messages(persona, context),
+                thinking=thinking,
+                label=f"persona:{persona_id}",
+            )
             reactions.append(_reaction_from_vlm(persona, item, context))
-        except (TypeError, ValueError) as exc:
+            used_vlm = True
+        except Exception as exc:
             logger.warning(
                 "creative_panel_persona_fallback",
                 ad_id=context.ad_id,
@@ -249,8 +236,15 @@ def _run_vlm_panel(
             used_fallback = True
 
     try:
-        moderator_summary = _summary_from_vlm(parsed.get("moderator_summary"))
-    except (TypeError, ValueError) as exc:
+        summary_payload = _complete_json(
+            client,
+            _summary_messages(context, reactions),
+            thinking=thinking,
+            label="moderator_summary",
+        )
+        moderator_summary = _summary_from_vlm(summary_payload)
+        used_vlm = True
+    except Exception as exc:
         logger.warning(
             "creative_panel_summary_fallback",
             ad_id=context.ad_id,
@@ -259,80 +253,124 @@ def _run_vlm_panel(
         moderator_summary = fallback_summary
         used_fallback = True
 
+    if not used_vlm:
+        raise ValueError("all VLM creative panel calls failed")
     return reactions, moderator_summary, used_fallback
 
 
-def _panel_messages(selected: list[str], context: _PanelContext) -> list[dict[str, str]]:
-    personas = [
-        {
-            "persona_id": PERSONAS[persona_id].id,
-            "label": PERSONAS[persona_id].label,
-            "lens": PERSONAS[persona_id].lens,
-        }
-        for persona_id in selected
-    ]
-    citations = [
-        {
-            "id": f"c{idx}",
-            "ad_id": citation.ad_id,
-            "time_ms": citation.time_ms,
-            "frame_index": citation.frame_index,
-            "source": citation.source,
-            "text": citation.text,
-        }
-        for idx, citation in enumerate(context.citations[:12])
-    ]
-    evidence = {
-        "ad_id": context.ad_id,
-        "brand": context.brand,
-        "category": context.category,
-        "products": context.products,
-        "offers": context.offers,
-        "prices": context.prices,
-        "ctas": context.ctas,
-        "disclaimers": context.disclaimers[:8],
-        "risk_observation_tags": context.risk_labels,
-        "transcript_excerpt": context.transcript_text[:1800],
-        "ocr_excerpts": _dedupe_text(context.ocr_texts)[:20],
-        "citations": citations,
-    }
+def _complete_json(
+    client: AgentClient,
+    messages: list[dict[str, str]],
+    *,
+    thinking: bool,
+    label: str,
+) -> dict[str, Any]:
+    message = client.complete(messages, enable_thinking=thinking)
+    raw = message.content or ""
+    if not raw.strip():
+        raise ValueError(f"{label} VLM response was empty")
+    try:
+        parsed = json.loads(_extract_json_object(raw))
+    except (json.JSONDecodeError, ValueError) as exc:
+        if message.finish_reason == "length":
+            raise ValueError(f"{label} VLM response hit token limit before valid JSON") from exc
+        raise
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{label} VLM response must be a JSON object")
+    return parsed
+
+
+def _persona_messages(persona: Persona, context: _PanelContext) -> list[dict[str, str]]:
+    evidence = _compact_evidence(context)
     schema = {
-        "personas": [
-            {
-                "persona_id": "one of the requested persona_id values",
-                "first_impression": "string",
-                "understood_product_or_offer": "string",
-                "emotional_reaction": "qualitative string, no probability",
-                "trust_points": ["string"],
-                "confusion_points": ["string"],
-                "likely_objection": "string",
-                "memorable_moment": "string",
-                "cta_likelihood": "qualitative string, no probability",
-                "citation_ids": ["c0"],
-            }
-        ],
-        "moderator_summary": {
-            "consensus": ["string"],
-            "disagreements": ["string"],
-            "message_clarity_issues": ["string"],
-            "strongest_hooks": ["string"],
-            "suggested_ab_variants": ["string"],
-        },
+        "persona_id": persona.id,
+        "first_impression": "max 18 words",
+        "understood_product_or_offer": "max 18 words",
+        "emotional_reaction": "max 10 words, qualitative only",
+        "trust_points": ["max 2 items"],
+        "confusion_points": ["max 2 items"],
+        "likely_objection": "max 16 words",
+        "memorable_moment": "max 12 words",
+        "cta_likelihood": "max 14 words, no probability",
+        "citation_ids": ["c0"],
     }
     system = (
         "You are ARGUS Creative Review Panel, a local-first ad analysis assistant. "
-        "Simulate creative-review personas using only the supplied evidence. "
-        "Do not claim statistical representativeness, real demographic behavior, sales lift, "
-        "policy violations, or market response percentages. Do not invent ad IDs, offers, prices, "
-        "or CTAs. Cite only the provided citation ids. Return strict JSON only."
+        "Use only supplied evidence. No market forecasts, percentages, policy claims, "
+        "or invented offers. Cite only supplied citation ids. Return one compact JSON object only."
     )
     user = (
-        "Generate a simulated creative review panel for this ad.\n\n"
-        f"Requested personas:\n{json.dumps(personas, ensure_ascii=True, indent=2)}\n\n"
-        f"Evidence:\n{json.dumps(evidence, ensure_ascii=True, indent=2)}\n\n"
-        f"Return JSON with this shape:\n{json.dumps(schema, ensure_ascii=True, indent=2)}"
+        f"Persona: {persona.label}\nLens: {persona.lens}\n\n"
+        f"Evidence:\n{json.dumps(evidence, ensure_ascii=True, separators=(',', ':'))}\n\n"
+        "Return strict JSON with this exact shape and short values:\n"
+        f"{json.dumps(schema, ensure_ascii=True, separators=(',', ':'))}"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _summary_messages(
+    context: _PanelContext,
+    reactions: list[PersonaReaction],
+) -> list[dict[str, str]]:
+    reaction_brief = [
+        {
+            "persona_id": reaction.persona_id,
+            "first_impression": reaction.first_impression,
+            "objection": reaction.likely_objection,
+            "confusion": reaction.confusion_points[:2],
+        }
+        for reaction in reactions
+    ]
+    schema = {
+        "consensus": ["max 3 items"],
+        "disagreements": ["max 2 items"],
+        "message_clarity_issues": ["max 3 items"],
+        "strongest_hooks": ["max 3 items"],
+        "suggested_ab_variants": ["max 3 items"],
+    }
+    system = (
+        "You are ARGUS Creative Review Panel moderator. Use only supplied reactions and evidence. "
+        "No market forecasts, percentages, or claims of representativeness. Return compact JSON only."
+    )
+    payload = {
+        "ad_id": context.ad_id,
+        "evidence": _compact_evidence(context),
+        "persona_reactions": reaction_brief,
+    }
+    user = (
+        f"Summarize this simulated panel:\n{json.dumps(payload, ensure_ascii=True, separators=(',', ':'))}\n\n"
+        f"Return strict JSON with this shape:\n{json.dumps(schema, ensure_ascii=True, separators=(',', ':'))}"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _compact_evidence(context: _PanelContext) -> dict[str, Any]:
+    return {
+        "ad_id": context.ad_id,
+        "brand": context.brand,
+        "category": context.category,
+        "products": context.products[:4],
+        "offers": context.offers[:4],
+        "prices": context.prices[:3],
+        "ctas": context.ctas[:3],
+        "observation_tags": context.risk_labels[:4],
+        "transcript": _truncate(context.transcript_text, 700),
+        "ocr": [_truncate(text, 160) for text in _dedupe_text(context.ocr_texts)[:8]],
+        "citations": _citation_payload(context.citations[:8]),
+    }
+
+
+def _citation_payload(citations: list[PanelCitation]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": f"c{idx}",
+            "time_ms": citation.time_ms,
+            "frame_index": citation.frame_index,
+            "source": citation.source,
+            "text": _truncate(citation.text, 180),
+        }
+        for idx, citation in enumerate(citations)
+    ]
 
 
 def _reaction_from_vlm(
@@ -408,6 +446,13 @@ def _dedupe_text(values: list[str]) -> list[str]:
             seen.add(key)
             results.append(text)
     return results
+
+
+def _truncate(value: str | None, max_chars: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 1].rstrip()}..."
 
 
 def _extract_json_object(raw: str) -> str:

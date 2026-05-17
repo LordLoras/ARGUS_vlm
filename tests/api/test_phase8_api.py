@@ -75,7 +75,6 @@ def client(config_path: Path) -> TestClient:
             [
                 AgentMessage(
                     content=(
-                        '{"personas":['
                         '{"persona_id":"budget_parent",'
                         '"first_impression":"The offer is easy to notice.",'
                         '"understood_product_or_offer":"Wrangler with 0% APR.",'
@@ -85,7 +84,13 @@ def client(config_path: Path) -> TestClient:
                         '"likely_objection":"I need total cost details.",'
                         '"memorable_moment":"0% APR",'
                         '"cta_likelihood":"Would consider the CTA; not a forecast.",'
-                        '"citation_ids":["c0"]},'
+                        '"citation_ids":["c0"]}'
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                ),
+                AgentMessage(
+                    content=(
                         '{"persona_id":"skeptical_buyer",'
                         '"first_impression":"The claim needs support.",'
                         '"understood_product_or_offer":"Wrangler financing offer.",'
@@ -95,17 +100,22 @@ def client(config_path: Path) -> TestClient:
                         '"likely_objection":"I need proof and terms.",'
                         '"memorable_moment":"Shop now",'
                         '"cta_likelihood":"CTA depends on term clarity.",'
-                        '"citation_ids":["c1"]}],'
-                        '"moderator_summary":{'
-                        '"consensus":["Offer is the clearest hook."],'
-                        '"disagreements":["Value and proof lenses differ."],'
-                        '"message_clarity_issues":["Terms need clarity."],'
-                        '"strongest_hooks":["0% APR"],'
-                        '"suggested_ab_variants":["Test offer-first copy."]}}'
+                        '"citation_ids":["c1"]}'
                     ),
                     tool_calls=[],
                     finish_reason="stop",
-                )
+                ),
+                AgentMessage(
+                    content=(
+                        '{"consensus":["Offer is the clearest hook."],'
+                        '"disagreements":["Value and proof lenses differ."],'
+                        '"message_clarity_issues":["Terms need clarity."],'
+                        '"strongest_hooks":["0% APR"],'
+                        '"suggested_ab_variants":["Test offer-first copy."]}'
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                ),
             ]
         )
 
