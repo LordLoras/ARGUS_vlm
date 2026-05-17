@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-17
 
-This file tracks current product and implementation suggestions against the scope described in `getting_started.html` and `technical_detail.html`.
+This file tracks active product and implementation suggestions against the scope described in `getting_started.html` and `technical_detail.html`.
 
 ## Scope Guardrails
 
@@ -11,40 +11,184 @@ ARGUS remains a local-first ad intelligence system:
 - Keep ingestion, OCR, transcript alignment, VLM classification, marketing entities, embeddings, search, campaigns, and the read-only agent as the core product.
 - Keep the classification path categorization-only. Do not add approve, block, flag, escalation, or human-review workflows.
 - Treat risk labels as descriptive observation tags for search and analysis.
-- Keep the frontend decoupled from the backend through JSON endpoints and SSE.
 - Keep optional creative-analysis reports downstream of persisted evidence so they do not block ingestion or classification.
 - Keep research local-first. Internet research remains out of scope until a controlled web research layer exists.
+- Do not present simulated persona output as representative consumer research.
 
-## Recently Completed
+## Highest-Wow Demo Candidates
 
-These items were previously listed as open and have now been addressed:
+### 1. Creative DNA Fingerprint
 
-- Removed active `decision` / human-review-era runtime surface from VLM prompt, model contract, API-facing types, and tests. Legacy nullable DB columns remain only for migration safety.
-- Removed disclosure observation labels that were not grounded enough to keep as first-class tags.
-- Separated raw OCR from cleaned OCR in the worker flow. Raw OCR remains `ocr`; advisory correction sources now use `ocr_cleanup` / `glm_ocr`.
-- Added per-ad transcript and OCR endpoints:
-  - `GET /api/ads/{ad_id}/transcript`
-  - `GET /api/ads/{ad_id}/ocr`
-- Added aggregate stats and observation-tag filtering:
-  - `GET /api/stats`
-  - `risk_label` filters on ad list/search routes.
-- Added evidence export:
-  - `GET /api/ads/{ad_id}/export/evidence?format=json|html`
-- Added Video-to-Storyboard Reverse Engineer MVP:
-  - `POST /api/ads/{ad_id}/storyboard`
-  - deterministic pHash/timestamp shot segmentation
-  - OCR/transcript-grounded shot text, voiceover, transition, beat, narrative function
-  - JSON + HTML artifacts under `data/out/{ad_id}/`
-  - frontend Storyboard tab in the ad detail drawer
-- Added Synthetic Creative Review Panel MVP:
-  - `GET /api/creative-panel/personas`
-  - `POST /api/ads/{ad_id}/creative-panel`
-  - 3-6 local personas, evidence citations, moderator summary, clear simulated-review caveat
-  - JSON artifact under `data/out/{ad_id}/`
-  - frontend Review Panel tab in the ad detail drawer
-- Removed the creative-attribute filter suggestion. Aspect ratio, voiceover, on-screen text, end card, and disclaimer density are not high-value standalone filters right now.
+Status: proposed
 
-## Current Watchlist
+Build a one-page "creative genome" for every ad: hook style, narrative arc, visual density, offer mechanics, brand presence, CTA style, emotional beat sequence, pacing, and repeated motifs. This turns one ad into a compact creative strategy profile.
+
+Why it is strong:
+
+- Agencies immediately understand it as "what makes this ad work."
+- It creates a reusable feature vector for comparing ads beyond category or brand.
+- It makes ARGUS feel like a creative intelligence product, not just an extractor.
+
+MVP:
+
+- Add `ad_classifier/creative/dna/`.
+- Generate `creative_dna.json` from storyboard shots, transcript, OCR, marketing entities, and classification evidence.
+- Show a compact radar/profile panel in the ad detail drawer.
+- Add agent tool support for questions like "show me ads with offer-first DNA" or "which brands use proof-heavy endings?"
+
+### 2. Counterfactual Creative Lab
+
+Status: proposed
+
+Let the user ask "what if this ad opened with the offer instead of the brand?" or "make this CTA clearer" and get a grounded alternate storyboard/script, plus a diff against the original extraction.
+
+Why it is strong:
+
+- It uses the existing evidence as source material, so it is practical and auditable.
+- It creates a demo moment: original ad -> alternate shot list -> changed entities/CTA/beat.
+- It stays local-first if powered by the local LLM.
+
+Guardrail:
+
+- Do not predict sales lift or real consumer response.
+- Label outputs as generated creative alternatives.
+
+MVP:
+
+- Input: ad id + rewrite goal.
+- Output: alternate script, alternate shot list, changed CTA/offer/beat fields, and citations to source evidence.
+- Store under `data/out/{ad_id}/counterfactuals/{report_id}.json`.
+
+### 3. Competitive White-Space Map
+
+Status: proposed
+
+Create an interactive map of ads by semantic/visual similarity, then overlay campaign, brand, category, offer type, hook type, and creative DNA. The killer demo is "show me where all local automotive ads cluster, and which creative territories nobody is using."
+
+Why it is strong:
+
+- It makes embeddings tangible.
+- It helps agencies pitch positioning and creative differentiation.
+- It turns the database into a visual strategy board.
+
+MVP:
+
+- Use persisted text + visual vectors and UMAP/t-SNE locally.
+- Generate a 2D coordinate cache per ad.
+- Add a frontend map view with hover preview, brand/category coloring, and cluster labels from local LLM or deterministic keywords.
+- Add "white-space notes" that describe sparse neighborhoods without claiming market opportunity as fact.
+
+### 4. Hook and Payoff Analyzer
+
+Status: proposed
+
+Analyze the first 3 seconds, middle proof section, and final CTA/payoff. Score only structural clarity, not quality: hook presence, product clarity, offer timing, proof timing, CTA timing, and end-card readability.
+
+Why it is strong:
+
+- It is instantly useful for creative review.
+- It avoids vague sentiment and focuses on observable structure.
+- It pairs well with storyboard and creative DNA.
+
+MVP:
+
+- Derive timings from storyboard shots, transcript segments, OCR density, and marketing entities.
+- Output a timeline with labels: hook, product reveal, offer reveal, proof, CTA, terms.
+- Add an agent answer template: "The ad waits 18.5s before the first explicit CTA."
+
+### 5. Promise Match: Ad vs Landing Page
+
+Status: proposed
+
+When optional landing-page metadata exists, compare the ad promise against the landing page: product, price, offer, CTA, disclaimer/terms, phone/URL, and brand identity. This is not a compliance gate; it is a consistency report.
+
+Why it is strong:
+
+- High-value for agencies and performance marketers.
+- Uses existing structured marketing entities.
+- Creates a concrete "handoff quality" report.
+
+MVP:
+
+- Add `ad_classifier/creative/promise_match/`.
+- Compare ad marketing entities against optional landing-page metadata.
+- Output matched, missing, changed, and ambiguous fields with evidence citations.
+- Add exportable HTML report.
+
+### 6. Auto Pitch Deck Generator
+
+Status: proposed
+
+Generate a local PowerPoint-style strategy deck from a campaign or selected ads: campaign overview, key ads, storyboard strips, creative DNA comparison, extracted offers/CTAs, related ads, synthetic panel summary, and next-test ideas.
+
+Why it is strong:
+
+- It turns ARGUS outputs into an artifact agencies already sell.
+- It shows the value of all earlier modules in one deliverable.
+- It is demo-friendly and shareable.
+
+MVP:
+
+- Start with HTML export before `.pptx`.
+- Use existing storyboard and creative panel artifacts when present.
+- Add a campaign-level endpoint such as `POST /api/campaigns/{campaign_id}/deck`.
+
+### 7. Multimodal Moment Search
+
+Status: proposed
+
+Let users search for exact moments inside ads, not just ads: "show frames where a price appears," "find shots with a product close-up and no voiceover," "find CTAs after 20 seconds," "show me red truck shots that mention APR."
+
+Why it is strong:
+
+- It makes ARGUS feel like a searchable creative memory.
+- It uses data already stored per frame and transcript segment.
+- It bridges visual embeddings, OCR, transcript, and storyboard.
+
+MVP:
+
+- Add `moments` search endpoint returning frame/shot-level hits.
+- Use frame visual vectors, OCR text, transcript overlap, and storyboard shot windows.
+- UI: search results as timestamped clips/frames, not just ad rows.
+
+### 8. Campaign Drift Detector
+
+Status: proposed
+
+Track how a campaign changes over time: new products, offer changes, CTA changes, disclaimer/terms changes, visual motif changes, and creative DNA shifts.
+
+Why it is strong:
+
+- Great for campaign tracking, not just one-off ad analysis.
+- It creates longitudinal insight from local persisted data.
+- It helps answer "what changed this week?"
+
+MVP:
+
+- Compare ads assigned to a campaign by ingestion date.
+- Produce timeline events from entity diffs, storyboard/DNA diffs, and vector movement.
+- Add agent support for "summarize creative drift for this campaign."
+
+## Existing Feature Enhancements
+
+### Storyboard Enhancement Path
+
+Status: future enhancement
+
+- Add optical-flow camera motion labels: static, pan, tilt, push-in, pull-out, handheld.
+- Add VLM-enriched shot type, camera angle, subject, setting, and mood.
+- Add campaign-level storyboard comparison.
+- Add queries such as "show ads that open with product close-up then price reveal."
+- Add PowerPoint export for agency-style presentations.
+
+### Synthetic Creative Review Panel Enhancement Path
+
+Status: future enhancement
+
+- Add optional local LLM pass for richer persona wording, with deterministic fallback retained for tests.
+- Add user-defined persona sets saved locally.
+- Add side-by-side panel comparison across multiple ads or campaign variants.
+- Keep all output framed as simulated creative review.
 
 ### Related Ads Snapshot Persistence
 
@@ -57,33 +201,21 @@ Only add persistence if exports or reproducible reports need a historical snapsh
 - a small `related_ads_json` snapshot on the classification/report artifact, or
 - a normalized `ad_related_ads` table for cross-ad reporting.
 
-### Storyboard Later Scope
+## Recommended Build Order
 
-Status: future enhancement
-
-The MVP is useful, but the following should stay out of the critical path:
-
-- Optical-flow camera motion labels: static, pan, tilt, push-in, pull-out, handheld.
-- VLM-enriched shot type, camera angle, subject, setting, and mood.
-- Campaign-level storyboard comparison.
-- Queries such as "show ads that open with product close-up then price reveal."
-- PowerPoint export for agency-style presentations.
-
-### Synthetic Creative Review Panel Later Scope
-
-Status: future enhancement
-
-The MVP is intentionally framed as simulated creative review, not demographic research. Future additions should preserve that framing:
-
-- Optional local LLM pass for richer persona wording, with deterministic fallback retained for tests.
-- User-defined persona sets saved locally.
-- Side-by-side panel comparison across multiple ads or campaign variants.
-- Generic `analysis_reports` persistence only if storyboard, panel, tone, and export reports need shared history.
+1. Creative DNA Fingerprint.
+2. Hook and Payoff Analyzer.
+3. Multimodal Moment Search.
+4. Competitive White-Space Map.
+5. Campaign Drift Detector.
+6. Promise Match.
+7. Counterfactual Creative Lab.
+8. Auto Pitch Deck Generator.
 
 ## Non-Goals
 
 - No creative-attribute filter work unless a real analyst workflow needs it.
-- No disclosure-label revival unless the labels are grounded as evidence-backed entities rather than broad risk tags.
+- No disclosure-label revival unless labels are grounded as evidence-backed entities rather than broad risk tags.
 - No demographic representativeness claims, fake response percentages, or market forecasts in synthetic panel output.
 - No web research by default.
 - No blocking, gating, escalation, or human-review queues.
