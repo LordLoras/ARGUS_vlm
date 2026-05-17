@@ -5,7 +5,11 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import structlog
+
+from ad_classifier.agent.client import AgentClient
 from ad_classifier.creative.panel.models import (
     CreativePanelReport,
     ModeratorSummary,
@@ -18,6 +22,8 @@ from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.models.classification import ClassificationRecord
 from ad_classifier.models.common import EvidenceItem
 from ad_classifier.models.marketing import MarketingEntities
+
+logger = structlog.get_logger(__name__)
 
 DEFAULT_PERSONAS = [
     "budget_parent",
@@ -80,6 +86,11 @@ def build_creative_panel(
     ad_id: str,
     out_root: Path,
     persona_ids: list[str] | None = None,
+    *,
+    use_vlm: bool = False,
+    llm_client: AgentClient | None = None,
+    source_model: str | None = None,
+    thinking: bool = False,
 ) -> CreativePanelReport:
     ad = AdRepository(conn).get(ad_id)
     if ad is None:
@@ -97,7 +108,8 @@ def build_creative_panel(
     context = _PanelContext(
         ad_id=ad_id,
         brand=ad.brand_name or marketing.brand.name,
-        category=ad.primary_category or (classification.primary_category if classification else None),
+        category=ad.primary_category
+        or (classification.primary_category if classification else None),
         products=_products(ad.products_text, marketing),
         offers=[offer.text for offer in marketing.offers],
         prices=[price.text for price in marketing.prices],
@@ -112,16 +124,44 @@ def build_creative_panel(
     )
 
     reactions = [_reaction(PERSONAS[persona_id], context) for persona_id in selected]
+    moderator_summary = _moderator_summary(context, reactions)
+    analysis_source = "deterministic_fallback"
+    fallback_error: str | None = None
+
+    if use_vlm and llm_client is not None:
+        try:
+            reactions, moderator_summary, used_fallback = _run_vlm_panel(
+                llm_client,
+                selected,
+                context,
+                fallback_reactions=reactions,
+                fallback_summary=moderator_summary,
+                thinking=thinking,
+            )
+            analysis_source = "vlm_with_fallback" if used_fallback else "vlm"
+        except Exception as exc:
+            fallback_error = f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "creative_panel_vlm_failed",
+                ad_id=ad_id,
+                error=fallback_error,
+            )
+    elif use_vlm:
+        fallback_error = "VLM client unavailable"
+
     report = CreativePanelReport(
         ad_id=ad_id,
         generated_at=datetime.now(UTC),
         json_path=str(out_root / ad_id / "creative_panel.json"),
+        analysis_source=analysis_source,
+        source_model=source_model if analysis_source.startswith("vlm") else None,
+        fallback_error=fallback_error,
         caveat=(
             "Simulated creative review generated from stored ARGUS evidence. "
             "It is not a real focus group, demographic sample, or market forecast."
         ),
         personas=reactions,
-        moderator_summary=_moderator_summary(context, reactions),
+        moderator_summary=moderator_summary,
         evidence_sources=_evidence_sources(context),
     )
 
@@ -160,6 +200,251 @@ class _PanelContext:
     citations: list[PanelCitation]
 
 
+def _run_vlm_panel(
+    client: AgentClient,
+    selected: list[str],
+    context: _PanelContext,
+    *,
+    fallback_reactions: list[PersonaReaction],
+    fallback_summary: ModeratorSummary,
+    thinking: bool,
+) -> tuple[list[PersonaReaction], ModeratorSummary, bool]:
+    message = client.complete(
+        _panel_messages(selected, context),
+        enable_thinking=thinking,
+    )
+    raw = message.content or ""
+    if not raw.strip():
+        raise ValueError("VLM returned empty creative panel response")
+    payload = _extract_json_object(raw)
+    parsed = json.loads(payload)
+    if not isinstance(parsed, dict):
+        raise ValueError("VLM creative panel response must be a JSON object")
+
+    fallback_by_id = {reaction.persona_id: reaction for reaction in fallback_reactions}
+    returned_personas = {
+        str(item.get("persona_id")): item
+        for item in parsed.get("personas", [])
+        if isinstance(item, dict) and item.get("persona_id")
+    }
+    reactions: list[PersonaReaction] = []
+    used_fallback = False
+    for persona_id in selected:
+        persona = PERSONAS[persona_id]
+        item = returned_personas.get(persona_id)
+        if item is None:
+            reactions.append(fallback_by_id[persona_id])
+            used_fallback = True
+            continue
+        try:
+            reactions.append(_reaction_from_vlm(persona, item, context))
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "creative_panel_persona_fallback",
+                ad_id=context.ad_id,
+                persona_id=persona_id,
+                error=str(exc),
+            )
+            reactions.append(fallback_by_id[persona_id])
+            used_fallback = True
+
+    try:
+        moderator_summary = _summary_from_vlm(parsed.get("moderator_summary"))
+    except (TypeError, ValueError) as exc:
+        logger.warning(
+            "creative_panel_summary_fallback",
+            ad_id=context.ad_id,
+            error=str(exc),
+        )
+        moderator_summary = fallback_summary
+        used_fallback = True
+
+    return reactions, moderator_summary, used_fallback
+
+
+def _panel_messages(selected: list[str], context: _PanelContext) -> list[dict[str, str]]:
+    personas = [
+        {
+            "persona_id": PERSONAS[persona_id].id,
+            "label": PERSONAS[persona_id].label,
+            "lens": PERSONAS[persona_id].lens,
+        }
+        for persona_id in selected
+    ]
+    citations = [
+        {
+            "id": f"c{idx}",
+            "ad_id": citation.ad_id,
+            "time_ms": citation.time_ms,
+            "frame_index": citation.frame_index,
+            "source": citation.source,
+            "text": citation.text,
+        }
+        for idx, citation in enumerate(context.citations[:12])
+    ]
+    evidence = {
+        "ad_id": context.ad_id,
+        "brand": context.brand,
+        "category": context.category,
+        "products": context.products,
+        "offers": context.offers,
+        "prices": context.prices,
+        "ctas": context.ctas,
+        "disclaimers": context.disclaimers[:8],
+        "risk_observation_tags": context.risk_labels,
+        "transcript_excerpt": context.transcript_text[:1800],
+        "ocr_excerpts": _dedupe_text(context.ocr_texts)[:20],
+        "citations": citations,
+    }
+    schema = {
+        "personas": [
+            {
+                "persona_id": "one of the requested persona_id values",
+                "first_impression": "string",
+                "understood_product_or_offer": "string",
+                "emotional_reaction": "qualitative string, no probability",
+                "trust_points": ["string"],
+                "confusion_points": ["string"],
+                "likely_objection": "string",
+                "memorable_moment": "string",
+                "cta_likelihood": "qualitative string, no probability",
+                "citation_ids": ["c0"],
+            }
+        ],
+        "moderator_summary": {
+            "consensus": ["string"],
+            "disagreements": ["string"],
+            "message_clarity_issues": ["string"],
+            "strongest_hooks": ["string"],
+            "suggested_ab_variants": ["string"],
+        },
+    }
+    system = (
+        "You are ARGUS Creative Review Panel, a local-first ad analysis assistant. "
+        "Simulate creative-review personas using only the supplied evidence. "
+        "Do not claim statistical representativeness, real demographic behavior, sales lift, "
+        "policy violations, or market response percentages. Do not invent ad IDs, offers, prices, "
+        "or CTAs. Cite only the provided citation ids. Return strict JSON only."
+    )
+    user = (
+        "Generate a simulated creative review panel for this ad.\n\n"
+        f"Requested personas:\n{json.dumps(personas, ensure_ascii=True, indent=2)}\n\n"
+        f"Evidence:\n{json.dumps(evidence, ensure_ascii=True, indent=2)}\n\n"
+        f"Return JSON with this shape:\n{json.dumps(schema, ensure_ascii=True, indent=2)}"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _reaction_from_vlm(
+    persona: Persona,
+    item: dict[str, Any],
+    context: _PanelContext,
+) -> PersonaReaction:
+    citations = _citations_from_ids(item.get("citation_ids"), context)
+    if not citations:
+        citations = context.citations[:4]
+    return PersonaReaction(
+        persona_id=persona.id,
+        persona_label=persona.label,
+        lens=persona.lens,
+        first_impression=_required_str(item, "first_impression"),
+        understood_product_or_offer=_required_str(item, "understood_product_or_offer"),
+        emotional_reaction=_required_str(item, "emotional_reaction"),
+        trust_points=_str_list(item.get("trust_points"))[:6],
+        confusion_points=_str_list(item.get("confusion_points"))[:6],
+        likely_objection=_required_str(item, "likely_objection"),
+        memorable_moment=_required_str(item, "memorable_moment"),
+        cta_likelihood=_required_str(item, "cta_likelihood"),
+        citations=citations[:6],
+    )
+
+
+def _summary_from_vlm(raw: Any) -> ModeratorSummary:
+    if not isinstance(raw, dict):
+        raise ValueError("missing moderator_summary")
+    return ModeratorSummary(
+        consensus=_str_list(raw.get("consensus"))[:6],
+        disagreements=_str_list(raw.get("disagreements"))[:6],
+        message_clarity_issues=_str_list(raw.get("message_clarity_issues"))[:6],
+        strongest_hooks=_str_list(raw.get("strongest_hooks"))[:6],
+        suggested_ab_variants=_str_list(raw.get("suggested_ab_variants"))[:6],
+    )
+
+
+def _citations_from_ids(raw: Any, context: _PanelContext) -> list[PanelCitation]:
+    if not isinstance(raw, list):
+        return []
+    by_id = {f"c{idx}": citation for idx, citation in enumerate(context.citations[:12])}
+    citations: list[PanelCitation] = []
+    seen: set[str] = set()
+    for value in raw:
+        citation_id = str(value)
+        if citation_id in by_id and citation_id not in seen:
+            citations.append(by_id[citation_id])
+            seen.add(citation_id)
+    return citations
+
+
+def _required_str(item: dict[str, Any], key: str) -> str:
+    value = item.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"missing {key}")
+    return value.strip()
+
+
+def _str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _dedupe_text(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    results: list[str] = []
+    for raw in values:
+        text = " ".join(str(raw).split())
+        key = text.lower()
+        if text and key not in seen:
+            seen.add(key)
+            results.append(text)
+    return results
+
+
+def _extract_json_object(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1 :]
+        closing = text.rfind("```")
+        if closing != -1:
+            text = text[:closing]
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("VLM response did not contain JSON")
+    depth = 0
+    in_string = False
+    escape = False
+    for idx, ch in enumerate(text[start:], start):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : idx + 1]
+    raise ValueError("VLM response JSON was incomplete")
+
+
 def _reaction(persona: Persona, context: _PanelContext) -> PersonaReaction:
     product = _product_phrase(context)
     offer = _offer_phrase(context)
@@ -193,7 +478,9 @@ def _reaction(persona: Persona, context: _PanelContext) -> PersonaReaction:
 def _first_impression(persona_id: str, context: _PanelContext, product: str) -> str:
     brand = context.brand or "the advertiser"
     if persona_id == "luxury_shopper":
-        return f"{brand} needs premium cues to land quickly; the stored evidence reads as {product}."
+        return (
+            f"{brand} needs premium cues to land quickly; the stored evidence reads as {product}."
+        )
     if persona_id == "gen_z_mobile_viewer":
         return f"The ad has to communicate fast; the clearest takeaway is {product}."
     if persona_id == "compliance_reviewer":
@@ -205,7 +492,9 @@ def _emotional_reaction(persona_id: str, context: _PanelContext) -> str:
     has_offer = bool(context.offers or context.prices)
     has_risk = bool(context.risk_labels)
     if persona_id == "budget_parent":
-        return "Value-oriented interest." if has_offer else "Interested, but waiting for cost clarity."
+        return (
+            "Value-oriented interest." if has_offer else "Interested, but waiting for cost clarity."
+        )
     if persona_id == "skeptical_buyer":
         return "Cautious curiosity." if has_risk else "Open but proof-seeking."
     if persona_id == "luxury_shopper":
@@ -273,7 +562,9 @@ def _moderator_summary(
     context: _PanelContext,
     reactions: list[PersonaReaction],
 ) -> ModeratorSummary:
-    clarity_issues = sorted({point for reaction in reactions for point in reaction.confusion_points})
+    clarity_issues = sorted(
+        {point for reaction in reactions for point in reaction.confusion_points}
+    )
     strongest_hooks = []
     if context.offers:
         strongest_hooks.append(context.offers[0])

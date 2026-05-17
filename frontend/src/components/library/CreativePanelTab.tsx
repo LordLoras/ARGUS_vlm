@@ -75,7 +75,7 @@ export function CreativePanelTab({
           })}
         </div>
 
-        <div className="storyboard-toolbar">
+        <div className="panel-toolbar">
           <button
             className="btn btn-primary"
             disabled={mutation.isPending || selected.length === 0}
@@ -84,10 +84,17 @@ export function CreativePanelTab({
             <SparkleIcon size={12} />
             <span>{mutation.isPending ? "Reviewing" : report ? "Run again" : "Run panel"}</span>
           </button>
-          <span className="mono storyboard-meta">{selected.length} personas selected</span>
+          <span className="mono panel-meta">
+            {report
+              ? `${report.analysis_source}${report.source_model ? ` / ${report.source_model}` : ""}`
+              : `${selected.length} personas selected`}
+          </span>
         </div>
 
         {mutation.isError ? <div className="obs-empty">Creative panel failed.</div> : null}
+        {report?.fallback_error ? (
+          <div className="obs-empty">VLM fallback: {report.fallback_error}</div>
+        ) : null}
 
         {report ? (
           <div className="panel-report">

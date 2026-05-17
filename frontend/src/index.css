@@ -831,107 +831,6 @@ input, textarea, select { font: inherit; color: inherit; }
 }
 .dcard-body { padding: 12px; }
 
-.storyboard-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.storyboard-meta {
-  color: var(--fg-quiet);
-  font-size: 10.5px;
-  overflow-wrap: anywhere;
-}
-.storyboard-empty {
-  padding: 22px 16px;
-}
-.storyboard-list {
-  display: grid;
-  gap: 10px;
-}
-.storyboard-shot {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 12px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-1);
-}
-.storyboard-shot-thumb {
-  width: 112px;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #050506;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--fg-quiet);
-  overflow: hidden;
-}
-.storyboard-shot-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.storyboard-shot-main {
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-}
-.storyboard-shot-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.storyboard-shot-head .mono {
-  color: var(--fg-mute);
-  font-size: 10.5px;
-}
-.storyboard-shot-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-.storyboard-shot-grid div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.storyboard-shot-grid span,
-.storyboard-copy span {
-  color: var(--fg-quiet);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-.storyboard-shot-grid strong {
-  min-width: 0;
-  color: var(--fg);
-  font-size: 11.5px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.storyboard-copy p {
-  margin: 2px 0 0;
-  color: var(--fg-mute);
-  font-size: 12px;
-}
-@media (max-width: 560px) {
-  .storyboard-shot {
-    grid-template-columns: 1fr;
-  }
-  .storyboard-shot-thumb {
-    width: 100%;
-  }
-  .storyboard-shot-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 .panel-caveat {
   border: 1px solid var(--amber);
   border-radius: 6px;
@@ -940,6 +839,17 @@ input, textarea, select { font: inherit; color: inherit; }
   padding: 9px 10px;
   font-size: 11.5px;
   margin-bottom: 12px;
+}
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.panel-meta {
+  color: var(--fg-quiet);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
 }
 .panel-personas {
   display: grid;

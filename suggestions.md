@@ -32,7 +32,7 @@ Why it is strong:
 MVP:
 
 - Add `ad_classifier/creative/dna/`.
-- Generate `creative_dna.json` from storyboard shots, transcript, OCR, marketing entities, and classification evidence.
+- Generate `creative_dna.json` from frames, transcript, OCR, marketing entities, and classification evidence.
 - Show a compact radar/profile panel in the ad detail drawer.
 - Add agent tool support for questions like "show me ads with offer-first DNA" or "which brands use proof-heavy endings?"
 
@@ -40,12 +40,12 @@ MVP:
 
 Status: proposed
 
-Let the user ask "what if this ad opened with the offer instead of the brand?" or "make this CTA clearer" and get a grounded alternate storyboard/script, plus a diff against the original extraction.
+Let the user ask "what if this ad opened with the offer instead of the brand?" or "make this CTA clearer" and get a grounded alternate script/shot-plan, plus a diff against the original extraction.
 
 Why it is strong:
 
 - It uses the existing evidence as source material, so it is practical and auditable.
-- It creates a demo moment: original ad -> alternate shot list -> changed entities/CTA/beat.
+- It creates a demo moment: original ad -> alternate script -> changed entities/CTA/beat.
 - It stays local-first if powered by the local LLM.
 
 Guardrail:
@@ -88,11 +88,11 @@ Why it is strong:
 
 - It is instantly useful for creative review.
 - It avoids vague sentiment and focuses on observable structure.
-- It pairs well with storyboard and creative DNA.
+- It pairs well with Creative DNA Fingerprint.
 
 MVP:
 
-- Derive timings from storyboard shots, transcript segments, OCR density, and marketing entities.
+- Derive timings from frame timestamps, transcript segments, OCR density, and marketing entities.
 - Output a timeline with labels: hook, product reveal, offer reveal, proof, CTA, terms.
 - Add an agent answer template: "The ad waits 18.5s before the first explicit CTA."
 
@@ -119,7 +119,7 @@ MVP:
 
 Status: proposed
 
-Generate a local PowerPoint-style strategy deck from a campaign or selected ads: campaign overview, key ads, storyboard strips, creative DNA comparison, extracted offers/CTAs, related ads, synthetic panel summary, and next-test ideas.
+Generate a local PowerPoint-style strategy deck from a campaign or selected ads: campaign overview, key ads, frame strips, creative DNA comparison, extracted offers/CTAs, related ads, synthetic panel summary, and next-test ideas.
 
 Why it is strong:
 
@@ -130,7 +130,7 @@ Why it is strong:
 MVP:
 
 - Start with HTML export before `.pptx`.
-- Use existing storyboard and creative panel artifacts when present.
+- Use existing creative panel and future Creative DNA artifacts when present.
 - Add a campaign-level endpoint such as `POST /api/campaigns/{campaign_id}/deck`.
 
 ### 7. Multimodal Moment Search
@@ -143,12 +143,12 @@ Why it is strong:
 
 - It makes ARGUS feel like a searchable creative memory.
 - It uses data already stored per frame and transcript segment.
-- It bridges visual embeddings, OCR, transcript, and storyboard.
+- It bridges visual embeddings, OCR, transcript, and frame-level timing.
 
 MVP:
 
 - Add `moments` search endpoint returning frame/shot-level hits.
-- Use frame visual vectors, OCR text, transcript overlap, and storyboard shot windows.
+- Use frame visual vectors, OCR text, transcript overlap, and timestamp windows.
 - UI: search results as timestamped clips/frames, not just ad rows.
 
 ### 8. Campaign Drift Detector
@@ -166,20 +166,10 @@ Why it is strong:
 MVP:
 
 - Compare ads assigned to a campaign by ingestion date.
-- Produce timeline events from entity diffs, storyboard/DNA diffs, and vector movement.
+- Produce timeline events from entity diffs, Creative DNA diffs, and vector movement.
 - Add agent support for "summarize creative drift for this campaign."
 
 ## Existing Feature Enhancements
-
-### Storyboard Enhancement Path
-
-Status: future enhancement
-
-- Add optical-flow camera motion labels: static, pan, tilt, push-in, pull-out, handheld.
-- Add VLM-enriched shot type, camera angle, subject, setting, and mood.
-- Add campaign-level storyboard comparison.
-- Add queries such as "show ads that open with product close-up then price reveal."
-- Add PowerPoint export for agency-style presentations.
 
 ### Synthetic Creative Review Panel Enhancement Path
 

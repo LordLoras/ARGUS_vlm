@@ -36,13 +36,11 @@ export function Library() {
       ? "Edit"
       : tabParam === "related"
         ? "Related"
-        : tabParam === "storyboard"
-          ? "Storyboard"
-          : tabParam === "panel"
-            ? "Review Panel"
-            : tabParam === "evidence"
-              ? "Evidence"
-              : "Overview";
+        : tabParam === "panel"
+          ? "Review Panel"
+          : tabParam === "evidence"
+            ? "Evidence"
+            : "Overview";
 
   useEffect(() => {
     if (queryAdId && queryAdId !== selectedAdId) setSelectedAdIdState(queryAdId);
@@ -50,7 +48,7 @@ export function Library() {
 
   const setSelectedAdId = (
     adId: string | null,
-    tab?: "related" | "edit" | "evidence" | "storyboard" | "panel"
+    tab?: "related" | "edit" | "evidence" | "panel"
   ) => {
     setSelectedAdIdState(adId);
     const next = new URLSearchParams(searchParams);

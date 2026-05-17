@@ -347,34 +347,6 @@ export type StatsResponse = {
   risk_labels: StatsCount[];
 };
 
-export type StoryboardShot = {
-  shot_index: number;
-  start_ms: number;
-  end_ms: number;
-  duration_ms: number;
-  representative_frame_index?: number | null;
-  representative_frame_path?: string | null;
-  transition: string;
-  camera_motion: string;
-  shot_type: string;
-  camera_angle: string;
-  on_screen_text: string[];
-  voiceover?: string | null;
-  emotional_beat: string;
-  narrative_function: string;
-  evidence: EvidenceItem[];
-};
-
-export type Storyboard = {
-  ad_id: string;
-  generated_at: string;
-  json_path: string;
-  html_path: string;
-  shot_count: number;
-  method: string;
-  shots: StoryboardShot[];
-};
-
 export type CreativePanelPersona = {
   id: string;
   label: string;
@@ -417,6 +389,9 @@ export type CreativePanelReport = {
   generated_at: string;
   json_path: string;
   report_type: string;
+  analysis_source: "vlm" | "vlm_with_fallback" | "deterministic_fallback" | string;
+  source_model?: string | null;
+  fallback_error?: string | null;
   caveat: string;
   personas: PersonaReaction[];
   moderator_summary: ModeratorSummary;

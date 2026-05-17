@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -9,6 +10,7 @@ from ad_classifier.models.common import StrictModel
 
 class CreativePanelRequest(StrictModel):
     persona_ids: list[str] | None = Field(default=None, min_length=1, max_length=6)
+    use_vlm: bool = True
 
 
 class PanelCitation(StrictModel):
@@ -47,6 +49,11 @@ class CreativePanelReport(StrictModel):
     generated_at: datetime
     json_path: str
     report_type: str = "simulated_creative_review"
+    analysis_source: Literal["vlm", "vlm_with_fallback", "deterministic_fallback"] = (
+        "deterministic_fallback"
+    )
+    source_model: str | None = None
+    fallback_error: str | None = None
     caveat: str
     personas: list[PersonaReaction] = Field(default_factory=list)
     moderator_summary: ModeratorSummary

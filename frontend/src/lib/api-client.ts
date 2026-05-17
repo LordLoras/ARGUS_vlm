@@ -17,7 +17,6 @@ import type {
   OcrItemDetail,
   RelatedAds,
   SearchHit,
-  Storyboard,
   StatsResponse,
   TranscriptSegment
 } from "./types";
@@ -92,16 +91,13 @@ export const api = {
   getStats: (query: { brand?: string; category?: string; status?: string; limit?: number } = {}) =>
     apiFetch<StatsResponse>(`/api/stats${params(query)}`),
 
-  createStoryboard: (adId: string) =>
-    apiFetch<Storyboard>(`/api/ads/${adId}/storyboard`, { method: "POST" }),
-
   listCreativePanelPersonas: () =>
     apiFetch<{ items: CreativePanelPersona[] }>("/api/creative-panel/personas"),
 
-  createCreativePanel: (adId: string, personaIds?: string[]) =>
+  createCreativePanel: (adId: string, personaIds?: string[], useVlm = true) =>
     apiFetch<CreativePanelReport>(`/api/ads/${adId}/creative-panel`, {
       method: "POST",
-      body: JSON.stringify({ persona_ids: personaIds })
+      body: JSON.stringify({ persona_ids: personaIds, use_vlm: useVlm })
     }),
 
   patchAd: (

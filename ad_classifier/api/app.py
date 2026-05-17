@@ -16,7 +16,6 @@ from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.search import router as search_router
 from ad_classifier.api.routes.stats import router as stats_router
-from ad_classifier.api.routes.storyboard import router as storyboard_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -31,6 +30,7 @@ def create_app(
     agent_text_embedder_factory: Callable | None = None,
     agent_visual_text_embedder_factory: Callable | None = None,
     agent_vector_store_factory: Callable | None = None,
+    creative_panel_client_factory: Callable | None = None,
 ) -> FastAPI:
     config, config_file = load_config(config_path)
     resolved_db = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
@@ -70,6 +70,7 @@ def create_app(
     app.state.agent_text_embedder_factory = agent_text_embedder_factory
     app.state.agent_visual_text_embedder_factory = agent_visual_text_embedder_factory
     app.state.agent_vector_store_factory = agent_vector_store_factory
+    app.state.creative_panel_client_factory = creative_panel_client_factory
 
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
@@ -97,7 +98,6 @@ def create_app(
     app.include_router(jobs_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(stats_router, prefix="/api")
-    app.include_router(storyboard_router, prefix="/api")
     app.include_router(creative_panel_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")

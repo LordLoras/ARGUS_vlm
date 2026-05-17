@@ -70,10 +70,50 @@ def client(config_path: Path) -> TestClient:
             ]
         )
 
+    def creative_panel_client_factory(_config):
+        return MockAgentClient(
+            [
+                AgentMessage(
+                    content=(
+                        '{"personas":['
+                        '{"persona_id":"budget_parent",'
+                        '"first_impression":"The offer is easy to notice.",'
+                        '"understood_product_or_offer":"Wrangler with 0% APR.",'
+                        '"emotional_reaction":"Value interest.",'
+                        '"trust_points":["The offer is specific."],'
+                        '"confusion_points":["Terms still need clarity."],'
+                        '"likely_objection":"I need total cost details.",'
+                        '"memorable_moment":"0% APR",'
+                        '"cta_likelihood":"Would consider the CTA; not a forecast.",'
+                        '"citation_ids":["c0"]},'
+                        '{"persona_id":"skeptical_buyer",'
+                        '"first_impression":"The claim needs support.",'
+                        '"understood_product_or_offer":"Wrangler financing offer.",'
+                        '"emotional_reaction":"Cautious interest.",'
+                        '"trust_points":["The CTA is direct."],'
+                        '"confusion_points":["Offer terms are thin."],'
+                        '"likely_objection":"I need proof and terms.",'
+                        '"memorable_moment":"Shop now",'
+                        '"cta_likelihood":"CTA depends on term clarity.",'
+                        '"citation_ids":["c1"]}],'
+                        '"moderator_summary":{'
+                        '"consensus":["Offer is the clearest hook."],'
+                        '"disagreements":["Value and proof lenses differ."],'
+                        '"message_clarity_issues":["Terms need clarity."],'
+                        '"strongest_hooks":["0% APR"],'
+                        '"suggested_ab_variants":["Test offer-first copy."]}}'
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                )
+            ]
+        )
+
     app = create_app(
         config_path=config_path,
         upload_probe=lambda _path: object(),
         agent_client_factory=agent_client_factory,
+        creative_panel_client_factory=creative_panel_client_factory,
     )
     return TestClient(app)
 
@@ -242,55 +282,7 @@ def test_evidence_endpoints_stats_and_risk_filters(client: TestClient, config_pa
     assert "Limited time Wrangler offer" in export_html.text
 
 
-def test_storyboard_endpoint_creates_shot_artifacts(client: TestClient, config_path: Path):
-    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    conn = _db(config_path)
-    try:
-        conn.execute(
-            """
-            INSERT INTO ads (id, source_path, ingested_at, duration_ms, status)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            ("ad_story_api", "/tmp/story.mp4", datetime.now(UTC).isoformat(), 2000, "completed"),
-        )
-        for frame_index, time_ms, phash in [
-            (0, 0, "0000000000000000"),
-            (1, 500, "ffffffffffffffff"),
-        ]:
-            conn.execute(
-                """
-                INSERT INTO frames (ad_id, frame_index, time_ms, path, kept, phash)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                ("ad_story_api", frame_index, time_ms, f"/tmp/frame_{frame_index}.jpg", 1, phash),
-            )
-        frame_id = conn.execute(
-            "SELECT id FROM frames WHERE ad_id = ? AND frame_index = 1",
-            ("ad_story_api",),
-        ).fetchone()["id"]
-        conn.execute(
-            """
-            INSERT INTO ocr_items (frame_id, engine, text, confidence)
-            VALUES (?, ?, ?, ?)
-            """,
-            (frame_id, "paddleocr", "Shop now", 0.9),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    response = client.post("/api/ads/ad_story_api/storyboard")
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["shot_count"] == 2
-    assert payload["shots"][1]["narrative_function"] == "cta_or_resolution"
-    assert Path(data["paths"]["out"], "ad_story_api", "storyboard.json").exists()
-
-
-def test_creative_panel_endpoint_creates_simulated_report(
-    client: TestClient, config_path: Path
-):
+def test_creative_panel_endpoint_creates_simulated_report(client: TestClient, config_path: Path):
     data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     conn = _db(config_path)
     try:
@@ -340,17 +332,17 @@ def test_creative_panel_endpoint_creates_simulated_report(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["report_type"] == "simulated_creative_review"
+    assert payload["analysis_source"] == "vlm"
     assert [item["persona_id"] for item in payload["personas"]] == [
         "budget_parent",
         "skeptical_buyer",
     ]
+    assert payload["personas"][0]["first_impression"] == "The offer is easy to notice."
     assert "not a real focus group" in payload["caveat"]
     assert Path(data["paths"]["out"], "ad_panel_api", "creative_panel.json").exists()
 
 
-def test_delete_ad_can_cleanup_database_and_local_artifacts(
-    client: TestClient, config_path: Path
-):
+def test_delete_ad_can_cleanup_database_and_local_artifacts(client: TestClient, config_path: Path):
     data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     data_root = Path(data["paths"]["data_root"])
     ad_id = "ad_delete"
@@ -412,8 +404,7 @@ def test_delete_ad_can_cleanup_database_and_local_artifacts(
         load_sqlite_vec(conn)
         assert conn.execute("SELECT COUNT(*) FROM ads WHERE id = ?", (ad_id,)).fetchone()[0] == 0
         assert (
-            conn.execute("SELECT COUNT(*) FROM frames WHERE ad_id = ?", (ad_id,)).fetchone()[0]
-            == 0
+            conn.execute("SELECT COUNT(*) FROM frames WHERE ad_id = ?", (ad_id,)).fetchone()[0] == 0
         )
         assert (
             conn.execute("SELECT COUNT(*) FROM ads_fts WHERE ad_id = ?", (ad_id,)).fetchone()[0]
@@ -543,7 +534,11 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     assert detail["research"]["creative"]["small_print_ads"] == 1
     deep = client.post(
         "/api/campaigns/c_test/research/deep",
-        json={"include_web": False, "question": "How should we improve the offer?", "thinking": True},
+        json={
+            "include_web": False,
+            "question": "How should we improve the offer?",
+            "thinking": True,
+        },
     )
     assert deep.status_code == 200, deep.text
     deep_json = deep.json()
@@ -698,9 +693,7 @@ def test_search_keyword_returns_preview(client: TestClient, config_path: Path):
     assert item["source"] == "keyword"
 
 
-def test_hybrid_keyword_query_excludes_vector_only_noise(
-    client: TestClient, config_path: Path
-):
+def test_hybrid_keyword_query_excludes_vector_only_noise(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:
         rows = [
@@ -745,9 +738,7 @@ def test_hybrid_keyword_query_excludes_vector_only_noise(
     assert [item["ad_id"] for item in payload["items"]] == ["ad_search_jeep"]
 
 
-def test_hybrid_keyword_query_expands_business_aliases(
-    client: TestClient, config_path: Path
-):
+def test_hybrid_keyword_query_expands_business_aliases(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:
         conn.execute(
@@ -822,9 +813,7 @@ def test_hybrid_restaurant_query_does_not_match_retail_delivery(
     finally:
         conn.close()
 
-    response = client.get(
-        "/api/search", params={"mode": "hybrid", "q": "restaurants", "k": 20}
-    )
+    response = client.get("/api/search", params={"mode": "hybrid", "q": "restaurants", "k": 20})
 
     assert response.status_code == 200, response.text
     assert response.json()["items"] == []
