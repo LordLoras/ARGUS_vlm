@@ -94,10 +94,19 @@ export const api = {
   listCreativePanelPersonas: () =>
     apiFetch<{ items: CreativePanelPersona[] }>("/api/creative-panel/personas"),
 
-  createCreativePanel: (adId: string, personaIds?: string[], useVlm = true) =>
+  createCreativePanel: (
+    adId: string,
+    personaIds?: string[],
+    useVlm = true,
+    enableReasoning = true
+  ) =>
     apiFetch<CreativePanelReport>(`/api/ads/${adId}/creative-panel`, {
       method: "POST",
-      body: JSON.stringify({ persona_ids: personaIds, use_vlm: useVlm })
+      body: JSON.stringify({
+        persona_ids: personaIds,
+        use_vlm: useVlm,
+        enable_reasoning: enableReasoning
+      })
     }),
 
   patchAd: (

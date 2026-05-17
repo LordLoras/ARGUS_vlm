@@ -11,6 +11,7 @@ from ad_classifier.models.common import StrictModel
 class CreativePanelRequest(StrictModel):
     persona_ids: list[str] | None = Field(default=None, min_length=1, max_length=6)
     use_vlm: bool = True
+    enable_reasoning: bool = True
 
 
 class PanelCitation(StrictModel):

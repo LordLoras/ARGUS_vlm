@@ -40,7 +40,7 @@ def create_creative_panel(
                 use_vlm=body.use_vlm,
                 llm_client=llm_client,
                 source_model=config.vlm.endpoint.model,
-                thinking=config.vlm.endpoint.enable_thinking,
+                thinking=body.enable_reasoning,
             )
         except ValueError as exc:
             message = str(exc)

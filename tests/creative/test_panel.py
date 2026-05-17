@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ad_classifier.agent.client import AgentMessage, MockAgentClient
 from ad_classifier.creative.panel import build_creative_panel
+from ad_classifier.creative.panel.service import PERSONAS, _persona_messages
 from ad_classifier.db.connection import initialize_database, open_database
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
@@ -162,16 +163,40 @@ def test_creative_panel_uses_vlm_when_client_is_provided(tmp_path: Path):
             use_vlm=True,
             llm_client=client,
             source_model="mock-vlm",
+            thinking=True,
         )
 
         assert report.analysis_source == "vlm"
         assert report.source_model == "mock-vlm"
         assert report.personas[0].first_impression == "The VLM sees the offer first."
         assert report.personas[0].citations[0].text == "0% APR"
-        assert client.calls[0]["enable_thinking"] is False
+        assert client.calls[0]["enable_thinking"] is True
         assert len(client.calls) == 2
     finally:
         conn.close()
+
+
+def test_persona_prompt_requires_internal_evidence_reasoning():
+    class Context:
+        ad_id = "ad_prompt"
+        brand = "Jeep"
+        category = "automotive"
+        products = ["Wrangler"]
+        offers = ["0% APR"]
+        prices = []
+        ctas = ["Shop now"]
+        risk_labels = []
+        transcript_text = "Shop now for Wrangler"
+        ocr_texts = ["0% APR", "Shop now"]
+        citations = []
+
+    messages = _persona_messages(PERSONAS["budget_parent"], Context())  # type: ignore[arg-type]
+    system = messages[0]["content"]
+
+    assert "Internally reason" in system
+    assert "Do not reveal chain-of-thought" in system
+    assert "Use only supplied evidence" in system
+    assert "Ignore repetitive OCR boilerplate" in system
 
 
 def test_creative_panel_falls_back_when_vlm_hits_length(tmp_path: Path):

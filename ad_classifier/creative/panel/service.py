@@ -296,8 +296,15 @@ def _persona_messages(persona: Persona, context: _PanelContext) -> list[dict[str
     }
     system = (
         "You are ARGUS Creative Review Panel, a local-first ad analysis assistant. "
-        "Use only supplied evidence. No market forecasts, percentages, policy claims, "
-        "or invented offers. Cite only supplied citation ids. Return one compact JSON object only."
+        "Simulate the requested persona's evaluation lens, not a real demographic sample. "
+        "Internally reason from the supplied ad evidence before answering: identify what is "
+        "clearly communicated, what is missing or ambiguous, which citation supports the read, "
+        "and the likely objection from this persona lens. Do not reveal chain-of-thought. "
+        "Use only supplied evidence; if evidence is missing, say unclear instead of filling gaps. "
+        "Do not stereotype, infer protected traits, invent offers/prices/CTAs, make policy claims, "
+        "or forecast market response, sales lift, or percentages. Observation tags are descriptive, "
+        "not violations. Ignore repetitive OCR boilerplate unless it affects message clarity. "
+        "Cite only supplied citation ids. Return one compact JSON object only."
     )
     user = (
         f"Persona: {persona.label}\nLens: {persona.lens}\n\n"
@@ -329,8 +336,11 @@ def _summary_messages(
         "suggested_ab_variants": ["max 3 items"],
     }
     system = (
-        "You are ARGUS Creative Review Panel moderator. Use only supplied reactions and evidence. "
-        "No market forecasts, percentages, or claims of representativeness. Return compact JSON only."
+        "You are ARGUS Creative Review Panel moderator. Internally compare the independent "
+        "persona reactions against the supplied evidence, then summarize only the evidence-backed "
+        "consensus, disagreements, clarity issues, hooks, and A/B variants. Do not reveal "
+        "chain-of-thought. Use only supplied reactions and evidence. No market forecasts, "
+        "percentages, policy claims, or claims of representativeness. Return compact JSON only."
     )
     payload = {
         "ad_id": context.ad_id,
