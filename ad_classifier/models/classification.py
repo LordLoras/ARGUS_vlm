@@ -9,10 +9,6 @@ from ad_classifier.models.ads import utc_now
 from ad_classifier.models.common import EvidenceItem, StrictModel
 
 
-# VLM self-assessment of ad clarity. Only used by the VLM output models;
-# the pipeline does not gate or threshold on this value.
-Decision = Literal["allow", "review"]
-
 OcrQualityLevel = Literal["good", "mixed", "poor"]
 
 

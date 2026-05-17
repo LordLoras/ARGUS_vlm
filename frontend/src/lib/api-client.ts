@@ -80,7 +80,6 @@ export const api = {
       products_text?: string | null;
       primary_category?: string | null;
       subcategory?: string | null;
-      decision?: string | null;
       tagline?: string | null;
       offers?: Array<{ text: string }> | null;
       ctas?: Array<{ text: string }> | null;

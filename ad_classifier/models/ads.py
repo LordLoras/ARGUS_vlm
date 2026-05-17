@@ -32,7 +32,6 @@ class AdRecord(StrictModel):
     products_text: str | None = None
     primary_category: str | None = None
     subcategory: str | None = None
-    decision: str | None = None
     source_hash: str | None = None
     phash_mean: str | None = None
     duplicate_of: str | None = None

@@ -27,14 +27,14 @@ def test_extract_json_plain():
 
 
 def test_extract_json_fenced():
-    raw = '```json\n{"decision": "allow"}\n```'
-    assert json.loads(_extract_json(raw)) == {"decision": "allow"}
+    raw = '```json\n{"primary_category": "other"}\n```'
+    assert json.loads(_extract_json(raw)) == {"primary_category": "other"}
 
 
 def test_extract_json_with_preamble():
-    raw = 'Here is the result:\n{"decision": "review", "confidence": 0.4}'
+    raw = 'Here is the result:\n{"primary_category": "other", "confidence": 0.4}'
     result = json.loads(_extract_json(raw))
-    assert result["decision"] == "review"
+    assert result["primary_category"] == "other"
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ def test_mock_verifier_returns_default_result():
     bundle = _make_bundle()
     result = verifier.verify(bundle)
     assert isinstance(result, VLMVerificationResult)
-    assert result.decision == "allow"
+    assert result.primary_category == "other"
     assert result.parse_ok is True
 
 
@@ -69,14 +69,11 @@ def test_mock_verifier_returns_custom_result():
     custom = VLMVerificationResult(
         primary_category="gambling",
         confidence=0.9,
-        decision="review",
-        needs_human_review=True,
         summary="high risk gambling ad",
     )
     verifier = MockVLMVerifier(result=custom)
     bundle = _make_bundle()
     result = verifier.verify(bundle)
-    assert result.decision == "review"
     assert result.primary_category == "gambling"
 
 
@@ -88,8 +85,6 @@ def test_mock_verifier_returns_custom_result():
 def test_parse_failure_factory():
     result = VLMVerificationResult.parse_failure("raw response here", "invalid JSON")
     assert result.parse_ok is False
-    assert result.decision == "review"
-    assert result.needs_human_review is True
     assert result.raw_response == "raw response here"
     assert "invalid JSON" in result.parse_error
 
@@ -138,15 +133,12 @@ def test_http_verifier_happy_path():
     payload = {
         "primary_category": "retail_ecommerce",
         "confidence": 0.85,
-        "decision": "allow",
-        "needs_human_review": False,
         "summary": "clean ad",
     }
     bundle = _make_bundle()
     with patch("ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
-    assert result.decision == "allow"
     assert result.primary_category == "retail_ecommerce"
     assert result.confidence == pytest.approx(0.85)
     assert result.parse_ok is True
@@ -156,8 +148,6 @@ def test_http_verifier_requests_structured_output():
     payload = {
         "primary_category": "retail_ecommerce",
         "confidence": 0.85,
-        "decision": "allow",
-        "needs_human_review": False,
         "summary": "clean ad",
     }
     bundle = _make_bundle()
@@ -183,8 +173,6 @@ def test_http_verifier_reads_reasoning_content_when_content_empty():
     payload = {
         "primary_category": "other",
         "confidence": 0.7,
-        "decision": "allow",
-        "needs_human_review": False,
         "summary": "reasoning field only",
     }
     data = {
@@ -226,8 +214,6 @@ def test_http_verifier_parses_fenced_json():
     payload = {
         "primary_category": "other",
         "confidence": 0.5,
-        "decision": "review",
-        "needs_human_review": True,
         "summary": "fenced",
     }
     fenced_content = f"```json\n{json.dumps(payload)}\n```"
@@ -244,15 +230,13 @@ def test_http_verifier_parses_fenced_json():
     with patch("ad_classifier.vlm.verifier.chat_completion", return_value=data):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
-    assert result.decision == "review"
+    assert result.primary_category == "other"
 
 
 def test_http_verifier_ignores_unknown_fields():
     payload = {
         "primary_category": "other",
         "confidence": 0.5,
-        "decision": "allow",
-        "needs_human_review": False,
         "summary": "ok",
         "unknown_future_field": "some value",
     }
@@ -260,15 +244,13 @@ def test_http_verifier_ignores_unknown_fields():
     with patch("ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)):
         verifier = _make_http_verifier()
         result = verifier.verify(bundle)
-    assert result.decision == "allow"
+    assert result.summary == "ok"
 
 
 def test_http_verifier_uses_generation_settings_from_constructor():
     payload = {
         "primary_category": "other",
         "confidence": 0.8,
-        "decision": "allow",
-        "needs_human_review": False,
         "summary": "ok",
     }
     bundle = _make_bundle()
@@ -290,7 +272,7 @@ def test_http_verifier_uses_generation_settings_from_constructor():
 
 def test_parse_vlm_content_salvages_malformed_nested_json():
     raw = (
-        '{"primary_category":"automotive","confidence":0.95,"decision":"allow","needs_human_review":false,'
+        '{"primary_category":"automotive","confidence":0.95,'
         '"evidence":[{"time_ms":11000,"frame_index":22,"source":"ocr",'
         '"text":"0% APR financing","confidence":0.95}],'
         '"marketing_entities":{"brand":{"name":"Jeep","logo_present":true,'

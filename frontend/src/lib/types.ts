@@ -16,7 +16,6 @@ export type AdRecord = {
   products_text?: string | null;
   primary_category?: string | null;
   subcategory?: string | null;
-  decision?: string | null;
   source_hash?: string | null;
   phash_mean?: string | null;
   duplicate_of?: string | null;
@@ -39,8 +38,6 @@ export type ClassificationRecord = {
   primary_category?: string | null;
   risk_labels?: string[];
   confidence?: number | null;
-  decision?: string | null;
-  needs_human_review?: boolean | null;
   evidence?: EvidenceItem[];
   ocr_quality?: {
     overall?: string | null;

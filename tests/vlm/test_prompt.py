@@ -31,7 +31,8 @@ def test_sensitive_categories_included():
 def test_prompt_is_categorization_only():
     prompt = render_verifier_prompt()
     assert "CATEGORIZATION ONLY" in prompt
-    assert 'Set decision to "allow" and needs_human_review to false' in prompt
+    assert "do not output review or decision fields" in prompt
+    assert "needs_human_review" not in prompt
 
 
 def test_prompt_restricts_campaign_suggestion_names():

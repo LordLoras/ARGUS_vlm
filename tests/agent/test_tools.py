@@ -23,13 +23,13 @@ def _insert_hvac_ad(conn) -> None:
     conn.execute("""
         INSERT INTO ads (
             id, source_path, ingested_at, status, brand_name, advertiser_name,
-            products_text, primary_category, decision, source_hash
+            products_text, primary_category, source_hash
         )
         VALUES (
             'ad_hvac_a', '/tmp/hvac.mp4', datetime('now'), 'completed',
             'Prillaman Mechanical, Heating & AC', 'Prillaman',
             'Heating systems, Cooling systems, Air Conditioning Check',
-            'other', 'allow', 'hash_hvac'
+            'other', 'hash_hvac'
         )
         """)
 
@@ -38,12 +38,12 @@ def _insert_dose_ad(conn) -> None:
     conn.execute("""
         INSERT INTO ads (
             id, source_path, ingested_at, status, brand_name, advertiser_name,
-            products_text, primary_category, decision, source_hash
+            products_text, primary_category, source_hash
         )
         VALUES (
             'ad_dose_a', '/tmp/dose.mp4', datetime('now'), 'completed',
             'Dose', 'Dose', 'For Cholesterol',
-            'healthcare_pharma', 'allow', 'hash_dose'
+            'healthcare_pharma', 'hash_dose'
         )
         """)
 

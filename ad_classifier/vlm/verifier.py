@@ -33,8 +33,6 @@ class MockVLMVerifier(VLMVerifier):
         self._result = result or VLMVerificationResult(
             primary_category="other",
             confidence=0.8,
-            decision="allow",
-            needs_human_review=False,
             summary="mock verifier result",
         )
 
@@ -135,8 +133,6 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
     for key in (
         "primary_category",
         "confidence",
-        "decision",
-        "needs_human_review",
         "ocr_quality",
         "evidence",
         "conflicts",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ad_classifier.models.classification import Decision, OcrQualityLevel
+from ad_classifier.models.classification import OcrQualityLevel
 from ad_classifier.models.marketing import (
     AppStorePlatform,
     AspectRatio,
@@ -253,8 +253,6 @@ class VLMConflict(_VLMBase):
 class VLMVerificationResult(_VLMBase):
     primary_category: str = "other"
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    decision: Decision = "review"
-    needs_human_review: bool = True
     ocr_quality: VLMOCRQuality = Field(default_factory=VLMOCRQuality)
     evidence: list[VLMEvidence] = Field(default_factory=list)
     marketing_entities: VLMMarketingEntities = Field(default_factory=VLMMarketingEntities)
@@ -269,8 +267,6 @@ class VLMVerificationResult(_VLMBase):
         return cls(
             primary_category="other",
             confidence=0.0,
-            decision="review",
-            needs_human_review=True,
             summary=f"VLM response parsing failed: {error}",
             parse_ok=False,
             raw_response=raw_response,

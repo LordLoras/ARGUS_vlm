@@ -55,7 +55,7 @@ class AdRepository:
 
     def get(self, ad_id: str) -> AdRecord | None:
         row = self.conn.execute("SELECT * FROM ads WHERE id = ?", (ad_id,)).fetchone()
-        data = row_to_dict(row)
+        data = _ad_row(row)
         return AdRecord.model_validate(data) if data is not None else None
 
     def list(
@@ -110,7 +110,7 @@ class AdRepository:
             """,
             (*params, limit, offset),
         ).fetchall()
-        return [AdRecord.model_validate(row_to_dict(row)) for row in rows]
+        return [AdRecord.model_validate(data) for row in rows if (data := _ad_row(row)) is not None]
 
     def update_status(self, ad_id: str, status: str) -> None:
         self.conn.execute("UPDATE ads SET status = ? WHERE id = ?", (status, ad_id))
@@ -163,7 +163,7 @@ class AdRepository:
                 """,
                 (source_hash, exclude_ad_id),
             ).fetchone()
-        data = row_to_dict(row)
+        data = _ad_row(row)
         return AdRecord.model_validate(data) if data is not None else None
 
     def find_nearest_phash(
@@ -184,7 +184,7 @@ class AdRepository:
 
         nearest: tuple[AdRecord, int] | None = None
         for row in rows:
-            data = row_to_dict(row)
+            data = _ad_row(row)
             if data is None:
                 continue
             ad = AdRecord.model_validate(data)
@@ -239,3 +239,11 @@ class AdRepository:
 
     def delete(self, ad_id: str) -> None:
         self.conn.execute("DELETE FROM ads WHERE id = ?", (ad_id,))
+
+
+def _ad_row(row: sqlite3.Row | None) -> dict | None:
+    data = row_to_dict(row)
+    if data is None:
+        return None
+    data.pop("decision", None)
+    return data

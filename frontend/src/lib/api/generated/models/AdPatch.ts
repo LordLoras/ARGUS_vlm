@@ -7,5 +7,4 @@ export type AdPatch = {
     brand_confidence?: (number | null);
     products_text?: (string | null);
     primary_category?: (string | null);
-    decision?: (string | null);
 };

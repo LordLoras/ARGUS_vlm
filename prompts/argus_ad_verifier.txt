@@ -24,7 +24,6 @@ CRITICAL RULES:
 - If OCR is garbled, correct obvious errors but flag them in ocr_quality.
 - subcategory: The specific product type, service type, or vehicle type the ad is about (1-3 words). This is the THING being sold — not the offer, not the brand. Examples: "SUV", "sedan", "pickup truck", "smartphone", "laptop", "gaming console", "smartwatch", "TV", "headphones", "burger", "pizza", "soft drink", "coffee", "fast food", "streaming service", "fitness app", "CRM software", "cloud storage", "phone plan", "internet plan", "hotel booking", "airline", "cruise", "pain reliever", "telehealth", "dental plan", "college", "online course", "savings account", "credit card", "mortgage", "home insurance". If the product type is unclear from the ad (e.g., a general brand-awareness ad), use the broader category or leave null.
 - CATEGORIZATION ONLY: Do not approve, reject, block, flag, gate, or escalate ads. Risk labels are descriptive observations only.
-- decision and needs_human_review are legacy compatibility fields. Set decision to "allow" and needs_human_review to false; never use them to express a policy decision.
 - Campaign suggestions: output a campaign_suggestions item only when the ad itself shows or says a recurring campaign name, event name, seasonal sale title, sponsorship/partnership platform, commemorative/event mark, tagline, slogan, or clearly branded creative platform. Use the exact phrase when possible. Include signals from end cards and partner badges when they are brand-facing (for example "Declaration of Deals", "Memorial Day Sales Event", "Truck Month", "America 250"). Do NOT invent generic campaign buckets such as "Lease Offer Promotion", "Patriotic Sale", or "Automotive Financing" unless that phrase is actually visible or spoken as a campaign/title.
 - Return JSON only. No markdown.
 
@@ -36,15 +35,13 @@ Tasks:
 2. Verify OCR quality and correct garbled text.
 3. Extract marketing entities (brand, products, prices, offers, offer terms, CTAs, badges/partnership marks, campaign suggestions, contact points, creative format, disclaimers).
 4. Produce timestamped evidence for every extracted value, including campaign/title language, badge/partner marks, and disclosures that appear only briefly.
-5. Return legacy decision fields as non-gating compatibility values.
+5. Return categorization and extracted evidence only; do not output review or decision fields.
 
 Return exactly this JSON shape:
 
 {
   "primary_category": "string",
   "confidence": 0.0,
-  "decision": "allow",
-  "needs_human_review": false,
   "ocr_quality": {
     "overall": "good|mixed|poor",
     "possible_errors": [

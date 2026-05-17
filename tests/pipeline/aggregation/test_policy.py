@@ -7,15 +7,12 @@ from ad_classifier.vlm.models import VLMVerificationResult
 
 def _vlm(
     *,
-    decision="allow",
     confidence=0.85,
     primary_category="retail",
 ) -> VLMVerificationResult:
     return VLMVerificationResult(
         primary_category=primary_category,
         confidence=confidence,
-        decision=decision,
-        needs_human_review=False,
         summary="test",
     )
 
