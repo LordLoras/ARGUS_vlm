@@ -8,8 +8,9 @@ import { EditTab, type EditPatch } from "./library/EditTab";
 import { EvidenceTab } from "./library/EvidenceTab";
 import { OverviewTab } from "./library/OverviewTab";
 import { RelatedTab } from "./library/RelatedTab";
+import { StoryboardTab } from "./library/StoryboardTab";
 
-const TABS = ["Overview", "Evidence", "Related", "Edit"] as const;
+const TABS = ["Overview", "Evidence", "Storyboard", "Related", "Edit"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdDetailDrawer({
@@ -168,6 +169,7 @@ export function AdDetailDrawer({
             {tab === "Evidence" ? (
               <EvidenceTab classification={detail.classification} frames={frames} onSeek={seekVideo} />
             ) : null}
+            {tab === "Storyboard" ? <StoryboardTab adId={detail.ad.id} onSeek={seekVideo} /> : null}
             {tab === "Related" ? <RelatedTab related={related} onSelectAd={onSelectRelated} /> : null}
             {tab === "Edit" ? <EditTab detail={detail} onSave={onSave} saving={saving} /> : null}
           </div>

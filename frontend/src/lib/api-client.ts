@@ -15,6 +15,7 @@ import type {
   OcrItemDetail,
   RelatedAds,
   SearchHit,
+  Storyboard,
   StatsResponse,
   TranscriptSegment
 } from "./types";
@@ -88,6 +89,9 @@ export const api = {
 
   getStats: (query: { brand?: string; category?: string; status?: string; limit?: number } = {}) =>
     apiFetch<StatsResponse>(`/api/stats${params(query)}`),
+
+  createStoryboard: (adId: string) =>
+    apiFetch<Storyboard>(`/api/ads/${adId}/storyboard`, { method: "POST" }),
 
   patchAd: (
     adId: string,

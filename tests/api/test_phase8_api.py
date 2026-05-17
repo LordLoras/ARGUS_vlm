@@ -242,6 +242,52 @@ def test_evidence_endpoints_stats_and_risk_filters(client: TestClient, config_pa
     assert "Limited time Wrangler offer" in export_html.text
 
 
+def test_storyboard_endpoint_creates_shot_artifacts(client: TestClient, config_path: Path):
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (id, source_path, ingested_at, duration_ms, status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("ad_story_api", "/tmp/story.mp4", datetime.now(UTC).isoformat(), 2000, "completed"),
+        )
+        for frame_index, time_ms, phash in [
+            (0, 0, "0000000000000000"),
+            (1, 500, "ffffffffffffffff"),
+        ]:
+            conn.execute(
+                """
+                INSERT INTO frames (ad_id, frame_index, time_ms, path, kept, phash)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("ad_story_api", frame_index, time_ms, f"/tmp/frame_{frame_index}.jpg", 1, phash),
+            )
+        frame_id = conn.execute(
+            "SELECT id FROM frames WHERE ad_id = ? AND frame_index = 1",
+            ("ad_story_api",),
+        ).fetchone()["id"]
+        conn.execute(
+            """
+            INSERT INTO ocr_items (frame_id, engine, text, confidence)
+            VALUES (?, ?, ?, ?)
+            """,
+            (frame_id, "paddleocr", "Shop now", 0.9),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.post("/api/ads/ad_story_api/storyboard")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["shot_count"] == 2
+    assert payload["shots"][1]["narrative_function"] == "cta_or_resolution"
+    assert Path(data["paths"]["out"], "ad_story_api", "storyboard.json").exists()
+
+
 def test_delete_ad_can_cleanup_database_and_local_artifacts(
     client: TestClient, config_path: Path
 ):
