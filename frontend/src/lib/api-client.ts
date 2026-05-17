@@ -12,8 +12,11 @@ import type {
   FrameRecord,
   JobStreamEvent,
   JobRecord,
+  OcrItemDetail,
   RelatedAds,
-  SearchHit
+  SearchHit,
+  StatsResponse,
+  TranscriptSegment
 } from "./types";
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -56,13 +59,21 @@ function params(values: Record<string, string | number | boolean | undefined | n
 export const api = {
   health: () => apiFetch<{ status: string; service: string }>("/api/health"),
 
-  listAds: (query: { brand?: string; category?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
+  listAds: (query: { brand?: string; category?: string; risk_label?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),
 
   getAd: (adId: string) => apiFetch<AdDetail>(`/api/ads/${adId}`),
 
   getFrames: (adId: string) =>
     apiFetch<{ items: FrameRecord[] }>(`/api/ads/${adId}/frames`),
+
+  getTranscript: (adId: string) =>
+    apiFetch<{ ad_id: string; items: TranscriptSegment[]; full_text: string }>(
+      `/api/ads/${adId}/transcript`
+    ),
+
+  getOcr: (adId: string) =>
+    apiFetch<{ ad_id: string; items: OcrItemDetail[] }>(`/api/ads/${adId}/ocr`),
 
   getEvidence: (adId: string) =>
     apiFetch<{ classification_evidence: unknown[]; rule_triggers: unknown[] }>(
@@ -71,6 +82,12 @@ export const api = {
 
   getSimilar: (adId: string, k = 10) =>
     apiFetch<RelatedAds>(`/api/ads/${adId}/similar${params({ k })}`),
+
+  getEvidenceExport: (adId: string) =>
+    apiFetch<Record<string, unknown>>(`/api/ads/${adId}/export/evidence`),
+
+  getStats: (query: { brand?: string; category?: string; status?: string; limit?: number } = {}) =>
+    apiFetch<StatsResponse>(`/api/stats${params(query)}`),
 
   patchAd: (
     adId: string,
@@ -118,6 +135,7 @@ export const api = {
     ad_id?: string;
     brand?: string;
     category?: string;
+    risk_label?: string;
     status?: string;
     rerank?: boolean;
     k?: number;

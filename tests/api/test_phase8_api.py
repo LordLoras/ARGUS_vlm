@@ -128,6 +128,120 @@ def test_upload_exact_duplicate_short_circuits(client: TestClient):
     assert payload["job_id"] is None
 
 
+def test_evidence_endpoints_stats_and_risk_filters(client: TestClient, config_path: Path):
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_evidence",
+                "/tmp/evidence.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Wrangler",
+                "automotive",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO frames (ad_id, frame_index, time_ms, path, kept)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("ad_evidence", 0, 500, "/tmp/frame.jpg", 1),
+        )
+        frame_id = conn.execute(
+            "SELECT id FROM frames WHERE ad_id = ? AND frame_index = 0",
+            ("ad_evidence",),
+        ).fetchone()["id"]
+        conn.execute(
+            """
+            INSERT INTO ocr_items (frame_id, engine, text, bbox_json, confidence)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (frame_id, "paddleocr", "Limited time Wrangler offer", "[0,1,2,3]", 0.91),
+        )
+        conn.execute(
+            """
+            INSERT INTO transcript_segments (ad_id, start_ms, end_ms, text, confidence)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("ad_evidence", 0, 1000, "This Wrangler offer ends soon", 0.97),
+        )
+        conn.execute(
+            """
+            INSERT INTO classifications (
+                ad_id, primary_category, risk_labels_json, confidence,
+                ocr_quality_json, vlm_raw_json, evidence_json, vlm_model,
+                vlm_prompt_version, embedder_text_model, embedder_visual_model,
+                pipeline_version, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_evidence",
+                "automotive",
+                '["urgency_pressure"]',
+                0.88,
+                "null",
+                "{}",
+                '[{"time_ms":500,"frame_index":0,"source":"ocr","text":"Limited time Wrangler offer"}]',
+                "mock",
+                "test",
+                "text",
+                "visual",
+                "test",
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+        fts_update(
+            conn,
+            "ad_evidence",
+            brand="Jeep",
+            products="Wrangler",
+            primary_category="automotive",
+            transcript_text="This Wrangler offer ends soon",
+            ocr_text="Limited time Wrangler offer",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    transcript = client.get("/api/ads/ad_evidence/transcript")
+    assert transcript.status_code == 200
+    assert transcript.json()["full_text"] == "This Wrangler offer ends soon"
+
+    ocr = client.get("/api/ads/ad_evidence/ocr")
+    assert ocr.status_code == 200
+    assert ocr.json()["items"][0]["bbox"] == [0, 1, 2, 3]
+
+    listed = client.get("/api/ads", params={"risk_label": "urgency_pressure"})
+    assert [item["id"] for item in listed.json()["items"]] == ["ad_evidence"]
+
+    searched = client.get(
+        "/api/search",
+        params={"mode": "keyword", "q": "Wrangler", "risk_label": "urgency_pressure"},
+    )
+    assert [item["ad_id"] for item in searched.json()["items"]] == ["ad_evidence"]
+
+    stats = client.get("/api/stats")
+    assert stats.status_code == 200
+    assert stats.json()["risk_labels"][0] == {"value": "urgency_pressure", "count": 1}
+
+    export_json = client.get("/api/ads/ad_evidence/export/evidence")
+    assert export_json.status_code == 200
+    assert export_json.json()["ocr_items"][0]["text"] == "Limited time Wrangler offer"
+
+    export_html = client.get("/api/ads/ad_evidence/export/evidence", params={"format": "html"})
+    assert export_html.status_code == 200
+    assert "Limited time Wrangler offer" in export_html.text
+
+
 def test_delete_ad_can_cleanup_database_and_local_artifacts(
     client: TestClient, config_path: Path
 ):

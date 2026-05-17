@@ -66,6 +66,7 @@ class AdRepository:
         category: str | None = None,
         subcategory: str | None = None,
         status: str | None = None,
+        risk_label: str | None = None,
         q: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -93,6 +94,18 @@ class AdRepository:
         if status:
             clauses.append("status = ?")
             params.append(status)
+        if risk_label:
+            clauses.append(
+                """
+                EXISTS (
+                  SELECT 1
+                  FROM classifications c, json_each(c.risk_labels_json)
+                  WHERE c.ad_id = ads.id
+                    AND json_each.value = ?
+                )
+                """
+            )
+            params.append(risk_label)
         if q:
             loose_clause, loose_params = build_loose_like_clause(q)
             if loose_clause:

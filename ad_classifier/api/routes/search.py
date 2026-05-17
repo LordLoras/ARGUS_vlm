@@ -45,6 +45,7 @@ def search_ads(
     ad_id: str | None = None,
     brand: str | None = None,
     category: str | None = None,
+    risk_label: str | None = None,
     status: str | None = None,
     rerank: bool = Query(default=True),
     k: int = Query(default=10, ge=1, le=50),
@@ -68,7 +69,15 @@ def search_ads(
                 for ad_id, score in fts_search_expanded(conn, q, limit=k * 8)
             ]
             hits = filter_by_query_intent(conn, hits, q)
-            hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
+            hits = filter_hits(
+                conn,
+                hits,
+                brand=brand,
+                category=category,
+                risk_label=risk_label,
+                status=status,
+                k=k,
+            )
             return {"mode": mode, "items": _hydrate_hits(conn, hits)}
 
         if mode == "hybrid" and q and not ad_id:
@@ -85,6 +94,7 @@ def search_ads(
                     keyword_hits,
                     brand=brand,
                     category=category,
+                    risk_label=risk_label,
                     status=status,
                     k=k,
                 )
@@ -135,7 +145,15 @@ def search_ads(
             if rerank and q:
                 hits = rerank_hits(conn, hits, q)
             hits = filter_by_query_intent(conn, hits, q)
-            hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
+            hits = filter_hits(
+                conn,
+                hits,
+                brand=brand,
+                category=category,
+                risk_label=risk_label,
+                status=status,
+                k=k,
+            )
             return {
                 "mode": mode,
                 "strategy": "frame_visual",
@@ -175,7 +193,15 @@ def search_ads(
                 store, hits, query_vector, min_score=config.search.text_min_score, modality="text"
             )
             filtered_count = total_before - len(hits)
-            hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
+            hits = filter_hits(
+                conn,
+                hits,
+                brand=brand,
+                category=category,
+                risk_label=risk_label,
+                status=status,
+                k=k,
+            )
             return {
                 "mode": mode,
                 "filtered_count": filtered_count,
@@ -239,7 +265,15 @@ def search_ads(
             if rerank:
                 hits = rerank_hits(conn, hits, q)
             hits = filter_by_query_intent(conn, hits, q)
-            hits = filter_hits(conn, hits, brand=brand, category=category, status=status, k=k)
+            hits = filter_hits(
+                conn,
+                hits,
+                brand=brand,
+                category=category,
+                risk_label=risk_label,
+                status=status,
+                k=k,
+            )
             return {
                 "mode": mode,
                 "strategy": "visual_ocr_rrf",
@@ -286,7 +320,15 @@ def search_ads(
                 filtered.append(item)
             items = filtered
         items = filter_by_query_intent(conn, items, q)
-        items = filter_hits(conn, items, brand=brand, category=category, status=status, k=k)
+        items = filter_hits(
+            conn,
+            items,
+            brand=brand,
+            category=category,
+            risk_label=risk_label,
+            status=status,
+            k=k,
+        )
         return {
             "mode": mode,
             "strategy": "hybrid_rrf",

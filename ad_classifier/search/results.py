@@ -86,10 +86,11 @@ def filter_hits(
     category: str | None,
     status: str | None,
     k: int,
+    risk_label: str | None = None,
 ) -> list[dict[str, Any]]:
     if not hits:
         return []
-    if not any((brand, category, status)):
+    if not any((brand, category, risk_label, status)):
         return hits[:k]
 
     ad_ids = [hit["ad_id"] for hit in hits]
@@ -102,6 +103,18 @@ def filter_hits(
     if category:
         clauses.append("primary_category = ?")
         params.append(category)
+    if risk_label:
+        clauses.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM classifications c, json_each(c.risk_labels_json)
+              WHERE c.ad_id = ads.id
+                AND json_each.value = ?
+            )
+            """
+        )
+        params.append(risk_label)
     if status:
         clauses.append("status = ?")
         params.append(status)

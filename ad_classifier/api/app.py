@@ -11,8 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from ad_classifier.api.routes.ads import router as ads_router
 from ad_classifier.api.routes.agent import router as agent_router
 from ad_classifier.api.routes.campaigns import router as campaigns_router
+from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.search import router as search_router
+from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -89,8 +91,10 @@ def create_app(
     )
 
     app.include_router(ads_router, prefix="/api")
+    app.include_router(evidence_router, prefix="/api")
     app.include_router(jobs_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
+    app.include_router(stats_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")
 

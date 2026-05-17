@@ -313,6 +313,40 @@ export type RelatedAd = {
   differences?: FieldDifference[];
 };
 
+export type TranscriptSegment = {
+  id?: number;
+  ad_id?: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  confidence?: number | null;
+};
+
+export type OcrItemDetail = {
+  id?: number;
+  ad_id?: string;
+  frame_index: number;
+  time_ms: number;
+  frame_path?: string | null;
+  engine: string;
+  text: string;
+  bbox?: number[] | null;
+  confidence?: number | null;
+};
+
+export type StatsCount = {
+  value?: string | null;
+  count: number;
+};
+
+export type StatsResponse = {
+  total_ads: number;
+  by_status: StatsCount[];
+  by_category: StatsCount[];
+  by_brand: StatsCount[];
+  risk_labels: StatsCount[];
+};
+
 export type FieldDifference = {
   field: string;
   left?: string | string[] | null;

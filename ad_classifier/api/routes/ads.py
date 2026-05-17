@@ -125,6 +125,7 @@ def list_ads(
     request: Request,
     brand: str | None = None,
     category: str | None = None,
+    risk_label: str | None = None,
     status: str | None = None,
     q: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
@@ -135,6 +136,7 @@ def list_ads(
         ads = AdRepository(conn).list(
             brand=brand,
             category=category,
+            risk_label=risk_label,
             status=status,
             q=q,
             limit=limit,
