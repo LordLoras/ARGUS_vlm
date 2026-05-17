@@ -1,125 +1,165 @@
-# Pipeline & Demo Analysis
+# ARGUS Suggestions and Roadmap
 
-## Critical Accuracy Issues
+Last updated: 2026-05-17
 
-### A1. Short brand names silently dropped from products — **FIXED**
-**File**: `ad_classifier/vlm/validation.py:48-49`
+This file tracks current product and implementation suggestions against the scope described in `getting_started.html` and `technical_detail.html`.
 
-`_product_in_evidence` now falls back to matching all tokens against the evidence blob when no long/known-short words match, instead of returning `False` and dropping the product. Also added `ram`, `gmc`, `bmw`, `kia`, `ext`, `lt`, `lx`, `se` to `_KNOWN_SHORT_WORDS`.
+## Scope Guardrails
 
-### A2. VLM structured offer data discarded during aggregation — **PARTIALLY FIXED**
-**File**: `ad_classifier/pipeline/aggregation/policy.py:201-206`
+ARGUS is a local-first ad intelligence system. Suggestions should preserve these boundaries:
 
-Offer entities now carry VLM evidence timestamps. The `offer_terms` mapping (expiry, promo codes, scarcity signals) was already correct in the existing code — the offers themselves now have evidence items. Full structured offer mapping (promo codes, urgency signals from individual offers) still goes through `offer_terms` which is already mapped.
+- Keep ingestion, OCR, transcript alignment, VLM classification, marketing entities, embeddings, search, campaigns, and the read-only agent as the core product.
+- Keep the classification path categorization-only. Do not add approve, block, flag, escalation, or human-review workflows.
+- Treat risk labels as descriptive observation tags for search and analysis.
+- Keep the frontend decoupled from the backend through JSON endpoints and SSE.
+- Keep optional creative-analysis features downstream of persisted evidence so they do not block core ingestion/classification.
+- Keep research local-first. Internet research remains out of scope until a controlled web research layer exists.
 
-### A3. `_parse_rating_count` produces garbage from formatted strings — **FIXED**
-**File**: `ad_classifier/pipeline/aggregation/policy.py:416-420`
+## Current Open Technical Debt
 
-Now uses regex to extract the count portion specifically (`[\d,]+` pattern), handles K/M suffixes, and caps at 10M to reject absurd values. "4.7 out of 5 (2,341 ratings)" → `2341`. "1.2K" → `1200`.
+### T1. Remove remaining `decision` / review-era surface area
 
-### A4. Brand validation no-op — ungrounded brands kept — **FIXED**
-**File**: `ad_classifier/vlm/validation.py:41-44`
+Status: open
 
-The `pass` statement has been replaced: when `_brand_in_evidence` returns False and evidence is available, the brand is now cleared (`me.brand.name = None`).
+The project goal says there is no decisioning layer, but legacy `decision` and `needs_human_review` fields still appear in the SQLite schema, generated frontend types, VLM tests, and some model surfaces. `ClassificationRepository` already drops these fields, which is directionally correct, but the remaining schema/API/frontend traces are confusing.
 
----
+Recommended next step:
 
-## High-Severity Accuracy Issues
+- Remove user-facing and API-facing `decision` usage.
+- Keep a migration-safe approach for existing databases, either by leaving nullable legacy columns unused or adding a cleanup migration if practical.
+- Update VLM prompt/tests away from allow/review wording.
 
-### A5. OCR cleanup replaces in-memory data — **NOT YET FIXED**
-**File**: `ad_classifier/worker/stages.py:112-127`
+### T2. Separate raw OCR from cleaned OCR through the pipeline
 
-Original OCR items are saved to DB, then the in-memory list is replaced with VLM-cleaned items. The validation pass still uses cleaned OCR as its evidence source. This is a deeper architectural change that requires threading two OCR lists through the pipeline.
+Status: open
 
-### A6. European locale price misinterpretation — **FIXED**
-**File**: `ad_classifier/marketing/offer_extraction.py:326-332`
+Raw PaddleOCR is persisted, and `raw_ocr_items.json` is written before cleanup, but after OCR cleanup the in-memory pipeline uses cleaned OCR for rules, evidence text collection, validation, embeddings, and marketing enrichment. This weakens the "raw OCR is preserved exactly" rule for downstream reasoning.
 
-`_parse_amount` now handles the ambiguous `1.200` case by only treating comma-thousands format (`1,200`) as large numbers. Period-thousands (`1.200`) are no longer misinterpreted as 1200.
+Recommended next step:
 
-### A7. Auto-specific price filters applied to all categories — **FIXED**
-**File**: `ad_classifier/vlm/validation.py:95-114`
+- Thread both `raw_ocr_items` and `corrected_ocr_items` through rules/evidence/VLM/search decisions.
+- Persist or expose corrected OCR separately instead of replacing the working list.
+- Make evidence source labels explicit: `ocr` for raw OCR, `ocr_cleanup` or `glm_ocr` for advisory corrections.
 
-`_filter_non_vehicle_prices` now accepts a `category` parameter and skips filtering entirely for non-automotive categories. The `validate_vlm_output` function now passes `primary_category` through.
+### T3. Related ads are live-computed, not snapshotted
 
-### A8. OCR dedup always keeps first frame — **FIXED**
-**File**: `ad_classifier/vlm/verifier.py:331-354`
+Status: mostly acceptable
 
-`_dedupe_ocr_text` now prefers the longer OCR text when two frames are duplicates, instead of always keeping the first occurrence.
+The worker computes `related_ads` during aggregation and `/api/ads/{ad_id}/similar` computes similar ads live. That is enough for the UI today. Persistence is only needed if ARGUS needs a historical snapshot of "related at classification time."
 
-### A9. VLM salvage parser matching keys inside strings — **FIXED**
-**File**: `ad_classifier/vlm/verifier.py:124-174`
+Recommended next step:
 
-The salvage parser now uses `re.search(r'"marketing_entities"\s*:', raw)` to match the key followed by a colon (JSON key-value delimiter), preventing matches inside string values. Same fix applied to `offer_terms`.
+- Do not prioritize persistence unless exports or reproducible reports need it.
+- If needed later, add a small `related_ads_json` snapshot or a normalized `ad_related_ads` table.
 
-### A10. Character-level similarity over-deduplicates distinct offers — **FIXED**
-**File**: `ad_classifier/marketing/offer_extraction.py:591-599`
+## Near-Term API and UI Gaps
 
-`_text_similarity_ratio` now uses token-level Jaccard similarity instead of character-level overlap. This significantly reduces false deduplication of offers with shared vocabulary but different terms.
+These are higher-value than adding new AI demos because they expose evidence ARGUS already stores.
 
----
+| Priority | Item | Status | Why it matters |
+|---|---|---|---|
+| 1 | Per-ad transcript endpoint | Open | The DB stores `transcript_segments`, but the ad detail API does not expose them directly. |
+| 2 | Per-ad OCR endpoint | Open | Analysts need raw OCR and optional OCR-VL text by frame. |
+| 3 | Aggregate stats endpoint | Open | Dashboards should not fetch many ad details just to count brands, categories, tags, or statuses. |
+| 4 | Risk-label REST filters/search | Open | Observation tags are important analyst fields but are not first-class REST filters. |
+| 5 | Creative-attribute filters | Open | Fields such as aspect ratio, voiceover, on-screen text, end card, and disclaimer density should be searchable/filterable. |
+| 6 | Evidence export | Open | Useful for demos, QA, and analyst handoff: JSON/HTML bundle with frames, OCR, transcript, entities, and classification. |
 
-## Medium-Severity Issues
+## New Feature Candidate: Video-to-Storyboard Reverse Engineer
 
-### A11. Brand normalization mangles known brand capitalization — **NOT FIXED (by design)**
-The user noted that brand-specific manual tuning (expanding alias lists) is a bad approach. The `_title_case` function remains as-is — it produces reasonable defaults, and the VLM + evidence-based brand resolution handles the rest.
+Recommendation: add after core evidence APIs are cleaned up.
 
-### A12. VLM `decision` field computed but never persisted — **NOT YET FIXED**
-Requires schema decision (remove column vs persist).
+This is a strong demo and fits ARGUS well. It uses data the pipeline already creates: frames, transcript segments, OCR, keyframe selection, VLM reasoning, and campaign context. It should be an optional creative-analysis module, not part of the required classification path.
 
-### A13. Image resolution too low for VLM — **FIXED**
-**File**: `ad_classifier/vlm/verifier.py:305-319`
+### MVP Scope
 
-Default `max_dim` increased from 320 to 512. Added `image_max_dim` config option (`vlm.image_max_dim`, default 512) that flows through to `_encode_image` and `_build_content`.
+- Segment the ad into shots using frame difference, pHash changes, scene-change signals, and transcript timing.
+- Store or return shot records with:
+  - `start_ms`, `end_ms`, `duration_ms`
+  - representative frame path
+  - transition guess: `cut`, `fade`, `dissolve`, `unknown`
+  - on-screen text from OCR/OCR-VL
+  - nearby voiceover/transcript
+  - shot type, camera angle, subject, setting, and mood from VLM
+  - emotional beat and narrative function from LLM
+- Generate an HTML storyboard export before PDF/deck export.
+- Add API endpoint such as `POST /api/ads/{ad_id}/storyboard`.
+- Add frontend tab/action from the ad detail view.
 
-### A14. Self-correction index-based removal has no bounds checking — **FIXED**
-**File**: `ad_classifier/vlm/correction.py:122-132`
+### Later Scope
 
-`prices_to_remove`, `offers_to_remove`, `ctas_to_remove` now filter out non-integer and out-of-bounds indices before applying removal. Off-by-one errors from the LLM no longer silently remove wrong items.
+- Optical-flow camera motion labels: static, pan, tilt, push-in, pull-out, handheld.
+- Campaign-level storyboard comparison.
+- Queries such as "show ads that open with product close-up then price reveal."
+- PowerPoint export for agency-style presentations.
 
----
+### Implementation Notes
 
-## Code Quality Issues Fixed
+- Suggested package: `ad_classifier/creative/storyboard/`.
+- Suggested models: `Storyboard`, `StoryboardShot`, `ShotCamera`, `ShotBeat`.
+- Suggested persistence: start with `data/out/{ad_id}/storyboard.json`; add tables only when the UI needs filtering across storyboards.
+- Tests should cover shot boundary heuristics, transcript alignment, JSON schema validation, and export rendering.
 
-### C1. Global mutable state for sensitive categories — **FIXED**
-**File**: `ad_classifier/pipeline/aggregation/policy.py:46-60`
+## New Feature Candidate: Synthetic Creative Review Panel
 
-Replaced global mutable `_SENSITIVE_CATEGORIES` with `@functools.lru_cache(maxsize=1)` on `_load_sensitive_categories()`, returning a `frozenset` for thread safety.
+Recommendation: add later, but frame it carefully.
 
-### C8. Patch endpoint dropping offer/CTA evidence — **FIXED**
-**File**: `ad_classifier/api/routes/ads.py:287-298`
+This should not be presented as a real focus group or statistically valid demographic research. AI personas are useful for creative stress testing, message clarity checks, objection discovery, and A/B-test ideation. They are not consumer truth.
 
-The PATCH endpoint now preserves existing evidence items when updating offers and CTAs, instead of replacing them with empty evidence.
+Use the name "Synthetic Creative Review Panel" instead of "Synthetic Focus Group" in product/UI copy.
 
----
+### MVP Scope
 
-## Demo-Feature Gaps (Highest Impact for Marketing Researchers)
+- User selects 3-6 configured personas, such as:
+  - budget-conscious parent
+  - skeptical health buyer
+  - luxury shopper
+  - first-time car buyer
+  - Gen Z mobile-first viewer
+  - compliance-minded reviewer
+- Each persona receives the persisted evidence bundle, not unrestricted raw claims:
+  - transcript
+  - OCR/OCR-VL
+  - selected frames
+  - classification
+  - marketing entities
+  - offers, prices, CTAs, disclaimers
+- Each persona returns:
+  - first impression
+  - understood product/offer
+  - emotional reaction
+  - trust or confusion points
+  - likely objection
+  - most memorable frame/line
+  - CTA likelihood as qualitative text, not a fake probability
+- A moderator LLM summarizes:
+  - consensus
+  - disagreements
+  - message clarity issues
+  - strongest hooks
+  - suggested A/B variants
 
-### D1. `related_ads` computed but never persisted — **NOT YET FIXED**
-### D2. No aggregate statistics endpoint — **NOT YET FIXED**
-### D3. Transcript segments not in API — **NOT YET FIXED**
-### D4. OCR items not queryable per-ad — **NOT YET FIXED**
-### D5. No sentiment/tone detection — **NOT YET FIXED**
-### D6. No target audience/demographic inference — **NOT YET FIXED**
-### D7. Creative attributes not filterable — **NOT YET FIXED**
-### D8. Risk labels not searchable via REST — **NOT YET FIXED**
+### Guardrails
 
----
+- Do not infer protected or sensitive real audience traits as facts.
+- Do not claim representativeness.
+- Do not output "market will respond X%."
+- Label outputs as simulated creative review.
+- Keep the analysis local-first and auditable by citing evidence timestamps and ad IDs.
 
-## Quick Wins (Highest Impact / Lowest Effort)
+### Implementation Notes
 
-| Priority | Item | Status | Effort | Impact |
-|----------|------|--------|--------|--------|
-| 1 | Persist related_ads to DB | Not started | 2h | ★★★★★ |
-| 2 | Add `/api/stats` aggregation endpoint | Not started | 3h | ★★★★★ |
-| 3 | Map VLM offer fields into OfferTerms | Fixed | 2h | ★★★★☆ |
-| 4 | Fix brand validation no-op (A4) | Fixed | 15min | ★★★★☆ |
-| 5 | Fix rating count parsing (A3) | Fixed | 30min | ★★★☆☆ |
-| 6 | Fix product evidence matching (A1) | Fixed | 30min | ★★★★☆ |
-| 7 | Fix auto-specific price filtering (A7) | Fixed | 30min | ★★★☆☆ |
-| 8 | Improve OCR dedup (A8) | Fixed | 1h | ★★★☆☆ |
-| 9 | Make image resolution configurable (A13) | Fixed | 1h | ★★★☆☆ |
-| 10 | Add bounds checking to correction (A14) | Fixed | 30min | ★★★☆☆ |
-| 11 | Fix salvage parser key matching (A9) | Fixed | 1h | ★★★☆☆ |
-| 12 | Token-level offer dedup (A10) | Fixed | 1h | ★★★☆☆ |
-| 13 | Thread-safe category loading (C1) | Fixed | 15min | ★★☆☆☆ |
-| 14 | Preserve offer/CTA evidence on patch (C8) | Fixed | 15min | ★★☆☆☆ |
+- Suggested package: `ad_classifier/creative/panel/`.
+- Suggested endpoint: `POST /api/ads/{ad_id}/creative-panel`.
+- Suggested persistence: use a generic `analysis_reports` table later if storyboard, panel, tone, and export reports all need storage.
+- Tests should cover persona prompt construction, evidence grounding, no fabricated ad IDs, and schema validation.
+
+## Priority Order
+
+1. Clean scope drift around `decision` and review-era language.
+2. Expose transcript, OCR, risk labels, and creative attributes through proper APIs.
+3. Fix raw-vs-cleaned OCR data flow.
+4. Add Storyboard Reverse Engineer as the first premium creative-analysis feature.
+5. Add Synthetic Creative Review Panel after storyboard, with strong UI disclaimers.
+6. Consider sentiment/tone labels only as grounded creative descriptors, not demographic truth.
+
