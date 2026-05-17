@@ -397,7 +397,7 @@ def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dic
 
     all_ocr = []
     for fs in bundle.frame_summaries:
-        ocr_text = " ".join(item.text for item in fs.ocr_items if item.text)
+        ocr_text = _format_ocr_items(fs.ocr_items)
         all_ocr.append(ocr_text)
     keep = _dedupe_ocr_text(all_ocr)
 
@@ -442,6 +442,18 @@ def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dic
         )
 
     return parts
+
+
+def _format_ocr_items(items) -> str:
+    by_engine: dict[str, list[str]] = {}
+    for item in items:
+        if item.text:
+            by_engine.setdefault(item.engine or "ocr", []).append(item.text)
+    chunks: list[str] = []
+    for engine, texts in by_engine.items():
+        label = "ocr" if engine in {"paddleocr", "mock"} else engine
+        chunks.append(f"{label}: {' '.join(texts)}")
+    return " | ".join(chunks)
 
 
 class HTTPVLMVerifier(VLMVerifier):

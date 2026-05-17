@@ -21,7 +21,7 @@ def test_parse_cleaned_returns_corrected_items():
     result = _parse_cleaned(raw, original)
     assert len(result) == 2
     assert result[0].text == "Grand Cherokee"
-    assert result[0].engine == "vlm_corrected"
+    assert result[0].engine == "ocr_cleanup"
     assert result[1].text == "0% APR financing"
 
 

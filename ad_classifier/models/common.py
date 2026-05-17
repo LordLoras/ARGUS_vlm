@@ -4,7 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-EvidenceSource = Literal["ocr", "paddlevl", "transcript", "visual", "rule", "vlm"]
+EvidenceSource = Literal[
+    "ocr",
+    "ocr_cleanup",
+    "glm_ocr",
+    "paddlevl",
+    "transcript",
+    "visual",
+    "rule",
+    "vlm",
+]
 
 
 class StrictModel(BaseModel):

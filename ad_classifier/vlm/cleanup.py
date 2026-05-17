@@ -156,7 +156,7 @@ def _parse_cleaned(raw: str, original: list[OCRItem]) -> list[OCRItem]:
                 time_ms=entry.get("time_ms", src.time_ms),
                 text=text,
                 confidence=entry.get("confidence", src.confidence),
-                engine="vlm_corrected",
+                engine="ocr_cleanup",
                 bbox=src.bbox,
             )
         )

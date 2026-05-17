@@ -246,7 +246,7 @@ def _evidence_from_sources(
         EvidenceItem(
             time_ms=item.time_ms,
             frame_index=item.frame_index,
-            source="ocr",
+            source=_ocr_evidence_source(item.engine),
             text=item.text,
             bbox=item.bbox,
             confidence=item.confidence,
@@ -265,6 +265,15 @@ def _evidence_from_sources(
         if segment.text
     )
     return evidence
+
+
+def _ocr_evidence_source(engine: str) -> str:
+    normalized = (engine or "").casefold()
+    if normalized == "ocr_cleanup":
+        return "ocr_cleanup"
+    if normalized == "glm_ocr":
+        return "glm_ocr"
+    return "ocr"
 
 
 def _joined_ocr_evidence(ocr_items: list[OCRItem]) -> list[EvidenceItem]:

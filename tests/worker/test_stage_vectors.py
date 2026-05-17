@@ -19,6 +19,7 @@ from ad_classifier.worker.document_ocr import (
     select_glm_ocr_frames,
 )
 from ad_classifier.worker.stages import (
+    _corrected_ocr_items,
     _write_embeddings,
 )
 
@@ -149,3 +150,15 @@ def test_search_ocr_items_respects_glm_include_switch():
 
     config.glm_ocr.include_in_search = False
     assert [item.engine for item in search_ocr_items(raw, glm, config)] == ["paddleocr"]
+
+
+def test_corrected_ocr_items_keeps_only_cleanup_outputs():
+    items = [
+        OCRItem(frame_index=0, time_ms=0, text="raw", confidence=1.0, engine="paddleocr"),
+        OCRItem(frame_index=0, time_ms=0, text="clean", confidence=0.9, engine="ocr_cleanup"),
+        OCRItem(frame_index=1, time_ms=500, text="glm", confidence=None, engine="glm_ocr"),
+    ]
+
+    corrected = _corrected_ocr_items(items)
+
+    assert [item.text for item in corrected] == ["clean"]

@@ -162,6 +162,8 @@ def run_pipeline_for_job(
         )
 
     raw_ocr_items = list(ocr_items)
+    corrected_ocr_items: list[OCRItem] = []
+    rule_ocr_items = [*raw_ocr_items, *glm_ocr_items]
     vlm_complexity = assess_vlm_complexity(
         ocr_items=raw_ocr_items,
         transcript=ingest.transcript,
@@ -191,10 +193,14 @@ def run_pipeline_for_job(
 
     if config.vlm.enable_ocr_cleanup_pass:
         emit("vlm:cleanup", 0.50, "cleaning OCR text")
-        ocr_items = _run_ocr_cleanup(config, ocr_items, ingest.transcript, vlm_complexity)
+        cleaned = _run_ocr_cleanup(config, raw_ocr_items, ingest.transcript, vlm_complexity)
+        corrected_ocr_items = _corrected_ocr_items(cleaned)
+        if corrected_ocr_items:
+            _replace_ocr_items(conn, ad_id, [*raw_ocr_items, *glm_ocr_items, *corrected_ocr_items])
+            conn.commit()
 
     emit("rules", 0.55, "running rules")
-    rules = RulesEngine(load_rules(config.rules.rules_path)).run(ocr_items, ingest.transcript)
+    rules = RulesEngine(load_rules(config.rules.rules_path)).run(rule_ocr_items, ingest.transcript)
     _replace_rule_triggers(conn, ad_id, rules)
     conn.commit()
 
@@ -209,7 +215,7 @@ def run_pipeline_for_job(
         kept_frames=preprocess_result.kept_frames,
         transcript=ingest.transcript,
         rules_triggered=rules,
-        ocr_by_frame=_ocr_by_frame(ocr_items),
+        ocr_by_frame=_ocr_by_frame([*rule_ocr_items, *corrected_ocr_items]),
         paddlevl_by_frame=bundle_document_outputs(
             paddlevl_by_frame,
             glm_ocr_by_frame,
@@ -236,14 +242,14 @@ def run_pipeline_for_job(
     vlm_result = vlm.verify(bundle)
 
     if config.vlm.enable_post_validation:
-        evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
+        evidence_texts = _collect_evidence_texts(rule_ocr_items, ingest.transcript)
         vlm_result = validate_vlm_output(
             vlm_result, evidence_texts, primary_category=vlm_result.primary_category
         )
 
     if config.vlm.enable_self_correction:
         emit("vlm:correct", 0.72, "self-correction check")
-        evidence_texts = _collect_evidence_texts(ocr_items, ingest.transcript)
+        evidence_texts = _collect_evidence_texts(rule_ocr_items, ingest.transcript)
         vlm_result = _run_self_correction(config, vlm_result, evidence_texts, vlm_complexity)
 
     if getattr(config.vlm, "enable_visual_verify", False):
@@ -251,7 +257,11 @@ def run_pipeline_for_job(
         vlm_result = _run_visual_verify(config, vlm_result, preprocess_result.kept_frames)
 
     emit("embeddings", 0.78, "embedding ad")
-    search_ocr_for_index = search_ocr_items(ocr_items, glm_ocr_items, config)
+    search_ocr_for_index = search_ocr_items(
+        [*raw_ocr_items, *corrected_ocr_items],
+        glm_ocr_items,
+        config,
+    )
     text_embedder = components.text_embedder or SentenceTransformerEmbedder(
         config.text_embedder.model,
         config.text_embedder.device,
@@ -320,7 +330,7 @@ def run_pipeline_for_job(
     )
     final.marketing_entities = enrich_marketing_entities(
         final.marketing_entities,
-        ocr_items=ocr_items,
+        ocr_items=[*rule_ocr_items, *corrected_ocr_items],
         transcript=ingest.transcript,
     )
     ClassificationRepository(conn).upsert(
@@ -535,6 +545,10 @@ def _ocr_by_frame(items: list[OCRItem]) -> dict[int, list[OCRItem]]:
     for item in items:
         out.setdefault(item.frame_index, []).append(item)
     return out
+
+
+def _corrected_ocr_items(items: list[OCRItem]) -> list[OCRItem]:
+    return [item for item in items if item.engine == "ocr_cleanup"]
 
 
 def _mean_pool(vectors: list[list[float]]) -> list[float] | None:
