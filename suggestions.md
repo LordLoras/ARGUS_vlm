@@ -62,8 +62,7 @@ These are higher-value than adding new AI demos because they expose evidence ARG
 | 2 | Per-ad OCR endpoint | Open | Analysts need raw OCR and optional OCR-VL text by frame. |
 | 3 | Aggregate stats endpoint | Open | Dashboards should not fetch many ad details just to count brands, categories, tags, or statuses. |
 | 4 | Risk-label REST filters/search | Open | Observation tags are important analyst fields but are not first-class REST filters. |
-| 5 | Creative-attribute filters | Open | Fields such as aspect ratio, voiceover, on-screen text, end card, and disclaimer density should be searchable/filterable. |
-| 6 | Evidence export | Open | Useful for demos, QA, and analyst handoff: JSON/HTML bundle with frames, OCR, transcript, entities, and classification. |
+| 5 | Evidence export | Open | Useful for demos, QA, and analyst handoff: JSON/HTML bundle with frames, OCR, transcript, entities, and classification. |
 
 ## New Feature Candidate: Video-to-Storyboard Reverse Engineer
 
@@ -157,7 +156,7 @@ Use the name "Synthetic Creative Review Panel" instead of "Synthetic Focus Group
 ## Priority Order
 
 1. Clean scope drift around `decision` and review-era language.
-2. Expose transcript, OCR, risk labels, and creative attributes through proper APIs.
+2. Expose transcript, OCR, risk labels, and evidence export through proper APIs.
 3. Fix raw-vs-cleaned OCR data flow.
 4. Add Storyboard Reverse Engineer as the first premium creative-analysis feature.
 5. Add Synthetic Creative Review Panel after storyboard, with strong UI caveats.
