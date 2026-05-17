@@ -160,6 +160,5 @@ Use the name "Synthetic Creative Review Panel" instead of "Synthetic Focus Group
 2. Expose transcript, OCR, risk labels, and creative attributes through proper APIs.
 3. Fix raw-vs-cleaned OCR data flow.
 4. Add Storyboard Reverse Engineer as the first premium creative-analysis feature.
-5. Add Synthetic Creative Review Panel after storyboard, with strong UI disclaimers.
+5. Add Synthetic Creative Review Panel after storyboard, with strong UI caveats.
 6. Consider sentiment/tone labels only as grounded creative descriptors, not demographic truth.
-

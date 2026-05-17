@@ -45,15 +45,6 @@ rules:
     risk_label: predatory_lending
     severity: medium
 
-  - id: financial_apr
-    pattern: "\\bAPR\\b"
-    match_type: regex
-    case_insensitive: false
-    sources: [ocr, transcript]
-    category: financial_services
-    risk_label: rate_disclosure
-    severity: low
-
   # --- Health / Medical ---
   - id: health_weight_loss
     pattern: "lose \\d+ lbs?"

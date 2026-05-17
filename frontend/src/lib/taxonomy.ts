@@ -40,7 +40,6 @@ export const riskLabels = [
   "targeting_minors",
   "regulated_substance",
   "brand_impersonation",
-  "hidden_disclaimer",
   "price_manipulation",
   "false_scarcity"
 ];

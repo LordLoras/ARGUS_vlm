@@ -287,7 +287,7 @@ def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
             (
                 "ad_campaign",
                 "automotive",
-                '["hidden_disclaimers"]',
+                '["urgency_pressure"]',
                 0.82,
                 "{}",
                 "{}",
