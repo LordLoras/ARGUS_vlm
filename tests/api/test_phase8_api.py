@@ -288,6 +288,66 @@ def test_storyboard_endpoint_creates_shot_artifacts(client: TestClient, config_p
     assert Path(data["paths"]["out"], "ad_story_api", "storyboard.json").exists()
 
 
+def test_creative_panel_endpoint_creates_simulated_report(
+    client: TestClient, config_path: Path
+):
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_panel_api",
+                "/tmp/panel.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Wrangler",
+                "automotive",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO marketing_entities (ad_id, products_json, offers_json, ctas_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "ad_panel_api",
+                '["Wrangler"]',
+                '[{"text":"0% APR", "evidence":[{"time_ms":0,"frame_index":0,"source":"ocr","text":"0% APR"}]}]',
+                '[{"text":"Shop now", "evidence":[{"time_ms":0,"frame_index":0,"source":"ocr","text":"Shop now"}]}]',
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    personas = client.get("/api/creative-panel/personas")
+    assert personas.status_code == 200
+    assert personas.json()["items"]
+
+    response = client.post(
+        "/api/ads/ad_panel_api/creative-panel",
+        json={"persona_ids": ["budget_parent", "skeptical_buyer"]},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["report_type"] == "simulated_creative_review"
+    assert [item["persona_id"] for item in payload["personas"]] == [
+        "budget_parent",
+        "skeptical_buyer",
+    ]
+    assert "not a real focus group" in payload["caveat"]
+    assert Path(data["paths"]["out"], "ad_panel_api", "creative_panel.json").exists()
+
+
 def test_delete_ad_can_cleanup_database_and_local_artifacts(
     client: TestClient, config_path: Path
 ):

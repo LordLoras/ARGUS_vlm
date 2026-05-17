@@ -9,6 +9,8 @@ import type {
   Campaign,
   CampaignDeepResearch,
   CampaignDetail,
+  CreativePanelPersona,
+  CreativePanelReport,
   FrameRecord,
   JobStreamEvent,
   JobRecord,
@@ -92,6 +94,15 @@ export const api = {
 
   createStoryboard: (adId: string) =>
     apiFetch<Storyboard>(`/api/ads/${adId}/storyboard`, { method: "POST" }),
+
+  listCreativePanelPersonas: () =>
+    apiFetch<{ items: CreativePanelPersona[] }>("/api/creative-panel/personas"),
+
+  createCreativePanel: (adId: string, personaIds?: string[]) =>
+    apiFetch<CreativePanelReport>(`/api/ads/${adId}/creative-panel`, {
+      method: "POST",
+      body: JSON.stringify({ persona_ids: personaIds })
+    }),
 
   patchAd: (
     adId: string,

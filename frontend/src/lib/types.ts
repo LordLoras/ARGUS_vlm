@@ -375,6 +375,54 @@ export type Storyboard = {
   shots: StoryboardShot[];
 };
 
+export type CreativePanelPersona = {
+  id: string;
+  label: string;
+  lens: string;
+};
+
+export type PanelCitation = {
+  ad_id: string;
+  time_ms?: number | null;
+  frame_index?: number | null;
+  source: string;
+  text: string;
+};
+
+export type PersonaReaction = {
+  persona_id: string;
+  persona_label: string;
+  lens: string;
+  first_impression: string;
+  understood_product_or_offer: string;
+  emotional_reaction: string;
+  trust_points: string[];
+  confusion_points: string[];
+  likely_objection: string;
+  memorable_moment: string;
+  cta_likelihood: string;
+  citations: PanelCitation[];
+};
+
+export type ModeratorSummary = {
+  consensus: string[];
+  disagreements: string[];
+  message_clarity_issues: string[];
+  strongest_hooks: string[];
+  suggested_ab_variants: string[];
+};
+
+export type CreativePanelReport = {
+  ad_id: string;
+  generated_at: string;
+  json_path: string;
+  report_type: string;
+  caveat: string;
+  personas: PersonaReaction[];
+  moderator_summary: ModeratorSummary;
+  evidence_sources: string[];
+};
+
 export type FieldDifference = {
   field: string;
   left?: string | string[] | null;

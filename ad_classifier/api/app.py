@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from ad_classifier.api.routes.ads import router as ads_router
 from ad_classifier.api.routes.agent import router as agent_router
 from ad_classifier.api.routes.campaigns import router as campaigns_router
+from ad_classifier.api.routes.creative_panel import router as creative_panel_router
 from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.search import router as search_router
@@ -97,6 +98,7 @@ def create_app(
     app.include_router(search_router, prefix="/api")
     app.include_router(stats_router, prefix="/api")
     app.include_router(storyboard_router, prefix="/api")
+    app.include_router(creative_panel_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")
 
