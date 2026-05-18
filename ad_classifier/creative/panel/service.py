@@ -272,6 +272,8 @@ def _complete_json(
     message = client.complete(messages, enable_thinking=thinking)
     raw = message.content or ""
     if not raw.strip():
+        if message.finish_reason == "length":
+            raise ValueError(f"{label} VLM response hit token limit before valid JSON")
         raise ValueError(f"{label} VLM response was empty")
     try:
         parsed = json.loads(_extract_json_object(raw))
