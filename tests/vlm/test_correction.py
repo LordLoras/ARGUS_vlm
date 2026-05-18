@@ -4,8 +4,8 @@ import json
 
 from ad_classifier.vlm.correction import _apply_corrections
 from ad_classifier.vlm.models import (
-    VLMMarketingEntities,
     VLMBrand,
+    VLMMarketingEntities,
     VLMVerificationResult,
 )
 

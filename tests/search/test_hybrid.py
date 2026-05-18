@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ad_classifier.db.connection import apply_migrations, load_sqlite_vec, open_database

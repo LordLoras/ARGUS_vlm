@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -9,9 +10,12 @@ from ad_classifier.config import load_config, resolve_sqlite_path
 
 
 def bench_vectors(
-    db: Path = typer.Option(None, "--db", help="Path to SQLite database"),
-    n: int = typer.Option(100, "--n", help="Number of random vectors to insert + query"),
-    config_path: Path = typer.Option(None, "--config", help="Path to config.yaml"),
+    db: Annotated[Path | None, typer.Option("--db", help="Path to SQLite database")] = None,
+    n: Annotated[int, typer.Option("--n", help="Number of random vectors to insert + query")] = 100,
+    config_path: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to config.yaml"),
+    ] = None,
 ) -> None:
     """Benchmark SqliteVecStore insert and KNN query speed."""
     import random
@@ -27,7 +31,7 @@ def bench_vectors(
         load_sqlite_vec(conn)
     except Exception as exc:
         typer.echo(f"sqlite-vec not available: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     store = SqliteVecStore(
         conn,

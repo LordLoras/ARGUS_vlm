@@ -3,8 +3,6 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-import pytest
-
 from ad_classifier.embeddings.image.mock import MockImageEmbedder
 
 

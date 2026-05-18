@@ -18,6 +18,8 @@ from ad_classifier.creative.panel import (
 router = APIRouter(tags=["creative-panel"])
 
 PanelClientFactory = Callable[[AppConfig], AgentClient]
+CREATIVE_PANEL_BODY = Body(default_factory=CreativePanelRequest)
+CREATIVE_DEBATE_BODY = Body(default_factory=CreativeDebateRequest)
 
 
 @router.get("/creative-panel/personas")
@@ -29,7 +31,7 @@ def get_creative_panel_personas() -> dict[str, list[dict[str, str]]]:
 def create_creative_panel(
     ad_id: str,
     request: Request,
-    body: CreativePanelRequest = Body(default_factory=CreativePanelRequest),
+    body: CreativePanelRequest = CREATIVE_PANEL_BODY,
 ) -> dict:
     config = get_config(request)
     config_file = get_config_file(request)
@@ -61,7 +63,7 @@ def create_creative_panel(
 def create_creative_debate(
     ad_id: str,
     request: Request,
-    body: CreativeDebateRequest = Body(default_factory=CreativeDebateRequest),
+    body: CreativeDebateRequest = CREATIVE_DEBATE_BODY,
 ) -> dict:
     config = get_config(request)
     config_file = get_config_file(request)

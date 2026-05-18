@@ -2,14 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from ad_classifier.ingest.models import TranscriptSegment, WhisperTranscript
-from ad_classifier.pipeline.evidence import EvidenceBundle, build_evidence_bundle
+from ad_classifier.pipeline.evidence import build_evidence_bundle
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.pipeline.preprocess.models import FrameAnalysis
 from ad_classifier.pipeline.rules.models import RuleTrigger
-
 
 # ---------------------------------------------------------------------------
 # Helpers

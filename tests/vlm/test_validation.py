@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from ad_classifier.vlm.models import (
-    VLMMarketingEntities,
-    VLMPrice,
-    VLMOffer,
     VLMBrand,
     VLMEvidence,
+    VLMMarketingEntities,
+    VLMOffer,
+    VLMPrice,
     VLMVerificationResult,
 )
 from ad_classifier.vlm.validation import validate_vlm_output
@@ -82,7 +82,7 @@ def test_validate_removes_empty_evidence():
         evidence=[
             VLMEvidence(text="0% APR financing"),
             VLMEvidence(text=""),
-            VLMevidence := VLMEvidence(text="  "),
+            VLMEvidence(text="  "),
         ],
     )
     validated = validate_vlm_output(result)

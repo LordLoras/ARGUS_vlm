@@ -20,11 +20,11 @@ from ad_classifier.creative.panel.models import (
 from ad_classifier.creative.panel.service import (
     DEFAULT_PERSONAS,
     PERSONAS,
-    _PanelContext,
     _build_context,
     _evidence_sources,
     _moderator_summary,
     _offer_phrase,
+    _PanelContext,
     _product_phrase,
     _reaction,
 )

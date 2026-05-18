@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+from pydantic import ValidationError
 
 from ad_classifier.pipeline.ocr import FrameRef, MockOCREngine, OCRItem, PaddleOCREngine
 
@@ -97,10 +98,10 @@ def test_paddleocr_engine_raises_clear_import_error(tmp_path, monkeypatch):
 
 
 def test_frameref_rejects_negative_index():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         FrameRef(frame_index=-1, time_ms=0, path=Path("/tmp/f.png"))
 
 
 def test_ocr_item_rejects_confidence_out_of_range():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         OCRItem(frame_index=0, time_ms=0, text="hi", confidence=1.5, engine="test")

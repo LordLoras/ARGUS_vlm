@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.vlm.cleanup import _parse_cleaned
 

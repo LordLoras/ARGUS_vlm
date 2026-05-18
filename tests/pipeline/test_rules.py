@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from ad_classifier.ingest.models import TranscriptSegment, WhisperTranscript
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.pipeline.rules import RulesEngine, load_rules
-from ad_classifier.pipeline.rules.models import Rule, RuleTrigger
+from ad_classifier.pipeline.rules.models import Rule
 
 
 def _ocr(text: str, frame_index: int = 0, time_ms: int = 0) -> OCRItem:

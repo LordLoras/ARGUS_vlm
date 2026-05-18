@@ -1,3 +1,4 @@
+from ad_classifier.creative.panel.debate import build_creative_debate
 from ad_classifier.creative.panel.models import (
     CreativeDebateReport,
     CreativeDebateRequest,
@@ -8,7 +9,6 @@ from ad_classifier.creative.panel.models import (
     DebateTurn,
     PersonaReaction,
 )
-from ad_classifier.creative.panel.debate import build_creative_debate
 from ad_classifier.creative.panel.service import build_creative_panel, list_personas
 
 __all__ = [
