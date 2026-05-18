@@ -146,9 +146,7 @@ def _complete_debate_json(
             thinking=thinking,
             label="creative_debate",
         )
-    except ValueError as exc:
-        if "hit token limit" not in str(exc):
-            raise
+    except ValueError:
         return _complete_json(
             client,
             _debate_messages(context, topic, participants, compact=True),

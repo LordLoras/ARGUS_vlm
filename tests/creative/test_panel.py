@@ -4,6 +4,8 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from ad_classifier.agent.client import AgentMessage, MockAgentClient
 from ad_classifier.creative.panel import build_creative_debate, build_creative_panel
 from ad_classifier.creative.panel.service import PERSONAS, _persona_messages
@@ -325,7 +327,11 @@ def test_creative_debate_uses_vlm_with_reasoning(tmp_path: Path):
         conn.close()
 
 
-def test_creative_debate_retries_compact_without_reasoning_after_length(tmp_path: Path):
+@pytest.mark.parametrize("finish_reason", ["length", "stop"])
+def test_creative_debate_retries_compact_without_reasoning_after_json_parse_failure(
+    tmp_path: Path,
+    finish_reason: str,
+):
     conn = _conn(tmp_path)
     try:
         conn.execute(
@@ -361,7 +367,7 @@ def test_creative_debate_retries_compact_without_reasoning_after_length(tmp_path
                 AgentMessage(
                     content='{"opening_statements":[{"speaker_persona_id":"budget_parent"',
                     tool_calls=[],
-                    finish_reason="length",
+                    finish_reason=finish_reason,
                 ),
                 AgentMessage(
                     content=(
