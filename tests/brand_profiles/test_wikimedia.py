@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from ad_classifier.brand_profiles.wikimedia import (
     WikimediaBrandProfileClient,
@@ -35,6 +36,20 @@ def test_wikimedia_client_builds_company_context_from_wikipedia_and_wikidata():
     assert profile.key_metrics["revenue"] == "189,000,000 US dollar (2023)"
     assert any(step.action == "candidate" for step in profile.lookup_steps)
     assert profile.source_json["wikidata_claim_counts"]["P749"] == 1
+
+    http_client.close()
+
+
+def test_wikimedia_client_rejects_snippet_only_name_matches():
+    transport = httpx.MockTransport(_snippet_only_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
+        client.fetch("Prillaman")
 
     http_client.close()
 
@@ -116,6 +131,51 @@ def _wikimedia_handler(request: httpx.Request) -> httpx.Response:
                     for qid in ids
                     if qid
                 }
+            },
+        )
+    return httpx.Response(404, request=request, json={"error": "not mocked"})
+
+
+def _snippet_only_handler(request: httpx.Request) -> httpx.Response:
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("list") == "search"
+    ):
+        return _json(
+            request,
+            {
+                "query": {
+                    "search": [
+                        {
+                            "title": "Star Wars: Episode I - The Phantom Menace",
+                            "pageid": 50793,
+                            "snippet": "News and Past Events - Prillaman.net.",
+                        },
+                        {
+                            "title": "Stanley Furniture",
+                            "pageid": 25058748,
+                            "snippet": "Glenn Prillaman resigned from his role as CEO.",
+                        },
+                    ]
+                }
+            },
+        )
+    if (
+        request.url.host == "www.wikidata.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("action") == "wbsearchentities"
+    ):
+        return _json(
+            request,
+            {
+                "search": [
+                    {
+                        "id": "Q165713",
+                        "label": "Star Wars: Episode I - The Phantom Menace",
+                        "description": "1999 film directed by George Lucas",
+                    }
+                ]
             },
         )
     return httpx.Response(404, request=request, json={"error": "not mocked"})

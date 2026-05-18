@@ -111,6 +111,17 @@ class WikimediaBrandProfileClient:
         qid = page_info.get("wikidata_qid")
         if not qid:
             qid = self._wikidata_search(name, steps, context=context)
+        if selected is None and not qid:
+            steps.append(
+                BrandProfileLookupStep(
+                    source="wikimedia",
+                    action="no_relevant_candidate",
+                    query=name,
+                    result_count=0,
+                    detail="no candidate title or label matched the requested name",
+                )
+            )
+            raise ValueError(f"no relevant Wikimedia profile found for {name}")
 
         entity = self._wikidata_entity(str(qid), steps) if qid else {}
         labels = self._resolve_labels(collect_label_qids(entity), steps)

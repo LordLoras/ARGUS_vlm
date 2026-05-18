@@ -30,7 +30,18 @@ _CATEGORY_TERMS: dict[str, list[str]] = {
     "energy": ["energy", "oil", "gas", "petroleum", "utility", "power"],
     "real_estate": ["real estate", "property", "housing", "development", "construction"],
     "education": ["education", "university", "school", "learning", "academy"],
+    "home_improvement": [
+        "air conditioning",
+        "heating",
+        "hvac",
+        "plumbing",
+        "contractor",
+        "home improvement",
+        "repair",
+    ],
 }
+
+_MIN_CANDIDATE_SCORE = 2.0
 
 
 @dataclass
@@ -67,16 +78,31 @@ def select_wikipedia_candidate(
         return None
     normalized = normalize_profile_name(name)
     ranked = sorted(
-        candidates,
-        key=lambda candidate: _candidate_score(
-            normalized,
-            str(candidate.get("title") or ""),
-            str(candidate.get("snippet") or ""),
-            context=context,
+        (
+            (
+                candidate,
+                _candidate_score(
+                    normalized,
+                    str(candidate.get("title") or ""),
+                    str(candidate.get("snippet") or ""),
+                    context=context,
+                ),
+            )
+            for candidate in candidates
         ),
+        key=lambda item: item[1],
         reverse=True,
     )
-    return ranked[0]
+    for candidate, score in ranked:
+        title = str(candidate.get("title") or "")
+        detail = str(candidate.get("snippet") or "")
+        if score >= _MIN_CANDIDATE_SCORE and _candidate_name_matches(
+            normalized,
+            title,
+            detail,
+        ):
+            return candidate
+    return None
 
 
 def select_wikidata_candidate(
@@ -88,16 +114,31 @@ def select_wikidata_candidate(
         return None
     normalized = normalize_profile_name(name)
     ranked = sorted(
-        candidates,
-        key=lambda candidate: _candidate_score(
-            normalized,
-            str(candidate.get("label") or ""),
-            str(candidate.get("description") or ""),
-            context=context,
+        (
+            (
+                candidate,
+                _candidate_score(
+                    normalized,
+                    str(candidate.get("label") or ""),
+                    str(candidate.get("description") or ""),
+                    context=context,
+                ),
+            )
+            for candidate in candidates
         ),
+        key=lambda item: item[1],
         reverse=True,
     )
-    return ranked[0]
+    for candidate, score in ranked:
+        label = str(candidate.get("label") or "")
+        detail = str(candidate.get("description") or "")
+        if score >= _MIN_CANDIDATE_SCORE and _candidate_name_matches(
+            normalized,
+            label,
+            detail,
+        ):
+            return candidate
+    return None
 
 
 def candidate_digest(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -191,6 +232,41 @@ def _candidate_score(
                 break
 
     return score
+
+
+def _candidate_name_matches(normalized_query: str, title: str, detail: str) -> bool:
+    title_norm = normalize_profile_name(title)
+    if not normalized_query or not title_norm:
+        return False
+    if title_norm == normalized_query:
+        return True
+    if title_norm.startswith(f"{normalized_query} "):
+        return True
+    if normalized_query.startswith(f"{title_norm} "):
+        return True
+
+    query_tokens = _distinctive_tokens(normalized_query)
+    title_tokens = _distinctive_tokens(title_norm)
+    if not query_tokens or not title_tokens:
+        return False
+
+    overlap = query_tokens & title_tokens
+    if len(overlap) >= min(2, len(query_tokens)):
+        return True
+
+    # A one-token brand can be represented by a longer article title such as
+    # "Ram Trucks"; snippets alone are not enough because Wikimedia search often
+    # matches author/citation text on unrelated pages.
+    if len(query_tokens) == 1 and overlap:
+        return True
+
+    detail_norm = normalize_profile_name(strip_html(detail))
+    detail_tokens = _distinctive_tokens(detail_norm)
+    return bool(overlap and query_tokens <= (title_tokens | detail_tokens))
+
+
+def _distinctive_tokens(text: str) -> set[str]:
+    return {token for token in text.split() if len(token) > 2}
 
 
 def is_disambiguation(candidates: list[dict[str, Any]]) -> bool:
