@@ -6,6 +6,7 @@ import type {
   AgentMessage,
   AgentSession,
   AgentStreamEvent,
+  BrandProfileEnrichmentResponse,
   Campaign,
   CampaignDeepResearch,
   CampaignDetail,
@@ -66,6 +67,15 @@ export const api = {
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),
 
   getAd: (adId: string) => apiFetch<AdDetail>(`/api/ads/${adId}`),
+
+  enrichBrandProfile: (
+    adId: string,
+    body: { target: "brand" | "advertiser"; force?: boolean; query?: string | null }
+  ) =>
+    apiFetch<BrandProfileEnrichmentResponse>(`/api/ads/${adId}/brand-profile/enrich`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
 
   getFrames: (adId: string) =>
     apiFetch<{ items: FrameRecord[] }>(`/api/ads/${adId}/frames`),

@@ -1,14 +1,20 @@
+import { Fragment } from "react";
+
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import type { AdDetail } from "../../lib/types";
+import type { AdDetail, BrandProfile } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
 import { TimestampChip } from "../shared/TimestampChip";
 
 export function OverviewTab({
   detail,
-  onSeek
+  onSeek,
+  onEnrichProfile,
+  enrichingProfileTarget
 }: {
   detail: AdDetail;
   onSeek?: (timeMs: number) => void;
+  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
+  enrichingProfileTarget?: "brand" | "advertiser" | null;
 }) {
   const cls = detail.classification;
   const ent = detail.marketing_entities;
@@ -23,6 +29,8 @@ export function OverviewTab({
     : ent?.products ?? [];
   const disclaimers = ent?.disclaimers ?? [];
   const subcategory = detail.ad.subcategory ?? ent?.subcategory ?? null;
+  const brandName = detail.ad.brand_name || ent?.brand?.name || null;
+  const advertiserName = detail.ad.advertiser_name || ent?.advertiser?.advertiser_name || null;
   const iab = cls?.iab_category ?? (
     detail.ad.iab_unique_id && detail.ad.iab_full_path && detail.ad.iab_selected_category
       ? {
@@ -96,7 +104,7 @@ export function OverviewTab({
         <dl className="kv">
           <dt>Brand</dt>
           <dd>
-            {detail.ad.brand_name || ent?.brand?.name || "—"}
+            {brandName || "—"}
             {ent?.brand?.logo_present ? (
               <span className="badge badge-violet" style={{ marginLeft: 6 }}>
                 logo present
@@ -104,12 +112,28 @@ export function OverviewTab({
             ) : null}
           </dd>
           <dt>Advertiser</dt>
-          <dd>{detail.ad.advertiser_name || "—"}</dd>
+          <dd>{advertiserName || "—"}</dd>
           <dt>Tagline</dt>
           <dd>{ent?.brand?.tagline || "—"}</dd>
           <dt>Products</dt>
           <dd>{products.length ? products.join(", ") : "—"}</dd>
         </dl>
+        <ProfilePanel
+          title="Brand profile"
+          target="brand"
+          name={brandName}
+          profile={detail.brand_profile}
+          loading={enrichingProfileTarget === "brand"}
+          onEnrichProfile={onEnrichProfile}
+        />
+        <ProfilePanel
+          title="Advertiser profile"
+          target="advertiser"
+          name={advertiserName}
+          profile={detail.advertiser_profile}
+          loading={enrichingProfileTarget === "advertiser"}
+          onEnrichProfile={onEnrichProfile}
+        />
       </Card>
 
       <Card title="Observation tags" count={risks.length}>
@@ -192,6 +216,119 @@ export function OverviewTab({
       </Card>
     </>
   );
+}
+
+function ProfilePanel({
+  title,
+  target,
+  name,
+  profile,
+  loading,
+  onEnrichProfile
+}: {
+  title: string;
+  target: "brand" | "advertiser";
+  name: string | null;
+  profile?: BrandProfile | null;
+  loading?: boolean;
+  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
+}) {
+  const metrics = Object.entries(profile?.key_metrics ?? {}).slice(0, 5);
+  const hasCompanyContext = Boolean(
+    profile?.parent_companies?.length ||
+      profile?.owners?.length ||
+      profile?.corporate_chain?.length ||
+      profile?.industries?.length ||
+      metrics.length
+  );
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="section-title" style={{ marginBottom: 0, flex: 1 }}>{title}</div>
+        <button
+          className="btn btn-sm"
+          disabled={!name || loading || !onEnrichProfile}
+          onClick={() => onEnrichProfile?.(target, Boolean(profile))}
+          title={profile ? "Refresh profile" : "Enrich profile"}
+        >
+          <span>{loading ? "Looking up" : profile ? "Refresh" : "Enrich"}</span>
+        </button>
+      </div>
+      {!name ? <div className="obs-empty">No {target} name.</div> : null}
+      {name && !profile ? <div className="obs-empty">No cached profile.</div> : null}
+      {profile ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ color: "var(--fg)" }}>{profile.display_name || profile.query_name}</span>
+            {profile.wikidata_qid ? <span className="badge badge-mono">{profile.wikidata_qid}</span> : null}
+            {profile.wikipedia_url ? (
+              <a href={profile.wikipedia_url} target="_blank" rel="noreferrer" style={{ color: "var(--accent-2)", fontSize: 12 }}>
+                Wikipedia
+              </a>
+            ) : null}
+          </div>
+          {profile.description ? <div style={{ color: "var(--fg-mute)", fontSize: 12 }}>{profile.description}</div> : null}
+          {hasCompanyContext ? (
+            <dl className="kv" style={{ overflowWrap: "anywhere" }}>
+              <dt>Parent chain</dt>
+              <dd>{joinList(profile.corporate_chain) || joinList(profile.parent_companies) || "—"}</dd>
+              <dt>Owned by</dt>
+              <dd>{joinList(profile.owners) || "—"}</dd>
+              <dt>Industry</dt>
+              <dd>{joinList(profile.industries) || "—"}</dd>
+              <dt>Website</dt>
+              <dd>
+                {profile.official_website ? (
+                  <a href={profile.official_website} target="_blank" rel="noreferrer" style={{ color: "var(--accent-2)" }}>
+                    {profile.official_website}
+                  </a>
+                ) : "—"}
+              </dd>
+              <dt>HQ</dt>
+              <dd>{joinList(profile.headquarters) || "—"}</dd>
+              <dt>Country</dt>
+              <dd>{joinList(profile.countries) || "—"}</dd>
+              <dt>Founded</dt>
+              <dd>{profile.inception || "—"}</dd>
+              {metrics.map(([key, value]) => (
+                <Fragment key={key}>
+                  <dt>{metricLabel(key)}</dt>
+                  <dd>{Array.isArray(value) ? value.join(", ") : value}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          ) : null}
+          {profile.summary ? <div style={{ color: "var(--fg-mute)", fontSize: 12, lineHeight: 1.5 }}>{profile.summary}</div> : null}
+          {profile.lookup_steps?.length ? (
+            <details>
+              <summary style={{ cursor: "pointer", color: "var(--accent-2)", fontSize: 12 }}>
+                Lookup chain
+              </summary>
+              <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+                {profile.lookup_steps.slice(0, 12).map((step, idx) => (
+                  <div key={`${step.source}-${step.action}-${idx}`} className="mono" style={{ color: "var(--fg-mute)", fontSize: 11, overflowWrap: "anywhere" }}>
+                    {step.source}/{step.action}
+                    {step.title ? ` · ${step.title}` : ""}
+                    {step.qid ? ` · ${step.qid}` : ""}
+                    {step.result_count != null ? ` · ${step.result_count}` : ""}
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function joinList(values?: string[]) {
+  return values?.filter(Boolean).join(", ") ?? "";
+}
+
+function metricLabel(key: string) {
+  return key.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function Card({

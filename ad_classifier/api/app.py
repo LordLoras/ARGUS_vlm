@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ad_classifier.api.routes.ads import router as ads_router
 from ad_classifier.api.routes.agent import router as agent_router
+from ad_classifier.api.routes.brand_profiles import router as brand_profiles_router
 from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.creative_panel import router as creative_panel_router
 from ad_classifier.api.routes.evidence import router as evidence_router
@@ -31,6 +32,7 @@ def create_app(
     agent_visual_text_embedder_factory: Callable | None = None,
     agent_vector_store_factory: Callable | None = None,
     creative_panel_client_factory: Callable | None = None,
+    brand_profile_client_factory: Callable | None = None,
 ) -> FastAPI:
     config, config_file = load_config(config_path)
     resolved_db = db_path or resolve_config_path(config.paths.sqlite_path, config_file)
@@ -71,6 +73,7 @@ def create_app(
     app.state.agent_visual_text_embedder_factory = agent_visual_text_embedder_factory
     app.state.agent_vector_store_factory = agent_vector_store_factory
     app.state.creative_panel_client_factory = creative_panel_client_factory
+    app.state.brand_profile_client_factory = brand_profile_client_factory
 
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
@@ -98,6 +101,7 @@ def create_app(
     app.include_router(jobs_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(stats_router, prefix="/api")
+    app.include_router(brand_profiles_router, prefix="/api")
     app.include_router(creative_panel_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")

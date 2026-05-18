@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,6 +12,8 @@ from ad_classifier.agent.client import AgentMessage, MockAgentClient
 from ad_classifier.api.app import create_app
 from ad_classifier.db.connection import load_sqlite_vec, open_database
 from ad_classifier.db.repositories import JobRepository
+from ad_classifier.models.ads import utc_now
+from ad_classifier.models.brand_profiles import BrandProfile, BrandProfileLookupStep
 from ad_classifier.models.jobs import JobRecord
 from ad_classifier.search.fts import fts_update
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -669,6 +671,92 @@ def test_vector_search_route_loads_sqlite_vec(client: TestClient):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "visual vector not found"
+
+
+def test_brand_profile_enrichment_persists_cache_and_returns_on_detail(config_path: Path):
+    calls: list[str] = []
+
+    class FakeBrandProfileClient:
+        def fetch(self, name: str) -> BrandProfile:
+            calls.append(name)
+            now = utc_now()
+            return BrandProfile(
+                normalized_name="jeep",
+                query_name=name,
+                display_name="Jeep",
+                description="American automobile brand",
+                summary="Jeep is an American automobile brand now owned by Stellantis.",
+                wikipedia_title="Jeep",
+                wikipedia_url="https://en.wikipedia.org/wiki/Jeep",
+                wikidata_qid="Q43193",
+                parent_companies=["Stellantis"],
+                owners=["Stellantis"],
+                corporate_chain=["Stellantis", "Exor"],
+                industries=["automotive industry"],
+                key_metrics={"employees": "10,000"},
+                lookup_steps=[
+                    BrandProfileLookupStep(
+                        source="wikipedia",
+                        action="search",
+                        query=name,
+                        result_count=1,
+                    )
+                ],
+                source_urls=["https://en.wikipedia.org/wiki/Jeep"],
+                fetched_at=now,
+                expires_at=now + timedelta(days=90),
+            )
+
+    app = create_app(
+        config_path=config_path,
+        brand_profile_client_factory=lambda _config: FakeBrandProfileClient(),
+    )
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, advertiser_name
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_profile",
+                "/tmp/profile.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Stellantis",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with TestClient(app) as profile_client:
+        response = profile_client.post(
+            "/api/ads/ad_profile/brand-profile/enrich",
+            json={"target": "brand"},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["cached"] is False
+        assert payload["profile"]["parent_companies"] == ["Stellantis"]
+        assert payload["profile"]["corporate_chain"] == ["Stellantis", "Exor"]
+        assert calls == ["Jeep"]
+
+        detail = profile_client.get("/api/ads/ad_profile")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["brand_profile"]["display_name"] == "Jeep"
+        assert detail.json()["brand_profile"]["key_metrics"]["employees"] == "10,000"
+
+        cached = profile_client.post(
+            "/api/ads/ad_profile/brand-profile/enrich",
+            json={"target": "brand"},
+        )
+        assert cached.status_code == 200
+        assert cached.json()["cached"] is True
+        assert calls == ["Jeep"]
 
 
 def test_search_keyword_returns_preview(client: TestClient, config_path: Path):

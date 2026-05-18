@@ -31,6 +31,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "005_flag_to_review",
         "006_duplicate_metadata",
         "007_iab_taxonomy",
+        "008_brand_profiles",
     ]
 
     conn = open_database(db_path)
@@ -50,6 +51,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "ads_fts",
             "agent_sessions",
             "agent_messages",
+            "brand_profiles",
             "schema_migrations",
         }.issubset(tables)
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
@@ -84,6 +86,18 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "campaign_suggestions_json",
             "subcategory_json",
         }.issubset(marketing_columns)
+        profile_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(brand_profiles)").fetchall()
+        }
+        assert {
+            "normalized_name",
+            "parent_companies_json",
+            "owners_json",
+            "corporate_chain_json",
+            "key_metrics_json",
+            "lookup_steps_json",
+            "source_json",
+        }.issubset(profile_columns)
     finally:
         conn.close()
 

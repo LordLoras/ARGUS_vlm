@@ -378,6 +378,20 @@ class SearchConfig(BaseModel):
     visual_hybrid_min_score: float = Field(default=0.08, ge=-1.0, le=1.0)
 
 
+class BrandProfilesConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    user_agent: str = (
+        "ARGUS-VLM/0.1 (local-first ad classifier; "
+        "https://github.com/LordLoras/ARGUS_vlm)"
+    )
+    timeout_s: float = Field(default=10.0, ge=0.1)
+    cache_days: int = Field(default=90, ge=1)
+    max_candidates: int = Field(default=5, ge=1, le=10)
+    max_parent_depth: int = Field(default=3, ge=0, le=5)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -398,6 +412,7 @@ class AppConfig(BaseModel):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
+    brand_profiles: BrandProfilesConfig = Field(default_factory=BrandProfilesConfig)
 
     @model_validator(mode="after")
     def _resolve_agent_endpoint(self) -> AppConfig:

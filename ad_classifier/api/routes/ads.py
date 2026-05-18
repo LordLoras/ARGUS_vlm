@@ -11,9 +11,11 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from ad_classifier.api.deps import get_config, get_config_file, get_upload_probe, open_request_db
+from ad_classifier.brand_profiles.wikimedia import normalize_profile_name
 from ad_classifier.config import resolve_config_path
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdCampaignRepository, AdRepository, JobRepository
+from ad_classifier.db.repositories.brand_profiles import BrandProfileRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.dedup.file_hash import source_sha256
@@ -165,11 +167,22 @@ def get_ad(ad_id: str, request: Request) -> dict[str, Any]:
             logger.warning("malformed_marketing_entities", ad_id=ad_id, error=str(exc))
             marketing = None
         campaigns = AdCampaignRepository(conn).list_for_ad(ad_id)
+        profile_repo = BrandProfileRepository(conn)
+        brand_profile = _cached_profile(
+            profile_repo,
+            ad.brand_name or (marketing.brand.name if marketing else None),
+        )
+        advertiser_profile = _cached_profile(
+            profile_repo,
+            ad.advertiser_name or (marketing.advertiser.advertiser_name if marketing else None),
+        )
         return {
             "ad": _dump(ad),
             "classification": _dump(classification),
             "marketing_entities": _dump(marketing),
             "campaigns": [_dump(campaign) for campaign in campaigns],
+            "brand_profile": _dump(brand_profile),
+            "advertiser_profile": _dump(advertiser_profile),
         }
     finally:
         conn.close()
@@ -416,3 +429,10 @@ def _dump(value):
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
     return value
+
+
+def _cached_profile(repo: BrandProfileRepository, name: str | None):
+    if not name:
+        return None
+    normalized = normalize_profile_name(name)
+    return repo.get(normalized) if normalized else None

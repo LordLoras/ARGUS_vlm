@@ -266,6 +266,18 @@ campaigns:
     clusterer: hdbscan            # hdbscan | agglomerative
     name_template: "{brand} {month} {year}"
 
+brand_profiles:
+  # Explicit user-action enrichment for bigger brands/advertisers. This is not
+  # part of ingest and never overwrites ad-extracted marketing evidence.
+  # Uses Wikimedia public read APIs; set a descriptive User-Agent per API etiquette.
+  enabled: true
+  user_agent: "ARGUS-VLM/0.1 (local-first ad classifier; https://github.com/LordLoras/ARGUS_vlm)"
+  timeout_s: 10
+  cache_days: 90
+  max_candidates: 5
+  # Follow parent/owner Wikidata claims this many hops for corporate-chain context.
+  max_parent_depth: 3
+
 api:
   # FastAPI bind address. 127.0.0.1 keeps the API local-only.
   host: 127.0.0.1

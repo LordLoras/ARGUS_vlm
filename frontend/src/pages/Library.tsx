@@ -172,6 +172,21 @@ export function Library() {
     }
   });
 
+  const enrichProfileMutation = useMutation({
+    mutationFn: ({
+      adId,
+      target,
+      force
+    }: {
+      adId: string;
+      target: "brand" | "advertiser";
+      force?: boolean;
+    }) => api.enrichBrandProfile(adId, { target, force }),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["ad-detail", variables.adId] });
+    }
+  });
+
   const totalAds = counts.total;
   const campaignsCount = useMemo(() => {
     const ids = new Set<string>();
@@ -287,6 +302,12 @@ export function Library() {
           assigningCampaign={assignCampaignMutation.isPending}
           onAssignCampaign={(campaignId) =>
             assignCampaignMutation.mutate({ campaignId, adId: selectedDetail.ad.id })
+          }
+          enrichingProfileTarget={
+            enrichProfileMutation.isPending ? enrichProfileMutation.variables?.target ?? null : null
+          }
+          onEnrichProfile={(target, force) =>
+            enrichProfileMutation.mutate({ adId: selectedDetail.ad.id, target, force })
           }
           onDelete={() => {
             if (

@@ -136,6 +136,60 @@ export type MarketingEntities = {
     app_store_links?: unknown[];
     qr_codes?: unknown[];
   };
+  advertiser?: {
+    advertiser_name?: string | null;
+    brand_name?: string | null;
+    parent_company?: string | null;
+    service_area?: string[];
+    locations?: string[];
+    evidence?: EvidenceItem[];
+  };
+};
+
+export type BrandProfileLookupStep = {
+  source: string;
+  action: string;
+  status?: string | null;
+  query?: string | null;
+  title?: string | null;
+  qid?: string | null;
+  url?: string | null;
+  result_count?: number | null;
+  detail?: string | null;
+};
+
+export type BrandProfile = {
+  normalized_name: string;
+  query_name: string;
+  display_name?: string | null;
+  description?: string | null;
+  summary?: string | null;
+  wikipedia_title?: string | null;
+  wikipedia_url?: string | null;
+  wikipedia_page_id?: number | null;
+  wikidata_qid?: string | null;
+  parent_companies?: string[];
+  owners?: string[];
+  corporate_chain?: string[];
+  industries?: string[];
+  official_website?: string | null;
+  headquarters?: string[];
+  countries?: string[];
+  inception?: string | null;
+  founded_by?: string[];
+  subsidiaries?: string[];
+  key_metrics?: Record<string, string | string[]>;
+  lookup_steps?: BrandProfileLookupStep[];
+  source_urls?: string[];
+  source_json?: Record<string, unknown>;
+  fetched_at?: string | null;
+  expires_at?: string | null;
+};
+
+export type BrandProfileEnrichmentResponse = {
+  target: "brand" | "advertiser";
+  cached: boolean;
+  profile: BrandProfile;
 };
 
 export type Campaign = {
@@ -305,6 +359,8 @@ export type AdDetail = {
   classification?: ClassificationRecord | null;
   marketing_entities?: MarketingEntities | null;
   campaigns?: Campaign[];
+  brand_profile?: BrandProfile | null;
+  advertiser_profile?: BrandProfile | null;
 };
 
 export type FrameRecord = {

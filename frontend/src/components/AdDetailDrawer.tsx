@@ -23,8 +23,10 @@ export function AdDetailDrawer({
   onSelectRelated,
   campaigns = [],
   onAssignCampaign,
+  onEnrichProfile,
   saving,
   assigningCampaign,
+  enrichingProfileTarget,
   initialTab = "Overview"
 }: {
   detail: AdDetail;
@@ -36,8 +38,10 @@ export function AdDetailDrawer({
   onSelectRelated?: (adId: string) => void;
   campaigns?: Campaign[];
   onAssignCampaign?: (campaignId: string) => void;
+  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
   saving?: boolean;
   assigningCampaign?: boolean;
+  enrichingProfileTarget?: "brand" | "advertiser" | null;
   initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -165,7 +169,14 @@ export function AdDetailDrawer({
           </div>
 
           <div className="tab-pane">
-            {tab === "Overview" ? <OverviewTab detail={detail} onSeek={seekVideo} /> : null}
+            {tab === "Overview" ? (
+              <OverviewTab
+                detail={detail}
+                onSeek={seekVideo}
+                onEnrichProfile={onEnrichProfile}
+                enrichingProfileTarget={enrichingProfileTarget}
+              />
+            ) : null}
             {tab === "Evidence" ? (
               <EvidenceTab classification={detail.classification} frames={frames} onSeek={seekVideo} />
             ) : null}
