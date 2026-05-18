@@ -104,7 +104,11 @@ def apply_migrations(conn: sqlite3.Connection) -> list[str]:
             continue
 
         sql = migration.read_text(encoding="utf-8")
-        conn.executescript(sql)
+        try:
+            conn.executescript(sql)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
         conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
         conn.commit()
         newly_applied.append(version)

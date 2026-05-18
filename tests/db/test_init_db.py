@@ -32,6 +32,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "006_duplicate_metadata",
         "007_iab_taxonomy",
         "008_brand_profiles",
+        "009_brand_profiles_alter",
     ]
 
     conn = open_database(db_path)

@@ -677,7 +677,7 @@ def test_brand_profile_enrichment_persists_cache_and_returns_on_detail(config_pa
     calls: list[str] = []
 
     class FakeBrandProfileClient:
-        def fetch(self, name: str) -> BrandProfile:
+        def fetch(self, name: str, *, context=None) -> BrandProfile:
             calls.append(name)
             now = utc_now()
             return BrandProfile(

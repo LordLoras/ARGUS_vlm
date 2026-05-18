@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ad_classifier.api.deps import get_config, open_request_db
+from ad_classifier.brand_profiles.matching import SearchContext
 from ad_classifier.brand_profiles.wikimedia import (
     WikimediaBrandProfileClient,
     normalize_profile_name,
@@ -57,8 +58,15 @@ def enrich_brand_profile(
             }
 
         client = _brand_profile_client(request)
+        search_context = SearchContext(
+            category=ad.primary_category,
+            products=marketing.products[:3] if marketing else [],
+            parent_company=(
+                marketing.advertiser.parent_company if marketing else None
+            ),
+        )
         try:
-            profile = client.fetch(name)
+            profile = client.fetch(name, context=search_context)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except httpx.HTTPError as exc:

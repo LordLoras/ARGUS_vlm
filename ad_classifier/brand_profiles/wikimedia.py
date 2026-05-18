@@ -7,9 +7,12 @@ from urllib.parse import quote
 import httpx
 
 from ad_classifier.brand_profiles.matching import (
+    SearchContext,
     candidate_digest,
+    enriched_queries,
     first_unseen,
     int_or_none,
+    is_disambiguation,
     normalize_profile_name,
     select_wikidata_candidate,
     select_wikipedia_candidate,
@@ -60,7 +63,7 @@ class WikimediaBrandProfileClient:
         self.max_parent_depth = max_parent_depth
         self.http_client = http_client
 
-    def fetch(self, name: str) -> BrandProfile:
+    def fetch(self, name: str, *, context: SearchContext | None = None) -> BrandProfile:
         normalized = normalize_profile_name(name)
         if not normalized:
             raise ValueError("brand or advertiser name is empty")
@@ -72,7 +75,29 @@ class WikimediaBrandProfileClient:
 
         candidates = self._wikipedia_search(name, steps)
         source_json["wikipedia_candidates"] = candidate_digest(candidates)
-        selected = select_wikipedia_candidate(name, candidates)
+
+        # Retry with enriched queries if initial results look like disambiguation.
+        if is_disambiguation(candidates) and context is not None:
+            for fallback_query in enriched_queries(name, context):
+                fallback_candidates = self._wikipedia_search(fallback_query, steps)
+                if fallback_candidates and not is_disambiguation(fallback_candidates):
+                    candidates = fallback_candidates
+                    source_json["wikipedia_candidates_fallback"] = {
+                        "query": fallback_query,
+                        "candidates": candidate_digest(candidates),
+                    }
+                    steps.append(
+                        BrandProfileLookupStep(
+                            source="wikipedia",
+                            action="fallback_query_selected",
+                            query=fallback_query,
+                            result_count=len(candidates),
+                            detail="replaced disambiguation results",
+                        )
+                    )
+                    break
+
+        selected = select_wikipedia_candidate(name, candidates, context=context)
 
         page_info: dict[str, Any] = {}
         if selected:
@@ -85,7 +110,7 @@ class WikimediaBrandProfileClient:
         summary = self._wikipedia_summary(page_info.get("title") or selected_title(selected), steps)
         qid = page_info.get("wikidata_qid")
         if not qid:
-            qid = self._wikidata_search(name, steps)
+            qid = self._wikidata_search(name, steps, context=context)
 
         entity = self._wikidata_entity(str(qid), steps) if qid else {}
         labels = self._resolve_labels(collect_label_qids(entity), steps)
@@ -262,6 +287,8 @@ class WikimediaBrandProfileClient:
         self,
         name: str,
         steps: list[BrandProfileLookupStep],
+        *,
+        context: SearchContext | None = None,
     ) -> str | None:
         data = self._get_json(
             WIKIDATA_API,
@@ -275,7 +302,37 @@ class WikimediaBrandProfileClient:
         )
         rows = data.get("search", [])
         candidates = [row for row in rows if isinstance(row, dict)]
-        selected = select_wikidata_candidate(name, candidates)
+        selected = select_wikidata_candidate(name, candidates, context=context)
+
+        # Retry with enriched queries if Wikidata results are ambiguous.
+        if selected is None and context is not None:
+            for fallback_query in enriched_queries(name, context):
+                fallback_data = self._get_json(
+                    WIKIDATA_API,
+                    params={
+                        "action": "wbsearchentities",
+                        "search": fallback_query,
+                        "language": "en",
+                        "limit": self.max_candidates,
+                        "format": "json",
+                    },
+                )
+                fallback_rows = fallback_data.get("search", [])
+                fallback_candidates = [row for row in fallback_rows if isinstance(row, dict)]
+                fallback_selected = select_wikidata_candidate(name, fallback_candidates, context=context)
+                if fallback_selected:
+                    selected = fallback_selected
+                    steps.append(
+                        BrandProfileLookupStep(
+                            source="wikidata",
+                            action="fallback_query_selected",
+                            query=fallback_query,
+                            qid=str(selected.get("id") or ""),
+                            result_count=len(fallback_candidates),
+                            detail="replaced ambiguous wikidata results",
+                        )
+                    )
+                    break
         steps.append(
             BrandProfileLookupStep(
                 source="wikidata",
