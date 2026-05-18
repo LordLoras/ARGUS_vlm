@@ -54,6 +54,20 @@ def test_wikimedia_client_rejects_snippet_only_name_matches():
     http_client.close()
 
 
+def test_wikimedia_client_rejects_family_name_entity():
+    transport = httpx.MockTransport(_family_name_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
+        client.fetch("Prillaman")
+
+    http_client.close()
+
+
 def _wikimedia_handler(request: httpx.Request) -> httpx.Response:
     if request.url.host == "en.wikipedia.org" and request.url.path == "/w/api.php":
         if request.url.params.get("list") == "search":
@@ -174,6 +188,33 @@ def _snippet_only_handler(request: httpx.Request) -> httpx.Response:
                         "id": "Q165713",
                         "label": "Star Wars: Episode I - The Phantom Menace",
                         "description": "1999 film directed by George Lucas",
+                    }
+                ]
+            },
+        )
+    return httpx.Response(404, request=request, json={"error": "not mocked"})
+
+
+def _family_name_handler(request: httpx.Request) -> httpx.Response:
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("list") == "search"
+    ):
+        return _json(request, {"query": {"search": []}})
+    if (
+        request.url.host == "www.wikidata.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("action") == "wbsearchentities"
+    ):
+        return _json(
+            request,
+            {
+                "search": [
+                    {
+                        "id": "Q37527325",
+                        "label": "Prillaman",
+                        "description": "family name",
                     }
                 ]
             },

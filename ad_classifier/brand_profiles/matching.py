@@ -16,6 +16,14 @@ _DISAMBIG_PHRASES = re.compile(
     flags=re.IGNORECASE,
 )
 
+_NON_BRAND_DETAIL_RE = re.compile(
+    r"\b("
+    r"family name|surname|given name|male given name|female given name|"
+    r"human name|patronymic|matronymic|wikimedia disambiguation page"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+
 # Category id → terms that indicate the Wikipedia article is about a brand in this space.
 _CATEGORY_TERMS: dict[str, list[str]] = {
     "automotive": ["automaker", "vehicle", "truck", "car", "motor", "pickup", "suv", "automobile", "marque"],
@@ -96,10 +104,14 @@ def select_wikipedia_candidate(
     for candidate, score in ranked:
         title = str(candidate.get("title") or "")
         detail = str(candidate.get("snippet") or "")
-        if score >= _MIN_CANDIDATE_SCORE and _candidate_name_matches(
-            normalized,
-            title,
-            detail,
+        if (
+            score >= _MIN_CANDIDATE_SCORE
+            and not is_non_brand_detail(detail)
+            and _candidate_name_matches(
+                normalized,
+                title,
+                detail,
+            )
         ):
             return candidate
     return None
@@ -132,13 +144,21 @@ def select_wikidata_candidate(
     for candidate, score in ranked:
         label = str(candidate.get("label") or "")
         detail = str(candidate.get("description") or "")
-        if score >= _MIN_CANDIDATE_SCORE and _candidate_name_matches(
-            normalized,
-            label,
-            detail,
+        if (
+            score >= _MIN_CANDIDATE_SCORE
+            and not is_non_brand_detail(detail)
+            and _candidate_name_matches(
+                normalized,
+                label,
+                detail,
+            )
         ):
             return candidate
     return None
+
+
+def is_non_brand_detail(detail: str) -> bool:
+    return bool(_NON_BRAND_DETAIL_RE.search(strip_html(detail)))
 
 
 def candidate_digest(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -212,6 +232,9 @@ def _candidate_score(
     # Penalize disambiguation-style snippets.
     if _DISAMBIG_PHRASES.search(detail):
         score -= 3.0
+
+    if is_non_brand_detail(detail):
+        score -= 8.0
 
     # Context-aware boosting.
     if context is not None:
