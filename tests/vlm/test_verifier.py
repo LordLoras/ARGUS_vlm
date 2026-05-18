@@ -144,6 +144,33 @@ def test_http_verifier_happy_path():
     assert result.parse_ok is True
 
 
+def test_http_verifier_parses_iab_category():
+    payload = {
+        "primary_category": "automotive",
+        "iab_category": {
+            "iab_unique_id": "1554",
+            "iab_parent_id": "1553",
+            "tier_1": "Vehicles",
+            "tier_2": "Automotive Ownership",
+            "tier_3": "New Vehicle Ownership",
+            "selected_depth": 3,
+            "selected_category": "New Vehicle Ownership",
+            "full_path": "Vehicles > Automotive Ownership > New Vehicle Ownership",
+            "confidence": "high",
+        },
+        "confidence": 0.85,
+        "summary": "vehicle ad",
+    }
+    bundle = _make_bundle()
+    with patch("ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)):
+        verifier = _make_http_verifier()
+        result = verifier.verify(bundle)
+
+    assert result.iab_category is not None
+    assert result.iab_category.iab_unique_id == "1554"
+    assert result.iab_category.selected_depth == 3
+
+
 def test_http_verifier_requests_structured_output():
     payload = {
         "primary_category": "retail_ecommerce",

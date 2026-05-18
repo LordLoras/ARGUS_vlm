@@ -62,7 +62,7 @@ function params(values: Record<string, string | number | boolean | undefined | n
 export const api = {
   health: () => apiFetch<{ status: string; service: string }>("/api/health"),
 
-  listAds: (query: { brand?: string; category?: string; risk_label?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
+  listAds: (query: { brand?: string; category?: string; risk_label?: string; iab_unique_id?: string; iab_tier_1?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),
 
   getAd: (adId: string) => apiFetch<AdDetail>(`/api/ads/${adId}`),

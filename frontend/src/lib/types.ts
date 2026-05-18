@@ -16,11 +16,43 @@ export type AdRecord = {
   products_text?: string | null;
   primary_category?: string | null;
   subcategory?: string | null;
+  iab_unique_id?: string | null;
+  iab_parent_id?: string | null;
+  iab_tier_1?: string | null;
+  iab_tier_2?: string | null;
+  iab_tier_3?: string | null;
+  iab_selected_depth?: number | null;
+  iab_selected_category?: string | null;
+  iab_full_path?: string | null;
+  iab_confidence?: string | null;
   source_hash?: string | null;
   phash_mean?: string | null;
   duplicate_of?: string | null;
   duplicate_verdict?: string | null;
   duplicate_score?: number | null;
+};
+
+export type IABCategory = {
+  iab_unique_id: string;
+  iab_parent_id?: string | null;
+  tier_1?: string | null;
+  tier_2?: string | null;
+  tier_3?: string | null;
+  selected_depth: number;
+  selected_category: string;
+  full_path: string;
+  confidence?: string | null;
+  parent_categories?: Array<{
+    iab_unique_id: string;
+    name: string;
+    depth: number;
+    full_path: string;
+  }>;
+  alternative_categories?: Array<{
+    iab_unique_id: string;
+    full_path: string;
+    use_when?: string | null;
+  }>;
 };
 
 export type EvidenceItem = {
@@ -36,6 +68,7 @@ export type EvidenceItem = {
 export type ClassificationRecord = {
   ad_id: string;
   primary_category?: string | null;
+  iab_category?: IABCategory | null;
   risk_labels?: string[];
   confidence?: number | null;
   evidence?: EvidenceItem[];

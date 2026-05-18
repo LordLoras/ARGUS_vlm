@@ -246,7 +246,17 @@ Post-processing then runs deterministic checks:
 - optional visual verification pass for brand/logo claims
 - aggregation of VLM and rule evidence into the final classification
 
-### 8. Marketing Entities and Projections
+### 8. Product Taxonomy and Marketing Entities
+
+In addition to the project-level `primary_category`, the verifier selects one
+IAB product taxonomy row from `Ad Product Taxonomy 2.0.tsv`. It chooses the
+deepest tier directly supported by OCR/transcript/frame evidence and stores the
+canonical ID, parent ID, tier labels, selected depth, selected label, full path,
+confidence, and alternatives in `classifications.iab_category_json`.
+
+The `ads` table also has IAB projection columns such as `iab_unique_id`,
+`iab_tier_1`, and `iab_full_path` so the API, search, and agent tools can filter
+or group by product taxonomy without parsing JSON.
 
 Marketing entities are the structured business output of the pipeline. They
 include brand, advertiser, products, prices, offers, CTAs, social proof,

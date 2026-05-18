@@ -15,8 +15,8 @@ class CountAdsTool(AgentTool):
     name = "count_ads"
     description = (
         "Count ads matching brand / advertiser / primary_category / subcategory / "
-        "status filters or a loose free-text q substring over id, brand, advertiser, "
-        "products, category, website, phone, and landing page domain. Use q for "
+        "IAB taxonomy / status filters or a loose free-text q substring over id, "
+        "brand, advertiser, products, category, IAB taxonomy, website, phone, and landing page domain. Use q for "
         "topic words and business shorthand such as HVAC or services. Use this for "
         "'how many' questions instead of list_ads."
     )
@@ -29,6 +29,11 @@ class CountAdsTool(AgentTool):
                 "advertiser": {"type": "string", "description": "Exact advertiser_name match."},
                 "category": {"type": "string", "description": "Primary industry category."},
                 "subcategory": {"type": "string", "description": "Product type or niche."},
+                "iab_unique_id": {
+                    "type": "string",
+                    "description": "Exact IAB product taxonomy unique ID.",
+                },
+                "iab_tier_1": {"type": "string", "description": "IAB top-level taxonomy bucket."},
                 "status": {"type": "string"},
                 "q": {"type": "string"},
             },
@@ -55,6 +60,12 @@ class CountAdsTool(AgentTool):
         if args.get("subcategory"):
             clauses.append("LOWER(subcategory) = LOWER(?)")
             params.append(args["subcategory"])
+        if args.get("iab_unique_id"):
+            clauses.append("iab_unique_id = ?")
+            params.append(args["iab_unique_id"])
+        if args.get("iab_tier_1"):
+            clauses.append("LOWER(iab_tier_1) = LOWER(?)")
+            params.append(args["iab_tier_1"])
         if args.get("status"):
             clauses.append("status = ?")
             params.append(args["status"])

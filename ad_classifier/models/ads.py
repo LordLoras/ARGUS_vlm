@@ -32,6 +32,15 @@ class AdRecord(StrictModel):
     products_text: str | None = None
     primary_category: str | None = None
     subcategory: str | None = None
+    iab_unique_id: str | None = None
+    iab_parent_id: str | None = None
+    iab_tier_1: str | None = None
+    iab_tier_2: str | None = None
+    iab_tier_3: str | None = None
+    iab_selected_depth: int | None = Field(default=None, ge=1, le=3)
+    iab_selected_category: str | None = None
+    iab_full_path: str | None = None
+    iab_confidence: str | None = None
     source_hash: str | None = None
     phash_mean: str | None = None
     duplicate_of: str | None = None

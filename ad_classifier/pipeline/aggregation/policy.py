@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
-import functools
-
 import yaml
 
+from ad_classifier.iab_taxonomy import normalize_iab_category
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
 from ad_classifier.marketing._utils import format_price as _format_price
 from ad_classifier.marketing.brand import brand_normalize
@@ -44,6 +44,7 @@ from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
 
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent.parent / "taxonomy.yaml"
+
 
 @functools.lru_cache(maxsize=1)
 def _load_sensitive_categories() -> frozenset[str]:
@@ -163,7 +164,6 @@ def _rule_evidence_score(rule: RuleTrigger) -> int:
     return len(text) + text.count(" ") * 2 + text.count(". ") * 3
 
 
-
 def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
     me = vlm.marketing_entities
     brand_name = brand_normalize(me.brand.name)
@@ -215,18 +215,20 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
             text_parts.append(f"{fin.duration_months}-mo")
         if fin.apr:
             text_parts.append(f"{fin.apr}% APR")
-        offers.append(OfferEntity(
-            text=" ".join(text_parts),
-            evidence=[
-                EvidenceItem(
-                    time_ms=e.time_ms,
-                    frame_index=e.frame_index,
-                    source="vlm",
-                    text=fin.text or " ".join(text_parts),
-                )
-                for e in (fin.evidence or [])
-            ],
-        ))
+        offers.append(
+            OfferEntity(
+                text=" ".join(text_parts),
+                evidence=[
+                    EvidenceItem(
+                        time_ms=e.time_ms,
+                        frame_index=e.frame_index,
+                        source="vlm",
+                        text=fin.text or " ".join(text_parts),
+                    )
+                    for e in (fin.evidence or [])
+                ],
+            )
+        )
 
     ctas = [
         CTAEntity(
@@ -327,7 +329,8 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
     )
 
     advertiser = AdvertiserEntity(
-        advertiser_name=brand_normalize(me.advertiser.advertiser_name) or me.advertiser.advertiser_name,
+        advertiser_name=brand_normalize(me.advertiser.advertiser_name)
+        or me.advertiser.advertiser_name,
         brand_name=brand_normalize(me.advertiser.brand_name),
         parent_company=me.advertiser.parent_company,
         service_area=list(me.advertiser.service_area),
@@ -419,15 +422,15 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
 def _parse_rating_count(value: str | None) -> int | None:
     if not value:
         return None
-    match = re.search(r'[\d,]+', value)
+    match = re.search(r"[\d,]+", value)
     if not match:
-        letter_match = re.search(r'(\d+(?:\.\d+)?)\s*[KkMm]', value)
+        letter_match = re.search(r"(\d+(?:\.\d+)?)\s*[KkMm]", value)
         if letter_match:
             num = float(letter_match.group(1))
             suffix = letter_match.group(0).strip()[-1].lower()
-            if suffix == 'k':
+            if suffix == "k":
                 return int(num * 1000)
-            if suffix == 'm':
+            if suffix == "m":
                 return int(num * 1_000_000)
         return None
     digits_str = match.group(0).replace(",", "")
@@ -471,16 +474,23 @@ def aggregate(
     sensitive = category in (sensitive_categories or _load_sensitive_categories())
 
     ocr_q = vlm_result.ocr_quality
-    ocr_quality = OCRQuality(
-        overall=ocr_q.overall,
-        possible_errors=[e.reason or e.raw_ocr for e in ocr_q.possible_errors],
-        missed_text=[e.text for e in ocr_q.missed_text],
-    ) if ocr_q.overall != "good" or ocr_q.possible_errors or ocr_q.missed_text else None
+    ocr_quality = (
+        OCRQuality(
+            overall=ocr_q.overall,
+            possible_errors=[e.reason or e.raw_ocr for e in ocr_q.possible_errors],
+            missed_text=[e.text for e in ocr_q.missed_text],
+        )
+        if ocr_q.overall != "good" or ocr_q.possible_errors or ocr_q.missed_text
+        else None
+    )
 
     debug = {
         "selected_frames": selected_frames or [],
         "dropped_frames": dropped_frames or [],
-        "rules_triggered": [{"rule_id": r.rule_id, "severity": r.severity, "time_ms": r.time_ms} for r in rules_triggered],
+        "rules_triggered": [
+            {"rule_id": r.rule_id, "severity": r.severity, "time_ms": r.time_ms}
+            for r in rules_triggered
+        ],
         "dropped_labels": [],
     }
 
@@ -489,6 +499,7 @@ def aggregate(
     return FinalAdClassification(
         ad_id=ad_id,
         primary_category=category,
+        iab_category=normalize_iab_category(vlm_result.iab_category),
         risk_labels=risk_labels,
         confidence=vlm_result.confidence,
         sensitive_category=sensitive,

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from ad_classifier.iab_taxonomy import normalize_iab_category
 from ad_classifier.vlm.models import (
     VLMVerificationResult,
 )
@@ -37,8 +38,12 @@ def validate_vlm_output(
         result.primary_category = "other"
         result.confidence = min(result.confidence, 0.3)
 
+    result.iab_category = normalize_iab_category(result.iab_category)
+
     me.prices = [p for p in me.prices if _valid_price(p.amount)]
-    me.prices = _filter_non_vehicle_prices(me.prices, evidence_blob, primary_category or result.primary_category)
+    me.prices = _filter_non_vehicle_prices(
+        me.prices, evidence_blob, primary_category or result.primary_category
+    )
     me.offers = [o for o in me.offers if _valid_offer(o.value)]
     if me.brand and me.brand.name:
         cleaned = _clean_brand(me.brand.name)
@@ -89,11 +94,34 @@ def _is_garbled_token(token: str) -> bool:
     return vowels == 0 and len(token) <= 5
 
 
-_KNOWN_SHORT_WORDS = frozenset({
-    "rv", "suv", "mpg", "apr", "msrp", "lev", "sel", "eco",
-    "sed", "rtl", "lte", "pro", "max", "ltz", "gts", "4x4",
-    "ram", "gmc", "bmw", "kia", "ext", "lt", "lx", "se",
-})
+_KNOWN_SHORT_WORDS = frozenset(
+    {
+        "rv",
+        "suv",
+        "mpg",
+        "apr",
+        "msrp",
+        "lev",
+        "sel",
+        "eco",
+        "sed",
+        "rtl",
+        "lte",
+        "pro",
+        "max",
+        "ltz",
+        "gts",
+        "4x4",
+        "ram",
+        "gmc",
+        "bmw",
+        "kia",
+        "ext",
+        "lt",
+        "lx",
+        "se",
+    }
+)
 
 
 def _valid_price(amount: float) -> bool:
@@ -110,9 +138,15 @@ _NON_PRICE_CONTEXT = re.compile(
 )
 
 
-_AUTOMotive_CATEGORIES = frozenset({
-    "automotive", "auto", "cars", "trucks", "dealership",
-})
+_AUTOMotive_CATEGORIES = frozenset(
+    {
+        "automotive",
+        "auto",
+        "cars",
+        "trucks",
+        "dealership",
+    }
+)
 
 
 def _filter_non_vehicle_prices(prices: list, evidence_blob: str, category: str = "") -> list:

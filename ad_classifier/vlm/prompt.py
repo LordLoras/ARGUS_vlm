@@ -5,6 +5,11 @@ from typing import Any
 
 import yaml
 
+from ad_classifier.iab_taxonomy import (
+    DEFAULT_IAB_TAXONOMY_PATH,
+    render_iab_taxonomy_for_prompt,
+)
+
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "argus_ad_verifier.txt"
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent / "taxonomy.yaml"
 
@@ -26,6 +31,7 @@ def render_verifier_prompt(
     *,
     prompt_path: Path = _PROMPT_PATH,
     taxonomy_path: Path = _TAXONOMY_PATH,
+    iab_taxonomy_path: Path = DEFAULT_IAB_TAXONOMY_PATH,
 ) -> str:
     template = prompt_path.read_text(encoding="utf-8")
     taxonomy = _load_taxonomy(taxonomy_path)
@@ -34,4 +40,8 @@ def render_verifier_prompt(
 
     allowed_categories = "\n".join(f"- {c['id']}" for c in categories)
 
-    return template.replace("{ALLOWED_CATEGORIES}", allowed_categories)
+    iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
+
+    return template.replace("{ALLOWED_CATEGORIES}", allowed_categories).replace(
+        "{IAB_PRODUCT_TAXONOMY}", iab_taxonomy
+    )

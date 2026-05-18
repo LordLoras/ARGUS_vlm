@@ -5,14 +5,22 @@ from typing import Any
 from ad_classifier.agent.models import ToolResult
 from ad_classifier.agent.tools.base import AgentTool, ToolContext
 
-_ALLOWED_GROUP = {"brand_name", "primary_category", "status", "advertiser_name"}
+_ALLOWED_GROUP = {
+    "brand_name",
+    "primary_category",
+    "status",
+    "advertiser_name",
+    "iab_tier_1",
+    "iab_selected_category",
+    "iab_full_path",
+}
 
 
 class AggregateTool(AgentTool):
     name = "aggregate"
     description = (
         "Group ads by an allowed dimension (brand_name, primary_category, status, "
-        "advertiser_name) and return a count per group. Use this for 'top N "
+        "advertiser_name, iab_tier_1, iab_selected_category, iab_full_path) and return a count per group. Use this for 'top N "
         "brands' or 'how many ads per category' questions."
     )
 

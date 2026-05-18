@@ -126,6 +126,8 @@ def list_ads(
     brand: str | None = None,
     category: str | None = None,
     risk_label: str | None = None,
+    iab_unique_id: str | None = None,
+    iab_tier_1: str | None = None,
     status: str | None = None,
     q: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
@@ -137,6 +139,8 @@ def list_ads(
             brand=brand,
             category=category,
             risk_label=risk_label,
+            iab_unique_id=iab_unique_id,
+            iab_tier_1=iab_tier_1,
             status=status,
             q=q,
             limit=limit,
@@ -277,6 +281,15 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             subcategory=(
                 patch.subcategory if patch.subcategory is not None else current.subcategory
             ),
+            iab_unique_id=current.iab_unique_id,
+            iab_parent_id=current.iab_parent_id,
+            iab_tier_1=current.iab_tier_1,
+            iab_tier_2=current.iab_tier_2,
+            iab_tier_3=current.iab_tier_3,
+            iab_selected_depth=current.iab_selected_depth,
+            iab_selected_category=current.iab_selected_category,
+            iab_full_path=current.iab_full_path,
+            iab_confidence=current.iab_confidence,
         )
 
         marketing_repo = MarketingEntityRepository(conn)
@@ -288,6 +301,7 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                 dirty = True
             if patch.offers is not None:
                 from ad_classifier.models.marketing import OfferEntity
+
                 marketing.offers = []
                 for o in patch.offers:
                     if o.get("text"):
@@ -300,6 +314,7 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                 dirty = True
             if patch.ctas is not None:
                 from ad_classifier.models.marketing import CTAEntity
+
                 marketing.ctas = []
                 for c in patch.ctas:
                     if c.get("text"):

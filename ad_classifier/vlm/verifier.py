@@ -132,6 +132,7 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
     data: dict[str, object] = {}
     for key in (
         "primary_category",
+        "iab_category",
         "confidence",
         "ocr_quality",
         "evidence",

@@ -30,6 +30,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "004_campaign_suggestions",
         "005_flag_to_review",
         "006_duplicate_metadata",
+        "007_iab_taxonomy",
     ]
 
     conn = open_database(db_path)
@@ -63,7 +64,14 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "duplicate_of",
             "duplicate_verdict",
             "duplicate_score",
+            "iab_unique_id",
+            "iab_full_path",
+            "iab_tier_1",
         }.issubset(ad_columns)
+        classification_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(classifications)").fetchall()
+        }
+        assert "iab_category_json" in classification_columns
         marketing_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(marketing_entities)").fetchall()
         }

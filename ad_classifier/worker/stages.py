@@ -348,9 +348,11 @@ def run_pipeline_for_job(
             embedder_text_model=text_embedder.model_name,
             embedder_visual_model=image_embedder.model_name,
             pipeline_version=final.pipeline_version,
+            iab_category=final.iab_category,
         )
     )
     MarketingEntityRepository(conn).upsert(ad_id, final.marketing_entities)
+    iab = final.iab_category
     AdRepository(conn).update_projection(
         ad_id,
         brand_name=final.marketing_entities.brand.name,
@@ -362,6 +364,15 @@ def run_pipeline_for_job(
         products_text=final.marketing_entities.products_text,
         primary_category=final.primary_category,
         subcategory=final.marketing_entities.subcategory,
+        iab_unique_id=iab.iab_unique_id if iab else None,
+        iab_parent_id=iab.iab_parent_id if iab else None,
+        iab_tier_1=iab.tier_1 if iab else None,
+        iab_tier_2=iab.tier_2 if iab else None,
+        iab_tier_3=iab.tier_3 if iab else None,
+        iab_selected_depth=iab.selected_depth if iab else None,
+        iab_selected_category=iab.selected_category if iab else None,
+        iab_full_path=iab.full_path if iab else None,
+        iab_confidence=iab.confidence if iab else None,
     )
     AdRepository(conn).update_status(ad_id, "completed")
     fts_update(
@@ -372,7 +383,12 @@ def run_pipeline_for_job(
         primary_category=final.primary_category,
         transcript_text=ingest.transcript.text,
         ocr_text=" ".join(item.text for item in search_ocr_for_index),
-        marketing_entities_text=json.dumps(final.marketing_entities.model_dump()),
+        marketing_entities_text=json.dumps(
+            {
+                "marketing_entities": final.marketing_entities.model_dump(),
+                "iab_category": final.iab_category.model_dump() if final.iab_category else None,
+            }
+        ),
     )
     conn.commit()
     emit("completed", 1.0, "job completed")

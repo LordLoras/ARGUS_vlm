@@ -25,6 +25,7 @@ export function ResultPanel({
   const offers = ent?.offers ?? [];
   const ctas = ent?.ctas ?? [];
   const disclaimers = ent?.disclaimers ?? [];
+  const iab = cls?.iab_category;
 
   return (
     <div className="result-panel">
@@ -62,6 +63,8 @@ export function ResultPanel({
           ) : null}
           <dt>Products</dt>
           <dd>{products.length ? products.join(", ") : "—"}</dd>
+          <dt>IAB</dt>
+          <dd>{iab?.full_path || detail.ad.iab_full_path || "—"}</dd>
         </dl>
       </div>
 

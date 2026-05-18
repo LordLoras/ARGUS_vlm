@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ad_classifier.models.iab import IABCategory
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
@@ -50,6 +51,32 @@ def test_products_mapped():
     vlm.marketing_entities.products = ["Product A", "Product B"]
     result = aggregate("ad_1", vlm, [])
     assert result.marketing_entities.products == ["Product A", "Product B"]
+
+
+def test_iab_category_is_canonicalized_from_vlm_id():
+    vlm = _vlm(primary_category="automotive")
+    vlm.iab_category = IABCategory(
+        iab_unique_id="1554",
+        iab_parent_id="wrong",
+        tier_1="Vehicles",
+        selected_depth=1,
+        selected_category="Vehicles",
+        full_path="Vehicles",
+        confidence="high",
+    )
+
+    result = aggregate("ad_1", vlm, [])
+
+    assert result.iab_category is not None
+    assert result.iab_category.iab_parent_id == "1553"
+    assert result.iab_category.selected_depth == 3
+    assert (
+        result.iab_category.full_path == "Vehicles > Automotive Ownership > New Vehicle Ownership"
+    )
+    assert [node.iab_unique_id for node in result.iab_category.parent_categories] == [
+        "1551",
+        "1553",
+    ]
 
 
 def test_zero_amount_prices_are_not_mapped():

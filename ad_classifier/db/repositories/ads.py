@@ -67,6 +67,8 @@ class AdRepository:
         subcategory: str | None = None,
         status: str | None = None,
         risk_label: str | None = None,
+        iab_unique_id: str | None = None,
+        iab_tier_1: str | None = None,
         q: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -106,6 +108,12 @@ class AdRepository:
                 """
             )
             params.append(risk_label)
+        if iab_unique_id:
+            clauses.append("iab_unique_id = ?")
+            params.append(iab_unique_id)
+        if iab_tier_1:
+            clauses.append("LOWER(iab_tier_1) = LOWER(?)")
+            params.append(iab_tier_1)
         if q:
             loose_clause, loose_params = build_loose_like_clause(q)
             if loose_clause:
@@ -221,6 +229,15 @@ class AdRepository:
         products_text: str | None,
         primary_category: str | None,
         subcategory: str | None = None,
+        iab_unique_id: str | None = None,
+        iab_parent_id: str | None = None,
+        iab_tier_1: str | None = None,
+        iab_tier_2: str | None = None,
+        iab_tier_3: str | None = None,
+        iab_selected_depth: int | None = None,
+        iab_selected_category: str | None = None,
+        iab_full_path: str | None = None,
+        iab_confidence: str | None = None,
     ) -> None:
         self.conn.execute(
             """
@@ -233,7 +250,16 @@ class AdRepository:
                 landing_page_domain = ?,
                 products_text = ?,
                 primary_category = ?,
-                subcategory = ?
+                subcategory = ?,
+                iab_unique_id = ?,
+                iab_parent_id = ?,
+                iab_tier_1 = ?,
+                iab_tier_2 = ?,
+                iab_tier_3 = ?,
+                iab_selected_depth = ?,
+                iab_selected_category = ?,
+                iab_full_path = ?,
+                iab_confidence = ?
             WHERE id = ?
             """,
             (
@@ -246,6 +272,15 @@ class AdRepository:
                 products_text,
                 primary_category,
                 subcategory,
+                iab_unique_id,
+                iab_parent_id,
+                iab_tier_1,
+                iab_tier_2,
+                iab_tier_3,
+                iab_selected_depth,
+                iab_selected_category,
+                iab_full_path,
+                iab_confidence,
                 ad_id,
             ),
         )

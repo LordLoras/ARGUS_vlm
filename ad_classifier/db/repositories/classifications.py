@@ -5,6 +5,7 @@ import sqlite3
 
 from ad_classifier.db.repositories.base import db_value, row_to_dict
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
+from ad_classifier.models.iab import IABCategory
 
 
 def _to_record(row: sqlite3.Row) -> ClassificationRecord:
@@ -14,6 +15,9 @@ def _to_record(row: sqlite3.Row) -> ClassificationRecord:
     data["risk_labels"] = json.loads(data.get("risk_labels_json") or "[]")
     data["evidence"] = json.loads(data.get("evidence_json") or "[]")
     data["vlm_raw"] = json.loads(data.get("vlm_raw_json") or "{}")
+    iab_raw = data.get("iab_category_json")
+    iab_dict = json.loads(iab_raw) if iab_raw else None
+    data["iab_category"] = IABCategory.model_validate(iab_dict) if iab_dict else None
 
     ocr_raw = data.get("ocr_quality_json")
     if ocr_raw:
@@ -23,8 +27,15 @@ def _to_record(row: sqlite3.Row) -> ClassificationRecord:
         data["ocr_quality"] = None
 
     # Drop raw JSON columns + removed fields — not in model
-    for key in ("risk_labels_json", "evidence_json", "vlm_raw_json", "ocr_quality_json",
-                "decision", "needs_human_review"):
+    for key in (
+        "risk_labels_json",
+        "evidence_json",
+        "vlm_raw_json",
+        "ocr_quality_json",
+        "iab_category_json",
+        "decision",
+        "needs_human_review",
+    ):
         data.pop(key, None)
 
     return ClassificationRecord.model_validate(data)
@@ -38,13 +49,14 @@ class ClassificationRepository:
         self.conn.execute(
             """
             INSERT INTO classifications (
-              ad_id, primary_category, risk_labels_json, confidence,
+              ad_id, primary_category, iab_category_json, risk_labels_json, confidence,
               ocr_quality_json, vlm_raw_json, evidence_json,
               vlm_model, vlm_prompt_version, embedder_text_model, embedder_visual_model,
               pipeline_version, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               primary_category = excluded.primary_category,
+              iab_category_json = excluded.iab_category_json,
               risk_labels_json = excluded.risk_labels_json,
               confidence = excluded.confidence,
               ocr_quality_json = excluded.ocr_quality_json,
@@ -60,6 +72,7 @@ class ClassificationRepository:
             (
                 record.ad_id,
                 record.primary_category,
+                json.dumps(record.iab_category.model_dump()) if record.iab_category else None,
                 json.dumps(record.risk_labels),
                 record.confidence,
                 json.dumps(record.ocr_quality.model_dump() if record.ocr_quality else None),

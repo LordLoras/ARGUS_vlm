@@ -8,6 +8,7 @@ import pytest
 from ad_classifier.db.connection import apply_migrations, open_database
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.models.classification import ClassificationRecord
+from ad_classifier.models.iab import IABCategory
 
 
 @pytest.fixture()
@@ -40,13 +41,30 @@ def _record(ad_id: str = "ad_test") -> ClassificationRecord:
 
 def test_upsert_and_get(conn):
     repo = ClassificationRepository(conn)
-    repo.upsert(_record())
+    record = _record()
+    record.iab_category = IABCategory(
+        iab_unique_id="1554",
+        iab_parent_id="1553",
+        tier_1="Vehicles",
+        tier_2="Automotive Ownership",
+        tier_3="New Vehicle Ownership",
+        selected_depth=3,
+        selected_category="New Vehicle Ownership",
+        full_path="Vehicles > Automotive Ownership > New Vehicle Ownership",
+        confidence="high",
+    )
+    repo.upsert(record)
     conn.commit()
 
     result = repo.get("ad_test")
     assert result is not None
     assert result.ad_id == "ad_test"
     assert result.primary_category == "retail"
+    assert result.iab_category is not None
+    assert result.iab_category.iab_unique_id == "1554"
+    assert (
+        result.iab_category.full_path == "Vehicles > Automotive Ownership > New Vehicle Ownership"
+    )
     assert result.risk_labels == []
 
 

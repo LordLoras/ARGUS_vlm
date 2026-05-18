@@ -9,6 +9,7 @@ from ad_classifier.models.agent import AgentMessageRecord, AgentSessionRecord
 from ad_classifier.models.campaigns import AdCampaignRecord, CampaignRecord
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 from ad_classifier.models.common import EvidenceItem
+from ad_classifier.models.iab import IABAlternativeCategory, IABCategory, IABCategoryNode
 from ad_classifier.models.jobs import JobRecord
 from ad_classifier.models.marketing import MarketingEntities
 from ad_classifier.models.similarity import FieldDifference, SimilarAdRecord
@@ -23,6 +24,9 @@ __all__ = [
     "EvidenceItem",
     "FieldDifference",
     "FrameRecord",
+    "IABAlternativeCategory",
+    "IABCategory",
+    "IABCategoryNode",
     "JobRecord",
     "MarketingEntities",
     "OCRItemRecord",

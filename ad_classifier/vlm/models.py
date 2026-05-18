@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from ad_classifier.models.classification import OcrQualityLevel
+from ad_classifier.models.iab import IABCategory
 from ad_classifier.models.marketing import (
     AppStorePlatform,
     AspectRatio,
@@ -252,6 +253,7 @@ class VLMConflict(_VLMBase):
 
 class VLMVerificationResult(_VLMBase):
     primary_category: str = "other"
+    iab_category: IABCategory | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     ocr_quality: VLMOCRQuality = Field(default_factory=VLMOCRQuality)
     evidence: list[VLMEvidence] = Field(default_factory=list)
