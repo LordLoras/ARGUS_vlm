@@ -294,7 +294,7 @@ class VLMEndpointDefaults:
         max_retries=2,
         retry_delay_s=2.0,
         temperature=0.3,
-        max_tokens=4096,
+        max_tokens=8192,
         enable_thinking=False,
         response_format="json_schema",
         stream=True,
