@@ -12,10 +12,10 @@ from ad_classifier.creative.panel.models import (
     PersonaReaction,
 )
 from ad_classifier.creative.panel.service import (
-    _PanelContext,
     _citations_from_ids,
     _compact_evidence,
     _complete_json,
+    _PanelContext,
     _required_str,
     _str_list,
     _summary_from_vlm,
@@ -44,12 +44,7 @@ def run_vlm_debate(
     ModeratorSummary,
     bool,
 ]:
-    raw = _complete_json(
-        client,
-        _debate_messages(context, topic, participants),
-        thinking=thinking,
-        label="creative_debate",
-    )
+    raw = _complete_debate_json(client, context, topic, participants, thinking=thinking)
     used_fallback = False
 
     opening = _turns_from_vlm(
@@ -117,27 +112,53 @@ def _debate_messages(
     context: _PanelContext,
     topic: str,
     participants: list[PersonaReaction],
+    *,
+    compact: bool = False,
 ) -> list[dict[str, str]]:
-    participant_payload = [
-        {
-            "persona_id": item.persona_id,
-            "label": item.persona_label,
-            "lens": item.lens,
-            "first_impression": item.first_impression,
-            "understood_product_or_offer": item.understood_product_or_offer,
-            "likely_objection": item.likely_objection,
-            "trust_points": item.trust_points[:2],
-            "confusion_points": item.confusion_points[:2],
-        }
-        for item in participants
-    ]
+    participant_payload = _participant_payload(participants, compact=compact)
     payload = {
         "ad_id": context.ad_id,
         "topic": topic,
-        "evidence": _compact_evidence(context),
+        "evidence": _debate_evidence(context, compact=compact),
         "participants": participant_payload,
     }
-    system = (
+    system = _compact_system_prompt() if compact else _system_prompt()
+    user = (
+        f"Debate payload:\n{json.dumps(payload, ensure_ascii=True, separators=(',', ':'))}\n\n"
+        f"{_return_instruction(compact)}\n"
+        f"{json.dumps(_debate_schema(compact=compact), ensure_ascii=True, separators=(',', ':'))}"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _complete_debate_json(
+    client: AgentClient,
+    context: _PanelContext,
+    topic: str,
+    participants: list[PersonaReaction],
+    *,
+    thinking: bool,
+) -> dict[str, Any]:
+    try:
+        return _complete_json(
+            client,
+            _debate_messages(context, topic, participants),
+            thinking=thinking,
+            label="creative_debate",
+        )
+    except ValueError as exc:
+        if "hit token limit" not in str(exc):
+            raise
+        return _complete_json(
+            client,
+            _debate_messages(context, topic, participants, compact=True),
+            thinking=False,
+            label="creative_debate_compact_retry",
+        )
+
+
+def _system_prompt() -> str:
+    return (
         "You are ARGUS Creative Debate Panel, a local-first ad analysis assistant. "
         "Run a compact adversarial debate between the supplied persona lenses about the topic. "
         "Internally reason from ad evidence and persona objections before answering, but do not "
@@ -147,21 +168,32 @@ def _debate_messages(
         "or percentages. Observation tags are descriptive, not violations. Keep it sharp and "
         "evidence-backed. Return one compact JSON object only."
     )
-    user = (
-        f"Debate payload:\n{json.dumps(payload, ensure_ascii=True, separators=(',', ':'))}\n\n"
-        "Return strict JSON with this exact shape:\n"
-        f"{json.dumps(_debate_schema(), ensure_ascii=True, separators=(',', ':'))}"
+
+
+def _compact_system_prompt() -> str:
+    return (
+        "You are ARGUS Creative Debate Panel. The prior response exceeded the token budget. "
+        "Return valid compact JSON only. Use supplied citation ids only. Do not reveal reasoning, "
+        "invent facts, forecast outcomes, or write markdown."
     )
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def _debate_schema() -> dict[str, Any]:
+def _return_instruction(compact: bool) -> str:
+    if compact:
+        return (
+            "Return strict JSON with this exact shape. Keep every string under 12 words. "
+            "Use one opening, one challenge, one closing, max two tensions, and max two summary items."
+        )
+    return "Return strict JSON with this exact shape:"
+
+
+def _debate_schema(*, compact: bool = False) -> dict[str, Any]:
     turn = {
         "speaker_persona_id": "persona id",
         "stance": "advocate|skeptic|explorer",
-        "claim": "max 22 words",
-        "evidence_read": "max 20 words",
-        "pressure_test": "max 18 words",
+        "claim": "max 12 words" if compact else "max 22 words",
+        "evidence_read": "max 10 words" if compact else "max 20 words",
+        "pressure_test": "max 10 words" if compact else "max 18 words",
         "citation_ids": ["c0"],
     }
     challenge = {**turn, "target_persona_id": "persona id or null"}
@@ -191,6 +223,54 @@ def _debate_schema() -> dict[str, Any]:
             "strongest_hooks": ["max 3 items"],
             "suggested_ab_variants": ["max 3 items"],
         },
+    }
+
+
+def _participant_payload(
+    participants: list[PersonaReaction],
+    *,
+    compact: bool,
+) -> list[dict[str, Any]]:
+    if compact:
+        return [
+            {
+                "persona_id": item.persona_id,
+                "label": item.persona_label,
+                "objection": item.likely_objection,
+                "trust": item.trust_points[:1],
+                "confusion": item.confusion_points[:1],
+            }
+            for item in participants[:3]
+        ]
+    return [
+        {
+            "persona_id": item.persona_id,
+            "label": item.persona_label,
+            "lens": item.lens,
+            "first_impression": item.first_impression,
+            "understood_product_or_offer": item.understood_product_or_offer,
+            "likely_objection": item.likely_objection,
+            "trust_points": item.trust_points[:2],
+            "confusion_points": item.confusion_points[:2],
+        }
+        for item in participants
+    ]
+
+
+def _debate_evidence(context: _PanelContext, *, compact: bool) -> dict[str, Any]:
+    evidence = _compact_evidence(context)
+    if not compact:
+        return evidence
+    return {
+        "ad_id": evidence.get("ad_id"),
+        "brand": evidence.get("brand"),
+        "category": evidence.get("category"),
+        "products": evidence.get("products", [])[:2],
+        "offers": evidence.get("offers", [])[:2],
+        "prices": evidence.get("prices", [])[:1],
+        "ctas": evidence.get("ctas", [])[:1],
+        "observation_tags": evidence.get("observation_tags", [])[:2],
+        "citations": evidence.get("citations", [])[:5],
     }
 
 

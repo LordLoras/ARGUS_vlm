@@ -325,6 +325,97 @@ def test_creative_debate_uses_vlm_with_reasoning(tmp_path: Path):
         conn.close()
 
 
+def test_creative_debate_retries_compact_without_reasoning_after_length(tmp_path: Path):
+    conn = _conn(tmp_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name, products_text,
+                primary_category
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_debate_length",
+                "/tmp/debate.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+                "Wrangler",
+                "automotive",
+            ),
+        )
+        evidence = EvidenceItem(time_ms=500, frame_index=1, source="ocr", text="0% APR")
+        MarketingEntityRepository(conn).upsert(
+            "ad_debate_length",
+            MarketingEntities(
+                products=["Wrangler"],
+                offers=[OfferEntity(text="0% APR", evidence=[evidence])],
+                ctas=[CTAEntity(text="Shop now", evidence=[evidence])],
+            ),
+        )
+        conn.commit()
+        client = MockAgentClient(
+            [
+                AgentMessage(
+                    content='{"opening_statements":[{"speaker_persona_id":"budget_parent"',
+                    tool_calls=[],
+                    finish_reason="length",
+                ),
+                AgentMessage(
+                    content=(
+                        '{"opening_statements":[{"speaker_persona_id":"budget_parent",'
+                        '"stance":"advocate","claim":"Lead with APR.",'
+                        '"evidence_read":"APR is visible.","pressure_test":"Clarify terms.",'
+                        '"citation_ids":["c0"]}],'
+                        '"cross_examination":[{"speaker_persona_id":"skeptical_buyer",'
+                        '"target_persona_id":"budget_parent","stance":"skeptic",'
+                        '"claim":"Terms remain thin.","evidence_read":"Only APR appears.",'
+                        '"pressure_test":"Show conditions.","citation_ids":["c0"]}],'
+                        '"closing_statements":[{"speaker_persona_id":"budget_parent",'
+                        '"stance":"advocate","claim":"Keep hook concise.",'
+                        '"evidence_read":"APR anchors recall.","pressure_test":"Add terms.",'
+                        '"citation_ids":["c0"]}],'
+                        '"tensions":[{"axis":"Hook vs terms","advocate":"APR is strong.",'
+                        '"skeptic":"Terms are missing.","moderator_take":"Pair hook with terms."}],'
+                        '"scorecard":{"moderator_verdict":"Retry produced compact debate.",'
+                        '"strongest_argument":"APR is explicit.",'
+                        '"weakest_argument":"Terms remain thin.",'
+                        '"unresolved_questions":["What terms apply?"],'
+                        '"recommended_tests":["Test compact term card."]},'
+                        '"moderator_summary":{"consensus":["Offer hook is clear."],'
+                        '"disagreements":["Proof depth differs."],'
+                        '"message_clarity_issues":["Terms need clarity."],'
+                        '"strongest_hooks":["0% APR"],'
+                        '"suggested_ab_variants":["Test terms card."]}}'
+                    ),
+                    tool_calls=[],
+                    finish_reason="stop",
+                ),
+            ]
+        )
+
+        report = build_creative_debate(
+            conn,
+            "ad_debate_length",
+            tmp_path / "out",
+            persona_ids=["budget_parent", "skeptical_buyer"],
+            use_vlm=True,
+            llm_client=client,
+            source_model="mock-vlm",
+            thinking=True,
+        )
+
+        assert report.analysis_source == "vlm"
+        assert report.fallback_error is None
+        assert report.scorecard.moderator_verdict == "Retry produced compact debate."
+        assert [call["enable_thinking"] for call in client.calls] == [True, False]
+        assert "prior response exceeded the token budget" in client.calls[1]["messages"][0]["content"]
+    finally:
+        conn.close()
+
+
 def test_persona_prompt_requires_internal_evidence_reasoning():
     class Context:
         ad_id = "ad_prompt"
