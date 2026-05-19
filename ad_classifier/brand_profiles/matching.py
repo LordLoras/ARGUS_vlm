@@ -24,7 +24,10 @@ _NON_BRAND_DETAIL_RE = re.compile(
     r"historic house|historic building|building in|house in|"
     r"unincorporated community|census-designated place|municipality|"
     r"town in|village in|city in|county in|river in|mountain in|"
-    r"film directed|film series|television episode|television series|"
+    r"god|goddess|deity|mythology|mythological|paganism|"
+    r"norse god|germanic god|greek god|roman god|"
+    r"film directed|film based|film series|feature film|superhero film|"
+    r"animated film|television episode|television series|"
     r"anime television series|manga series|animated television series|"
     r"fictional character|song by|single by|album by|"
     r"studio album|compilation album|musical group|rock band|pop band"
@@ -34,7 +37,23 @@ _NON_BRAND_DETAIL_RE = re.compile(
 
 # Category id → terms that indicate the Wikipedia article is about a brand in this space.
 _CATEGORY_TERMS: dict[str, list[str]] = {
-    "automotive": ["automaker", "vehicle", "truck", "car", "motor", "pickup", "suv", "automobile", "marque"],
+    "automotive": [
+        "automaker",
+        "vehicle",
+        "truck",
+        "car",
+        "motor",
+        "pickup",
+        "suv",
+        "automobile",
+        "marque",
+        "rv",
+        "recreational vehicle",
+        "motorhome",
+        "motor coach",
+        "camper",
+        "travel trailer",
+    ],
     "financial_services": ["bank", "financial", "insurance", "credit", "mortgage", "investment"],
     "technology": ["technology", "software", "hardware", "tech", "electronics", "computer"],
     "healthcare_pharma": ["pharmaceutical", "health", "medical", "biotech", "drug"],
@@ -63,8 +82,11 @@ _MIN_CANDIDATE_SCORE = 2.0
 @dataclass
 class SearchContext:
     category: str | None = None
+    subcategory: str | None = None
     products: list[str] = field(default_factory=list)
     parent_company: str | None = None
+    advertiser_name: str | None = None
+    website_domain: str | None = None
 
 
 def normalize_profile_name(name: str) -> str:
@@ -255,6 +277,12 @@ def _candidate_score(
             parent_norm = normalize_profile_name(context.parent_company)
             if parent_norm in detail_norm or parent_norm in title_norm:
                 score += 2.0
+        if context.subcategory:
+            subcategory_norm = normalize_profile_name(context.subcategory)
+            if subcategory_norm and (
+                subcategory_norm in detail_norm or subcategory_norm in title_norm
+            ):
+                score += 1.5
         for product in context.products[:3]:
             product_norm = normalize_profile_name(product)
             product_tokens = set(product_norm.split())
@@ -323,14 +351,52 @@ def enriched_queries(name: str, context: SearchContext) -> list[str]:
     queries: list[str] = []
     if context.parent_company:
         queries.append(f"{name} {context.parent_company}")
+    if context.subcategory:
+        queries.append(f"{name} {context.subcategory}")
     if context.category and context.category in _CATEGORY_TERMS:
         # Pick the most specific term for the category.
         queries.append(f"{name} {context.category}")
         queries.append(f"{name} {_CATEGORY_TERMS[context.category][0]}")
+        if context.category == "automotive" and _has_rv_context(context):
+            queries.extend(
+                [
+                    f"{name} RV",
+                    f"{name} motorhome",
+                    f"{name} motor coach",
+                    f"{name} recreational vehicle",
+                ]
+            )
     if context.products:
         # Use the first product's type word as a qualifier.
         first_product = context.products[0]
+        queries.append(f"{name} {first_product}")
         tokens = first_product.split()
         if len(tokens) > 1:
             queries.append(f"{name} {tokens[-1]}")
-    return queries
+    return unique(queries)
+
+
+def _has_rv_context(context: SearchContext) -> bool:
+    blob = normalize_profile_name(
+        " ".join(
+            item
+            for item in [
+                context.subcategory or "",
+                context.advertiser_name or "",
+                context.website_domain or "",
+                *context.products,
+            ]
+            if item
+        )
+    )
+    return any(
+        term in blob
+        for term in (
+            "rv",
+            "recreational vehicle",
+            "motorhome",
+            "motor coach",
+            "camper",
+            "rec van",
+        )
+    )

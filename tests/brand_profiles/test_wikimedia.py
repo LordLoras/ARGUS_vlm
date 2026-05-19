@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from ad_classifier.brand_profiles.matching import SearchContext
 from ad_classifier.brand_profiles.wikimedia import (
     WikimediaBrandProfileClient,
     normalize_profile_name,
@@ -92,6 +93,50 @@ def test_wikimedia_client_rejects_exact_creative_work_entity():
 
     with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
         client.fetch("Decoy")
+
+    http_client.close()
+
+
+def test_wikimedia_client_rejects_exact_mythology_entity():
+    transport = httpx.MockTransport(_thor_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
+        client.fetch("Thor")
+
+    http_client.close()
+
+
+def test_wikimedia_client_uses_context_fallback_after_rejected_non_brand_results():
+    transport = httpx.MockTransport(_thor_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    profile = client.fetch(
+        "Thor",
+        context=SearchContext(
+            category="automotive",
+            subcategory="RV",
+            products=["2026 Scope"],
+            advertiser_name="La Mesa Rec Van",
+            website_domain="lamesarv.com",
+        ),
+    )
+
+    assert profile.display_name == "Thor Motor Coach"
+    assert profile.wikidata_qid == "QTHORCOACH"
+    assert profile.description == "American recreational vehicle manufacturer"
+    assert any(
+        step.action == "fallback_query_selected" and step.query == "Thor RV"
+        for step in profile.lookup_steps
+    )
 
     http_client.close()
 
@@ -332,6 +377,120 @@ def _creative_work_handler(request: httpx.Request) -> httpx.Response:
                 ]
             },
         )
+    return httpx.Response(404, request=request, json={"error": "not mocked"})
+
+
+def _thor_handler(request: httpx.Request) -> httpx.Response:
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("list") == "search"
+    ):
+        query = request.url.params.get("srsearch")
+        if query == "Thor":
+            return _json(
+                request,
+                {
+                    "query": {
+                        "search": [
+                            {
+                                "title": "Thor",
+                                "pageid": 316348,
+                                "snippet": "Thor is a hammer-wielding Norse god associated with thunder.",
+                            },
+                            {
+                                "title": "Thor: Ragnarok",
+                                "pageid": 41974555,
+                                "snippet": "Thor: Ragnarok is a 2017 American superhero film.",
+                            },
+                        ]
+                    }
+                },
+            )
+        if query == "Thor RV":
+            return _json(
+                request,
+                {
+                    "query": {
+                        "search": [
+                            {
+                                "title": "Thor Motor Coach",
+                                "pageid": 98765,
+                                "snippet": (
+                                    "Thor Motor Coach is an American recreational vehicle "
+                                    "manufacturer."
+                                ),
+                            },
+                        ]
+                    }
+                },
+            )
+        return _json(request, {"query": {"search": []}})
+
+    if request.url.host == "en.wikipedia.org" and request.url.path == "/w/api.php":
+        title = request.url.params.get("titles")
+        if title == "Thor Motor Coach":
+            return _json(
+                request,
+                {
+                    "query": {
+                        "pages": {
+                            "98765": {
+                                "title": "Thor Motor Coach",
+                                "pageid": 98765,
+                                "fullurl": "https://en.wikipedia.org/wiki/Thor_Motor_Coach",
+                                "pageprops": {"wikibase_item": "QTHORCOACH"},
+                            }
+                        }
+                    }
+                },
+            )
+
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path.endswith("/summary/Thor Motor Coach")
+    ):
+        return _json(
+            request,
+            {
+                "title": "Thor Motor Coach",
+                "description": "American recreational vehicle manufacturer",
+                "extract": "Thor Motor Coach is an American recreational vehicle manufacturer.",
+                "content_urls": {
+                    "desktop": {"page": "https://en.wikipedia.org/wiki/Thor_Motor_Coach"}
+                },
+            },
+        )
+
+    if (
+        request.url.host == "www.wikidata.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("action") == "wbsearchentities"
+    ):
+        return _json(
+            request,
+            {
+                "search": [
+                    {
+                        "id": "Q42952",
+                        "label": "Thor",
+                        "description": "hammer-wielding Norse god associated with thunder",
+                    }
+                ]
+            },
+        )
+
+    if request.url.host == "www.wikidata.org" and request.url.path.endswith("/QTHORCOACH.json"):
+        return _json(
+            request,
+            _entity(
+                "QTHORCOACH",
+                "Thor Motor Coach",
+                "American recreational vehicle manufacturer",
+                {},
+            ),
+        )
+
     return httpx.Response(404, request=request, json={"error": "not mocked"})
 
 

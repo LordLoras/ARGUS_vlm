@@ -61,10 +61,14 @@ def enrich_brand_profile(
         client = _brand_profile_client(request)
         search_context = SearchContext(
             category=ad.primary_category,
+            subcategory=ad.subcategory,
             products=marketing.products[:3] if marketing else [],
             parent_company=(
                 marketing.advertiser.parent_company if marketing else None
             ),
+            advertiser_name=ad.advertiser_name
+            or (marketing.advertiser.advertiser_name if marketing else None),
+            website_domain=ad.website_domain or ad.landing_page_domain,
         )
         try:
             profile = client.fetch(name, context=search_context)

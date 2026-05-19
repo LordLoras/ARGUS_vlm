@@ -103,6 +103,32 @@ class WikimediaBrandProfileClient:
                     break
 
         selected = select_wikipedia_candidate(name, candidates, context=context)
+        if selected is None and context is not None:
+            for fallback_query in enriched_queries(name, context):
+                fallback_candidates = self._wikipedia_search(fallback_query, steps)
+                fallback_selected = select_wikipedia_candidate(
+                    name,
+                    fallback_candidates,
+                    context=context,
+                )
+                if fallback_selected is None:
+                    continue
+                candidates = fallback_candidates
+                selected = fallback_selected
+                source_json["wikipedia_candidates_fallback"] = {
+                    "query": fallback_query,
+                    "candidates": candidate_digest(candidates),
+                }
+                steps.append(
+                    BrandProfileLookupStep(
+                        source="wikipedia",
+                        action="fallback_query_selected",
+                        query=fallback_query,
+                        result_count=len(candidates),
+                        detail="replaced rejected non-brand results",
+                    )
+                )
+                break
 
         page_info: dict[str, Any] = {}
         if selected:
