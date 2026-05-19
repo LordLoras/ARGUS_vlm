@@ -47,6 +47,7 @@ export function OverviewTab({
         }
       : null
   );
+  const iabConfidence = displayIabConfidence(iab?.confidence);
 
   return (
     <>
@@ -67,7 +68,7 @@ export function OverviewTab({
               <span className="badge badge-sky">{iab.iab_unique_id}</span>
               <span style={{ color: "var(--fg)" }}>{iab.selected_category}</span>
               <span className="mono" style={{ color: "var(--fg-mute)" }}>
-                depth {iab.selected_depth}{iab.confidence ? ` / ${iab.confidence}` : ""}
+                depth {iab.selected_depth}{iabConfidence ? ` / ${iabConfidence}` : ""}
               </span>
             </div>
             <details>
@@ -329,6 +330,12 @@ function joinList(values?: string[]) {
 
 function metricLabel(key: string) {
   return key.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function displayIabConfidence(value?: string | null) {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "unknown" ? null : normalized;
 }
 
 function Card({
