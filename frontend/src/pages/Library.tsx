@@ -176,12 +176,31 @@ export function Library() {
     mutationFn: ({
       adId,
       target,
-      force
+      force,
+      query,
+      wikipediaTitle
     }: {
       adId: string;
       target: "brand" | "advertiser";
       force?: boolean;
-    }) => api.enrichBrandProfile(adId, { target, force }),
+      query?: string | null;
+      wikipediaTitle?: string | null;
+    }) =>
+      api.enrichBrandProfile(adId, {
+        target,
+        force,
+        query,
+        wikipedia_title: wikipediaTitle
+      }),
+    onSettled: async (_result, _error, variables) => {
+      if (!variables) return;
+      await queryClient.invalidateQueries({ queryKey: ["ad-detail", variables.adId] });
+    }
+  });
+
+  const resetProfileMutation = useMutation({
+    mutationFn: ({ adId, target }: { adId: string; target: "brand" | "advertiser" }) =>
+      api.resetBrandProfile(adId, target),
     onSettled: async (_result, _error, variables) => {
       if (!variables) return;
       await queryClient.invalidateQueries({ queryKey: ["ad-detail", variables.adId] });
@@ -305,10 +324,26 @@ export function Library() {
             assignCampaignMutation.mutate({ campaignId, adId: selectedDetail.ad.id })
           }
           enrichingProfileTarget={
-            enrichProfileMutation.isPending ? enrichProfileMutation.variables?.target ?? null : null
+            enrichProfileMutation.isPending
+              ? enrichProfileMutation.variables?.target ?? null
+              : resetProfileMutation.isPending
+                ? resetProfileMutation.variables?.target ?? null
+                : null
           }
-          onEnrichProfile={(target, force) =>
-            enrichProfileMutation.mutate({ adId: selectedDetail.ad.id, target, force })
+          onEnrichProfile={(target, options) =>
+            enrichProfileMutation.mutate({
+              adId: selectedDetail.ad.id,
+              target,
+              force: options?.force,
+              query: options?.query,
+              wikipediaTitle: options?.wikipediaTitle
+            })
+          }
+          onSearchProfile={(target, query) =>
+            api.searchBrandProfiles(selectedDetail.ad.id, { target, q: query })
+          }
+          onResetProfile={(target) =>
+            resetProfileMutation.mutate({ adId: selectedDetail.ad.id, target })
           }
           onDelete={() => {
             if (

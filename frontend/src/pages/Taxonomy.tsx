@@ -452,14 +452,28 @@ function OverridesTab() {
 
 function InferenceRulesTab() {
   const [rules, setRules] = useState<InferenceRule[]>([]);
+  const [productEntries, setProductEntries] = useState<IABEntry[]>([]);
+  const [contentEntries, setContentEntries] = useState<IABEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [newType, setNewType] = useState("content");
   const [newTarget, setNewTarget] = useState("");
   const [newTerms, setNewTerms] = useState("");
+  const [newContext, setNewContext] = useState("");
+  const [newNotes, setNewNotes] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
-    knowledgeApi.listInferenceRules().then(setRules).finally(() => setLoading(false));
+    Promise.all([
+      knowledgeApi.listInferenceRules(),
+      knowledgeApi.listProduct({ active_only: false, roots_only: false }),
+      knowledgeApi.listContent({ active_only: false, roots_only: false }),
+    ])
+      .then(([nextRules, products, content]) => {
+        setRules(nextRules);
+        setProductEntries(products);
+        setContentEntries(content);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -470,8 +484,10 @@ function InferenceRulesTab() {
       taxonomy_type: newType,
       target_id: newTarget.trim(),
       terms: newTerms.split(",").map(t => t.trim()).filter(Boolean),
+      context_terms: newContext.split(",").map(t => t.trim()).filter(Boolean),
+      notes: newNotes.trim() || null,
     });
-    setNewTarget(""); setNewTerms("");
+    setNewTarget(""); setNewTerms(""); setNewContext(""); setNewNotes("");
     load();
   };
 
@@ -480,17 +496,26 @@ function InferenceRulesTab() {
     load();
   };
 
+  const targetMap = new Map([
+    ...productEntries.map(entry => [`product:${entry.unique_id}`, entry] as const),
+    ...contentEntries.map(entry => [`content:${entry.unique_id}`, entry] as const),
+  ]);
+  const groups = groupInferenceRules(rules, targetMap);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="dcard">
         <div className="dcard-head"><span>Add Inference Rule</span></div>
-        <div style={{ display: "flex", gap: 8, padding: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "120px 140px 1fr", gap: 8, padding: 8 }}>
           <select className="input" style={{ flex: 1 }} value={newType} onChange={e => setNewType(e.target.value)}>
             <option value="content">Content</option>
             <option value="product">Product</option>
           </select>
-          <input className="input" style={{ flex: 1 }} placeholder="Target IAB ID" value={newTarget} onChange={e => setNewTarget(e.target.value)} />
-          <input className="input" style={{ flex: 3 }} placeholder="Terms (comma-separated)" value={newTerms} onChange={e => setNewTerms(e.target.value)} />
+          <input className="input" placeholder="Target IAB ID" value={newTarget} onChange={e => setNewTarget(e.target.value)} />
+          <input className="input" placeholder="Trigger terms, comma-separated" value={newTerms} onChange={e => setNewTerms(e.target.value)} />
+          <div />
+          <input className="input" placeholder="Optional context terms" value={newContext} onChange={e => setNewContext(e.target.value)} />
+          <input className="input" placeholder="Notes" value={newNotes} onChange={e => setNewNotes(e.target.value)} />
           <button className="btn btn-primary" onClick={add}>Add</button>
         </div>
       </div>
@@ -498,27 +523,86 @@ function InferenceRulesTab() {
       {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading...</div> : (
         <div className="dcard">
           <div className="dcard-head"><span>Inference Rules ({rules.length})</span></div>
-          <table style={{ width: "100%", fontSize: 12 }}>
-            <thead>
-              <tr><th>Type</th><th>Target</th><th>Terms</th><th>Context</th><th>Notes</th><th></th></tr>
-            </thead>
-            <tbody>
-              {rules.map(r => (
-                <tr key={r.id}>
-                  <td><span style={{ fontSize: 10, color: "var(--fg-mute)" }}>{r.taxonomy_type}</span></td>
-                  <td style={{ fontFamily: "monospace" }}>{r.target_id}</td>
-                  <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.terms.join(", ")}</td>
-                  <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.context_terms.join(", ") || "—"}</td>
-                  <td style={{ color: "var(--fg-mute)", fontSize: 10 }}>{r.notes ?? "—"}</td>
-                  <td><button className="btn btn-sm" onClick={() => remove(r.id)}>✕</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ display: "grid", gap: 8, padding: 8 }}>
+            {groups.map(group => (
+              <div
+                key={`${group.type}-${group.target}`}
+                style={{ border: "1px solid var(--border)", borderRadius: 6, padding: 10, display: "grid", gap: 8 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="badge badge-mono">{group.type}</span>
+                  <span className="badge badge-mono">{group.target}</span>
+                  <span style={{ flex: 1, fontWeight: 600 }}>{group.label}</span>
+                  <span style={{ color: "var(--fg-mute)", fontSize: 11 }}>{group.rules.length} rule{group.rules.length === 1 ? "" : "s"}</span>
+                </div>
+                <div style={{ color: "var(--fg-mute)", fontSize: 11 }}>{group.path}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {group.terms.map(term => <span key={term} className="badge">{term}</span>)}
+                </div>
+                {group.context.length ? (
+                  <div style={{ color: "var(--fg-mute)", fontSize: 11 }}>
+                    Context: {group.context.join(", ")}
+                  </div>
+                ) : null}
+                {group.notes.length ? (
+                  <div style={{ color: "var(--fg-mute)", fontSize: 11 }}>
+                    {group.notes.join(" · ")}
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                  {group.rules.map(rule => (
+                    <button key={rule.id} className="btn btn-sm" onClick={() => remove(rule.id)}>
+                      Remove {rule.id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {groups.length === 0 ? <div style={{ color: "var(--fg-mute)" }}>No rules configured.</div> : null}
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+function groupInferenceRules(rules: InferenceRule[], targetMap: Map<string, IABEntry>) {
+  const groups = new Map<string, {
+    type: string;
+    target: string;
+    label: string;
+    path: string;
+    terms: string[];
+    context: string[];
+    notes: string[];
+    rules: InferenceRule[];
+  }>();
+  rules.forEach(rule => {
+    const key = `${rule.taxonomy_type}:${rule.target_id}`;
+    const entry = targetMap.get(`${rule.taxonomy_type}:${rule.target_id}`);
+    const group = groups.get(key) ?? {
+      type: rule.taxonomy_type,
+      target: rule.target_id,
+      label: entry?.name ?? "Unknown IAB target",
+      path: entry?.full_path ?? "Taxonomy entry not loaded",
+      terms: [],
+      context: [],
+      notes: [],
+      rules: [],
+    };
+    group.terms = uniqueStrings([...group.terms, ...rule.terms]);
+    group.context = uniqueStrings([...group.context, ...rule.context_terms]);
+    group.notes = uniqueStrings([...group.notes, ...(rule.notes ? [rule.notes] : [])]);
+    group.rules.push(rule);
+    groups.set(key, group);
+  });
+  return Array.from(groups.values()).sort((a, b) =>
+    `${a.type}:${a.path}`.localeCompare(`${b.type}:${b.path}`)
+  );
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 // ── Backfill Tab ────────────────────────────────────────────

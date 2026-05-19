@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { CloseIcon, CopyIcon, EditIcon, PlayIcon, PlusIcon, TrashIcon } from "../lib/icons";
 import { filePathToDataUrl } from "../lib/format";
-import type { AdDetail, Campaign, FrameRecord, RelatedAds } from "../lib/types";
+import type { AdDetail, BrandProfileCandidate, Campaign, FrameRecord, RelatedAds } from "../lib/types";
 import { CampaignAssignDialog } from "./Campaigns/CampaignAssignDialog";
 import { CreativePanelTab } from "./library/CreativePanelTab";
 import { EditTab, type EditPatch } from "./library/EditTab";
@@ -24,6 +24,8 @@ export function AdDetailDrawer({
   campaigns = [],
   onAssignCampaign,
   onEnrichProfile,
+  onSearchProfile,
+  onResetProfile,
   saving,
   assigningCampaign,
   enrichingProfileTarget,
@@ -38,7 +40,15 @@ export function AdDetailDrawer({
   onSelectRelated?: (adId: string) => void;
   campaigns?: Campaign[];
   onAssignCampaign?: (campaignId: string) => void;
-  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
+  onEnrichProfile?: (
+    target: "brand" | "advertiser",
+    options?: { force?: boolean; query?: string | null; wikipediaTitle?: string | null }
+  ) => void;
+  onSearchProfile?: (
+    target: "brand" | "advertiser",
+    query: string
+  ) => Promise<{ items: BrandProfileCandidate[] }>;
+  onResetProfile?: (target: "brand" | "advertiser") => void;
   saving?: boolean;
   assigningCampaign?: boolean;
   enrichingProfileTarget?: "brand" | "advertiser" | null;
@@ -174,6 +184,8 @@ export function AdDetailDrawer({
                 detail={detail}
                 onSeek={seekVideo}
                 onEnrichProfile={onEnrichProfile}
+                onSearchProfile={onSearchProfile}
+                onResetProfile={onResetProfile}
                 enrichingProfileTarget={enrichingProfileTarget}
               />
             ) : null}

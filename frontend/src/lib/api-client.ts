@@ -7,6 +7,7 @@ import type {
   AgentSession,
   AgentStreamEvent,
   BrandProfileEnrichmentResponse,
+  BrandProfileCandidate,
   Campaign,
   CampaignDeepResearch,
   CampaignDetail,
@@ -70,12 +71,32 @@ export const api = {
 
   enrichBrandProfile: (
     adId: string,
-    body: { target: "brand" | "advertiser"; force?: boolean; query?: string | null }
+    body: {
+      target: "brand" | "advertiser";
+      force?: boolean;
+      query?: string | null;
+      wikipedia_title?: string | null;
+      wikidata_qid?: string | null;
+    }
   ) =>
     apiFetch<BrandProfileEnrichmentResponse>(`/api/ads/${adId}/brand-profile/enrich`, {
       method: "POST",
       body: JSON.stringify(body)
     }),
+
+  searchBrandProfiles: (
+    adId: string,
+    query: { target: "brand" | "advertiser"; q?: string | null }
+  ) =>
+    apiFetch<{ target: "brand" | "advertiser"; query: string; items: BrandProfileCandidate[] }>(
+      `/api/ads/${adId}/brand-profile/search${params(query)}`
+    ),
+
+  resetBrandProfile: (adId: string, target: "brand" | "advertiser") =>
+    apiFetch<{ target: "brand" | "advertiser"; deleted: boolean }>(
+      `/api/ads/${adId}/brand-profile/${target}`,
+      { method: "DELETE" }
+    ),
 
   getFrames: (adId: string) =>
     apiFetch<{ items: FrameRecord[] }>(`/api/ads/${adId}/frames`),
@@ -147,6 +168,8 @@ export const api = {
       products_text?: string | null;
       primary_category?: string | null;
       subcategory?: string | null;
+      iab_product_id?: string | null;
+      iab_content_ids?: string[] | null;
       tagline?: string | null;
       offers?: Array<{ text: string }> | null;
       ctas?: Array<{ text: string }> | null;

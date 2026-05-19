@@ -19,8 +19,12 @@ from ad_classifier.db.repositories.brand_profiles import BrandProfileRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.db.repositories.marketing import MarketingEntityRepository
 from ad_classifier.dedup.file_hash import source_sha256
+from ad_classifier.iab_content_taxonomy import iab_content_category_from_id
+from ad_classifier.iab_taxonomy import iab_category_from_id
 from ad_classifier.ingest.service import ad_id_from_source_hash
+from ad_classifier.knowledge.runtime import content_categories_from_ids, product_category_from_id
 from ad_classifier.models.ads import AdRecord
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 from ad_classifier.models.jobs import JobRecord
 from ad_classifier.search.fts import fts_delete
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
@@ -39,6 +43,8 @@ class AdPatch(BaseModel):
     products_text: str | None = None
     primary_category: str | None = None
     subcategory: str | None = None
+    iab_product_id: str | None = None
+    iab_content_ids: list[str] | None = None
     tagline: str | None = None
     offers: list[dict[str, str | None]] | None = None
     ctas: list[dict[str, str | None]] | None = None
@@ -261,6 +267,23 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
         current = repo.get(ad_id)
         if current is None:
             raise HTTPException(status_code=404, detail="ad not found")
+        classification = ClassificationRepository(conn).get(ad_id)
+        iab_product_set = "iab_product_id" in patch.model_fields_set
+        iab_content_set = "iab_content_ids" in patch.model_fields_set
+        iab_category = _resolve_iab_product_patch(
+            request,
+            patch.iab_product_id if iab_product_set else None,
+            current=current,
+            classification=classification,
+            field_was_set=iab_product_set,
+        )
+        iab_content_categories = _resolve_iab_content_patch(
+            request,
+            patch.iab_content_ids if iab_content_set else None,
+            current=current,
+            classification=classification,
+            field_was_set=iab_content_set,
+        )
         repo.update_projection(
             ad_id,
             brand_name=patch.brand_name if patch.brand_name is not None else current.brand_name,
@@ -296,18 +319,33 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             subcategory=(
                 patch.subcategory if patch.subcategory is not None else current.subcategory
             ),
-            iab_unique_id=current.iab_unique_id,
-            iab_parent_id=current.iab_parent_id,
-            iab_tier_1=current.iab_tier_1,
-            iab_tier_2=current.iab_tier_2,
-            iab_tier_3=current.iab_tier_3,
-            iab_selected_depth=current.iab_selected_depth,
-            iab_selected_category=current.iab_selected_category,
-            iab_full_path=current.iab_full_path,
-            iab_confidence=current.iab_confidence,
-            iab_content_ids=current.iab_content_ids,
-            iab_content_paths=current.iab_content_paths,
-            iab_content_categories_json=current.iab_content_categories_json,
+            iab_unique_id=iab_category.iab_unique_id if iab_category else None,
+            iab_parent_id=iab_category.iab_parent_id if iab_category else None,
+            iab_tier_1=iab_category.tier_1 if iab_category else None,
+            iab_tier_2=iab_category.tier_2 if iab_category else None,
+            iab_tier_3=iab_category.tier_3 if iab_category else None,
+            iab_selected_depth=iab_category.selected_depth if iab_category else None,
+            iab_selected_category=iab_category.selected_category if iab_category else None,
+            iab_full_path=iab_category.full_path if iab_category else None,
+            iab_confidence=iab_category.confidence if iab_category else None,
+            iab_content_ids=",".join(item.iab_unique_id for item in iab_content_categories)
+            or None,
+            iab_content_paths=" | ".join(item.full_path for item in iab_content_categories)
+            or None,
+            iab_content_categories_json=(
+                json.dumps([item.model_dump() for item in iab_content_categories])
+                if iab_content_categories
+                else None
+            ),
+        )
+        _update_classification_projection(
+            conn,
+            ad_id,
+            patch=patch,
+            iab_product_set=iab_product_set,
+            iab_content_set=iab_content_set,
+            iab_category=iab_category,
+            iab_content_categories=iab_content_categories,
         )
 
         marketing_repo = MarketingEntityRepository(conn)
@@ -350,7 +388,14 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
         updated = repo.get(ad_id)
 
         # Record corrections in knowledge base
-        _record_corrections(request, ad_id, current, patch)
+        _record_corrections(
+            request,
+            ad_id,
+            current,
+            patch,
+            iab_product_set=iab_product_set,
+            iab_content_set=iab_content_set,
+        )
 
         return _dump(updated)
     finally:
@@ -447,7 +492,146 @@ def _cached_profile(repo: BrandProfileRepository, name: str | None):
     return repo.get(normalized) if normalized else None
 
 
-def _record_corrections(request: Request, ad_id: str, current: AdRecord, patch: AdPatch) -> None:
+def _resolve_iab_product_patch(
+    request: Request,
+    value: str | None,
+    *,
+    current: AdRecord,
+    classification,
+    field_was_set: bool,
+) -> IABCategory | None:
+    if not field_was_set:
+        if classification and classification.iab_category:
+            return classification.iab_category
+        return _iab_category_from_ad(current)
+    if not value:
+        return None
+    kb = getattr(request.app.state, "knowledge_manager", None)
+    if kb is not None:
+        category = product_category_from_id(kb, value, confidence="high")
+        if category is not None:
+            return category
+    return iab_category_from_id(value, confidence="high")
+
+
+def _resolve_iab_content_patch(
+    request: Request,
+    value: list[str] | None,
+    *,
+    current: AdRecord,
+    classification,
+    field_was_set: bool,
+) -> list[IABContentCategory]:
+    if not field_was_set:
+        if classification and classification.iab_content_categories:
+            return classification.iab_content_categories
+        return _iab_content_categories_from_ad(current)
+    if not value:
+        return []
+    ids = [item.strip() for item in value if item and item.strip()]
+    kb = getattr(request.app.state, "knowledge_manager", None)
+    if kb is not None:
+        categories = content_categories_from_ids(
+            kb,
+            ids,
+            confidence="high",
+            reason="Manual taxonomy edit",
+        )
+        if categories:
+            return categories
+    return [
+        category
+        for unique_id in ids
+        if (
+            category := iab_content_category_from_id(
+                unique_id,
+                confidence="high",
+                reason="Manual taxonomy edit",
+            )
+        )
+        is not None
+    ]
+
+
+def _iab_category_from_ad(ad: AdRecord) -> IABCategory | None:
+    if ad.iab_unique_id and (category := iab_category_from_id(ad.iab_unique_id, confidence=ad.iab_confidence or "unknown")):
+        return category
+    if not ad.iab_unique_id or not ad.iab_selected_category or not ad.iab_full_path:
+        return None
+    return IABCategory(
+        iab_unique_id=ad.iab_unique_id,
+        iab_parent_id=ad.iab_parent_id,
+        tier_1=ad.iab_tier_1,
+        tier_2=ad.iab_tier_2,
+        tier_3=ad.iab_tier_3,
+        selected_depth=ad.iab_selected_depth or 1,
+        selected_category=ad.iab_selected_category,
+        full_path=ad.iab_full_path,
+        confidence=ad.iab_confidence or "unknown",
+    )
+
+
+def _iab_content_categories_from_ad(ad: AdRecord) -> list[IABContentCategory]:
+    if ad.iab_content_categories_json:
+        try:
+            raw = json.loads(ad.iab_content_categories_json)
+        except json.JSONDecodeError:
+            raw = []
+        if isinstance(raw, list):
+            parsed = [
+                IABContentCategory.model_validate(item)
+                for item in raw
+                if isinstance(item, dict)
+            ]
+            if parsed:
+                return parsed
+    ids = [item.strip() for item in (ad.iab_content_ids or "").split(",") if item.strip()]
+    return [
+        category
+        for unique_id in ids
+        if (category := iab_content_category_from_id(unique_id)) is not None
+    ]
+
+
+def _update_classification_projection(
+    conn,
+    ad_id: str,
+    *,
+    patch: AdPatch,
+    iab_product_set: bool,
+    iab_content_set: bool,
+    iab_category: IABCategory | None,
+    iab_content_categories: list[IABContentCategory],
+) -> None:
+    updates: dict[str, Any] = {}
+    if patch.primary_category is not None:
+        updates["primary_category"] = patch.primary_category
+    if iab_product_set:
+        updates["iab_category_json"] = (
+            json.dumps(iab_category.model_dump()) if iab_category else None
+        )
+    if iab_content_set:
+        updates["iab_content_categories_json"] = json.dumps(
+            [item.model_dump() for item in iab_content_categories]
+        )
+    if not updates:
+        return
+    set_clause = ", ".join(f"{field} = ?" for field in updates)
+    conn.execute(
+        f"UPDATE classifications SET {set_clause} WHERE ad_id = ?",
+        (*updates.values(), ad_id),
+    )
+
+
+def _record_corrections(
+    request: Request,
+    ad_id: str,
+    current: AdRecord,
+    patch: AdPatch,
+    *,
+    iab_product_set: bool = False,
+    iab_content_set: bool = False,
+) -> None:
     """Record field-level corrections in the knowledge base for learning."""
     kb = getattr(request.app.state, "knowledge_manager", None)
     if kb is None:
@@ -464,6 +648,14 @@ def _record_corrections(request: Request, ad_id: str, current: AdRecord, patch: 
     if patch.brand_name is not None and patch.brand_name != current.brand_name:
         corrections.append(("brand_name", current.brand_name, patch.brand_name))
 
+    if iab_product_set and patch.iab_product_id != current.iab_unique_id:
+        corrections.append(("iab_product_id", current.iab_unique_id, patch.iab_product_id))
+
+    if iab_content_set:
+        new_content = ",".join(patch.iab_content_ids or [])
+        if new_content != (current.iab_content_ids or ""):
+            corrections.append(("iab_content_ids", current.iab_content_ids, new_content))
+
     brand = patch.brand_name or current.brand_name
     for field, old_val, new_val in corrections:
         from ad_classifier.knowledge.models import CorrectionEntry
@@ -471,10 +663,14 @@ def _record_corrections(request: Request, ad_id: str, current: AdRecord, patch: 
         entry = CorrectionEntry(
             ad_id=ad_id,
             field=field,
-            old_value=brand if field in ("primary_category", "subcategory") else old_val,
+            old_value=(
+                brand
+                if field in ("primary_category", "subcategory", "iab_product_id", "iab_content_ids")
+                else old_val
+            ),
             new_value=new_val,
             source="manual",
         )
         kb.record_correction(entry)
-        if field in ("primary_category",):
+        if field in ("primary_category", "subcategory", "iab_product_id", "iab_content_ids"):
             kb.learn_from_correction(entry)

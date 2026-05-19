@@ -38,6 +38,9 @@ Allowed IAB product taxonomy entries:
 Allowed IAB content taxonomy entries:
 {IAB_CONTENT_TAXONOMY}
 
+Editable taxonomy guidance:
+{TAXONOMY_RUNTIME_GUIDANCE}
+
 Tasks:
 1. Determine the primary ad category.
 2. Determine the IAB product taxonomy category at the deepest directly supported tier.

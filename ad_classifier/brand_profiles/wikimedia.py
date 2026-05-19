@@ -68,25 +68,89 @@ class WikimediaBrandProfileClient:
         self.max_parent_depth = max_parent_depth
         self.http_client = http_client
 
-    def fetch(self, name: str, *, context: SearchContext | None = None) -> BrandProfile:
+    def fetch(
+        self,
+        name: str,
+        *,
+        context: SearchContext | None = None,
+        search_query: str | None = None,
+        wikipedia_title: str | None = None,
+        wikidata_qid: str | None = None,
+        allow_non_brand: bool = False,
+    ) -> BrandProfile:
         normalized = normalize_profile_name(name)
         if not normalized:
             raise ValueError("brand or advertiser name is empty")
 
+        lookup_query = search_query or name
         fetched_at = utc_now()
         expires_at = fetched_at + timedelta(days=self.cache_days)
         steps: list[BrandProfileLookupStep] = []
-        source_json: dict[str, Any] = {"query_name": name, "normalized_name": normalized}
+        source_json: dict[str, Any] = {
+            "query_name": name,
+            "normalized_name": normalized,
+            "search_query": lookup_query,
+        }
 
-        candidates = self._wikipedia_search(name, steps)
-        source_json["wikipedia_candidates"] = candidate_digest(candidates)
+        candidates: list[dict[str, Any]] = []
+        selected: dict[str, Any] | None = None
+        page_info: dict[str, Any] = {}
+        qid = wikidata_qid
+        if wikipedia_title:
+            page_info = self._wikipedia_page_info(wikipedia_title, steps)
+            qid = qid or page_info.get("wikidata_qid")
+            source_json["selected_wikipedia_candidate"] = {
+                "title": page_info.get("title") or wikipedia_title,
+                "pageid": page_info.get("pageid"),
+                "manual": True,
+            }
+            steps.append(
+                BrandProfileLookupStep(
+                    source="wikipedia",
+                    action="manual_title_selected",
+                    query=lookup_query,
+                    title=page_info.get("title") or wikipedia_title,
+                    qid=str(qid) if qid else None,
+                )
+            )
+        else:
+            candidates = self._wikipedia_search(lookup_query, steps)
+            source_json["wikipedia_candidates"] = candidate_digest(candidates)
 
-        # Retry with enriched queries if initial results look like disambiguation.
-        if is_disambiguation(candidates) and context is not None:
-            for fallback_query in enriched_queries(name, context):
-                fallback_candidates = self._wikipedia_search(fallback_query, steps)
-                if fallback_candidates and not is_disambiguation(fallback_candidates):
+            # Retry with enriched queries if initial results look like disambiguation.
+            if is_disambiguation(candidates) and context is not None:
+                for fallback_query in enriched_queries(name, context):
+                    fallback_candidates = self._wikipedia_search(fallback_query, steps)
+                    if fallback_candidates and not is_disambiguation(fallback_candidates):
+                        candidates = fallback_candidates
+                        source_json["wikipedia_candidates_fallback"] = {
+                            "query": fallback_query,
+                            "candidates": candidate_digest(candidates),
+                        }
+                        steps.append(
+                            BrandProfileLookupStep(
+                                source="wikipedia",
+                                action="fallback_query_selected",
+                                query=fallback_query,
+                                result_count=len(candidates),
+                                detail="replaced disambiguation results",
+                            )
+                        )
+                        break
+
+            selected = select_wikipedia_candidate(lookup_query, candidates, context=context)
+            if selected is None and context is not None:
+                for fallback_query in enriched_queries(name, context):
+                    fallback_candidates = self._wikipedia_search(fallback_query, steps)
+                    fallback_selected = select_wikipedia_candidate(
+                        fallback_query,
+                        fallback_candidates,
+                        context=context,
+                    )
+                    if fallback_selected is None:
+                        continue
                     candidates = fallback_candidates
+                    selected = fallback_selected
                     source_json["wikipedia_candidates_fallback"] = {
                         "query": fallback_query,
                         "candidates": candidate_digest(candidates),
@@ -97,51 +161,22 @@ class WikimediaBrandProfileClient:
                             action="fallback_query_selected",
                             query=fallback_query,
                             result_count=len(candidates),
-                            detail="replaced disambiguation results",
+                            detail="replaced rejected non-brand results",
                         )
                     )
                     break
 
-        selected = select_wikipedia_candidate(name, candidates, context=context)
-        if selected is None and context is not None:
-            for fallback_query in enriched_queries(name, context):
-                fallback_candidates = self._wikipedia_search(fallback_query, steps)
-                fallback_selected = select_wikipedia_candidate(
-                    name,
-                    fallback_candidates,
-                    context=context,
-                )
-                if fallback_selected is None:
-                    continue
-                candidates = fallback_candidates
-                selected = fallback_selected
-                source_json["wikipedia_candidates_fallback"] = {
-                    "query": fallback_query,
-                    "candidates": candidate_digest(candidates),
+            if selected:
+                page_info = self._wikipedia_page_info(str(selected["title"]), steps)
+                source_json["selected_wikipedia_candidate"] = {
+                    "title": selected.get("title"),
+                    "pageid": selected.get("pageid"),
                 }
-                steps.append(
-                    BrandProfileLookupStep(
-                        source="wikipedia",
-                        action="fallback_query_selected",
-                        query=fallback_query,
-                        result_count=len(candidates),
-                        detail="replaced rejected non-brand results",
-                    )
-                )
-                break
-
-        page_info: dict[str, Any] = {}
-        if selected:
-            page_info = self._wikipedia_page_info(str(selected["title"]), steps)
-            source_json["selected_wikipedia_candidate"] = {
-                "title": selected.get("title"),
-                "pageid": selected.get("pageid"),
-            }
+                qid = qid or page_info.get("wikidata_qid")
 
         summary = self._wikipedia_summary(page_info.get("title") or selected_title(selected), steps)
-        qid = page_info.get("wikidata_qid")
         if not qid:
-            qid = self._wikidata_search(name, steps, context=context)
+            qid = self._wikidata_search(lookup_query, steps, context=context)
         if selected is None and not qid:
             steps.append(
                 BrandProfileLookupStep(
@@ -164,7 +199,7 @@ class WikimediaBrandProfileClient:
 
         display_name = entity_label(entity) or page_info.get("title") or selected_title(selected)
         description = entity_description(entity) or summary.get("description")
-        if description and is_non_brand_detail(description):
+        if description and is_non_brand_detail(description) and not allow_non_brand:
             steps.append(
                 BrandProfileLookupStep(
                     source="wikidata",
@@ -220,6 +255,19 @@ class WikimediaBrandProfileClient:
             fetched_at=fetched_at,
             expires_at=expires_at,
         )
+
+    def search_wikipedia_candidates(self, query: str) -> list[dict[str, Any]]:
+        steps: list[BrandProfileLookupStep] = []
+        candidates = self._wikipedia_search(query, steps)
+        return [
+            {
+                "title": str(candidate.get("title") or ""),
+                "pageid": int_or_none(candidate.get("pageid")),
+                "snippet": strip_html(str(candidate.get("snippet") or ""))[:240] or None,
+                "url": wiki_url(str(candidate.get("title") or "")),
+            }
+            for candidate in candidates[: self.max_candidates]
+        ]
 
     def _new_client(self) -> httpx.Client:
         timeout = httpx.Timeout(self.timeout_s, connect=min(self.timeout_s, 5.0))

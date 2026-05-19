@@ -1,7 +1,12 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import type { AdDetail, BrandProfile, IABContentCategory } from "../../lib/types";
+import type {
+  AdDetail,
+  BrandProfile,
+  BrandProfileCandidate,
+  IABContentCategory
+} from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
 import { TimestampChip } from "../shared/TimestampChip";
 
@@ -9,11 +14,21 @@ export function OverviewTab({
   detail,
   onSeek,
   onEnrichProfile,
+  onSearchProfile,
+  onResetProfile,
   enrichingProfileTarget
 }: {
   detail: AdDetail;
   onSeek?: (timeMs: number) => void;
-  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
+  onEnrichProfile?: (
+    target: "brand" | "advertiser",
+    options?: { force?: boolean; query?: string | null; wikipediaTitle?: string | null }
+  ) => void;
+  onSearchProfile?: (
+    target: "brand" | "advertiser",
+    query: string
+  ) => Promise<{ items: BrandProfileCandidate[] }>;
+  onResetProfile?: (target: "brand" | "advertiser") => void;
   enrichingProfileTarget?: "brand" | "advertiser" | null;
 }) {
   const cls = detail.classification;
@@ -166,6 +181,8 @@ export function OverviewTab({
           profile={detail.brand_profile}
           loading={enrichingProfileTarget === "brand"}
           onEnrichProfile={onEnrichProfile}
+          onSearchProfile={onSearchProfile}
+          onResetProfile={onResetProfile}
         />
         <ProfilePanel
           title="Advertiser profile"
@@ -174,6 +191,8 @@ export function OverviewTab({
           profile={detail.advertiser_profile}
           loading={enrichingProfileTarget === "advertiser"}
           onEnrichProfile={onEnrichProfile}
+          onSearchProfile={onSearchProfile}
+          onResetProfile={onResetProfile}
         />
       </Card>
 
@@ -265,15 +284,32 @@ function ProfilePanel({
   name,
   profile,
   loading,
-  onEnrichProfile
+  onEnrichProfile,
+  onSearchProfile,
+  onResetProfile
 }: {
   title: string;
   target: "brand" | "advertiser";
   name: string | null;
   profile?: BrandProfile | null;
   loading?: boolean;
-  onEnrichProfile?: (target: "brand" | "advertiser", force?: boolean) => void;
+  onEnrichProfile?: (
+    target: "brand" | "advertiser",
+    options?: { force?: boolean; query?: string | null; wikipediaTitle?: string | null }
+  ) => void;
+  onSearchProfile?: (
+    target: "brand" | "advertiser",
+    query: string
+  ) => Promise<{ items: BrandProfileCandidate[] }>;
+  onResetProfile?: (target: "brand" | "advertiser") => void;
 }) {
+  const [query, setQuery] = useState(name ?? "");
+  const [candidates, setCandidates] = useState<BrandProfileCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    setQuery(name ?? "");
+    setCandidates([]);
+  }, [name]);
   const metrics = Object.entries(profile?.key_metrics ?? {}).slice(0, 5);
   const hasCompanyContext = Boolean(
     profile?.parent_companies?.length ||
@@ -287,10 +323,23 @@ function ProfilePanel({
     <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div className="section-title" style={{ marginBottom: 0, flex: 1 }}>{title}</div>
+        {profile ? (
+          <button
+            className="btn btn-sm"
+            disabled={!name || loading || !onResetProfile}
+            onClick={() => {
+              setCandidates([]);
+              onResetProfile?.(target);
+            }}
+            title="Clear cached Wikimedia profile"
+          >
+            Reset
+          </button>
+        ) : null}
         <button
           className="btn btn-sm"
           disabled={!name || loading || !onEnrichProfile}
-          onClick={() => onEnrichProfile?.(target, Boolean(profile))}
+          onClick={() => onEnrichProfile?.(target, { force: Boolean(profile) })}
           title={profile ? "Refresh profile" : "Enrich profile"}
         >
           <span>{loading ? "Looking up" : profile ? "Refresh" : "Enrich"}</span>
@@ -298,6 +347,76 @@ function ProfilePanel({
       </div>
       {!name ? <div className="obs-empty">No {target} name.</div> : null}
       {name && !profile ? <div className="obs-empty">No cached profile.</div> : null}
+      {name ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              className="input"
+              style={{ flex: 1, fontSize: 12 }}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search Wikipedia for ${name}`}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void runProfileSearch(target, query, onSearchProfile, setCandidates, setSearching);
+                }
+              }}
+            />
+            <button
+              className="btn btn-sm"
+              disabled={searching || !query.trim() || !onSearchProfile}
+              onClick={() =>
+                void runProfileSearch(target, query, onSearchProfile, setCandidates, setSearching)
+              }
+            >
+              {searching ? "Searching" : "Search"}
+            </button>
+          </div>
+          {candidates.length ? (
+            <div style={{ display: "grid", gap: 4 }}>
+              {candidates.slice(0, 5).map((candidate) => (
+                <div
+                  key={`${candidate.title}-${candidate.pageid ?? ""}`}
+                  style={{
+                    display: "grid",
+                    gap: 3,
+                    padding: 8,
+                    border: "1px solid var(--border)",
+                    borderRadius: 6
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ flex: 1, color: "var(--fg)", fontSize: 12 }}>
+                      {candidate.title}
+                    </span>
+                    {candidate.pageid ? (
+                      <span className="badge badge-mono">{candidate.pageid}</span>
+                    ) : null}
+                    <button
+                      className="btn btn-sm"
+                      disabled={loading || !onEnrichProfile}
+                      onClick={() =>
+                        onEnrichProfile?.(target, {
+                          force: true,
+                          query,
+                          wikipediaTitle: candidate.title
+                        })
+                      }
+                    >
+                      Use
+                    </button>
+                  </div>
+                  {candidate.snippet ? (
+                    <div style={{ color: "var(--fg-mute)", fontSize: 11 }}>
+                      {candidate.snippet}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {profile ? (
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -362,6 +481,28 @@ function ProfilePanel({
       ) : null}
     </div>
   );
+}
+
+async function runProfileSearch(
+  target: "brand" | "advertiser",
+  query: string,
+  onSearchProfile:
+    | ((
+        target: "brand" | "advertiser",
+        query: string
+      ) => Promise<{ items: BrandProfileCandidate[] }>)
+    | undefined,
+  setCandidates: (items: BrandProfileCandidate[]) => void,
+  setSearching: (value: boolean) => void
+) {
+  if (!onSearchProfile || !query.trim()) return;
+  setSearching(true);
+  try {
+    const result = await onSearchProfile(target, query.trim());
+    setCandidates(result.items ?? []);
+  } finally {
+    setSearching(false);
+  }
 }
 
 function joinList(values?: string[]) {

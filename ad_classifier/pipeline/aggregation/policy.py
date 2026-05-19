@@ -3,11 +3,15 @@ from __future__ import annotations
 import functools
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 
-from ad_classifier.iab_content_taxonomy import infer_iab_content_categories
-from ad_classifier.iab_taxonomy import infer_iab_category
+from ad_classifier.knowledge.runtime import (
+    apply_runtime_knowledge,
+    infer_content_with_knowledge,
+    infer_product_with_knowledge,
+)
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
 from ad_classifier.marketing._utils import format_price as _format_price
 from ad_classifier.marketing.brand import brand_normalize
@@ -466,6 +470,7 @@ def aggregate(
     sensitive_categories: set[str] | None = None,
     selected_frames: list[dict] | None = None,
     dropped_frames: list[dict] | None = None,
+    knowledge_manager: Any | None = None,
 ) -> FinalAdClassification:
     evidence = _map_vlm_evidence(vlm_result) + _rule_evidence(rules_triggered)
 
@@ -496,21 +501,37 @@ def aggregate(
     }
 
     risk_labels = _risk_labels(vlm_result, rules_triggered)
-    iab_category = infer_iab_category(
+    evidence_texts = [item.text for item in evidence if item.text]
+    iab_category = infer_product_with_knowledge(
+        knowledge_manager,
         vlm_result.iab_category,
         primary_category=category,
         subcategory=marketing_entities.subcategory,
         products=marketing_entities.products,
-        evidence_texts=[item.text for item in evidence],
+        evidence_texts=evidence_texts,
     )
-    iab_content_categories = infer_iab_content_categories(
+    iab_content_categories = infer_content_with_knowledge(
+        knowledge_manager,
         existing=vlm_result.iab_content_categories,
         primary_category=category,
         subcategory=marketing_entities.subcategory,
         products=marketing_entities.products,
         product_iab_path=iab_category.full_path if iab_category else None,
-        evidence_texts=[item.text for item in evidence],
+        evidence_texts=evidence_texts,
     )
+    knowledge_result = apply_runtime_knowledge(
+        knowledge_manager,
+        primary_category=category,
+        marketing_entities=marketing_entities,
+        iab_category=iab_category,
+        iab_content_categories=iab_content_categories,
+        evidence_texts=evidence_texts,
+    )
+    category = knowledge_result.primary_category
+    iab_category = knowledge_result.iab_category
+    iab_content_categories = knowledge_result.iab_content_categories
+    debug["knowledge_rules"] = knowledge_result.debug_events
+    sensitive = category in (sensitive_categories or _load_sensitive_categories())
 
     return FinalAdClassification(
         ad_id=ad_id,

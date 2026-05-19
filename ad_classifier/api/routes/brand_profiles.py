@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Literal
 
 import httpx
@@ -25,6 +26,8 @@ class BrandProfileEnrichmentRequest(BaseModel):
     target: Literal["brand", "advertiser"] = "brand"
     force: bool = False
     query: str | None = None
+    wikipedia_title: str | None = None
+    wikidata_qid: str | None = None
 
 
 @router.post("/ads/{ad_id}/brand-profile/enrich")
@@ -43,7 +46,7 @@ def enrich_brand_profile(
         if ad is None:
             raise HTTPException(status_code=404, detail="ad not found")
         marketing = MarketingEntityRepository(conn).get(ad_id)
-        name = body.query or _target_name(body.target, ad, marketing)
+        name = _target_name(body.target, ad, marketing)
         if not name:
             raise HTTPException(status_code=400, detail=f"{body.target} name is not available")
 
@@ -71,7 +74,14 @@ def enrich_brand_profile(
             website_domain=ad.website_domain or ad.landing_page_domain,
         )
         try:
-            profile = client.fetch(name, context=search_context)
+            profile = _fetch_brand_profile(
+                client,
+                name,
+                context=search_context,
+                search_query=body.query,
+                wikipedia_title=body.wikipedia_title,
+                wikidata_qid=body.wikidata_qid,
+            )
         except BrandProfileNotFoundError as exc:
             if body.force or cached is not None:
                 repo.delete(normalized)
@@ -89,6 +99,61 @@ def enrich_brand_profile(
             "cached": False,
             "profile": profile.model_dump(mode="json"),
         }
+    finally:
+        conn.close()
+
+
+@router.get("/ads/{ad_id}/brand-profile/search")
+def search_brand_profile_candidates(
+    ad_id: str,
+    request: Request,
+    target: Literal["brand", "advertiser"] = "brand",
+    q: str | None = None,
+) -> dict[str, Any]:
+    config = get_config(request)
+    if not config.brand_profiles.enabled:
+        raise HTTPException(status_code=403, detail="brand profile enrichment is disabled")
+
+    conn = open_request_db(request)
+    try:
+        ad = AdRepository(conn).get(ad_id)
+        if ad is None:
+            raise HTTPException(status_code=404, detail="ad not found")
+        marketing = MarketingEntityRepository(conn).get(ad_id)
+        target_name = _target_name(target, ad, marketing)
+        query = q or target_name
+        if not query:
+            raise HTTPException(status_code=400, detail=f"{target} name is not available")
+        client = _brand_profile_client(request)
+        return {
+            "target": target,
+            "query": query,
+            "items": client.search_wikipedia_candidates(query),
+        }
+    finally:
+        conn.close()
+
+
+@router.delete("/ads/{ad_id}/brand-profile/{target}")
+def reset_brand_profile(
+    ad_id: str,
+    target: Literal["brand", "advertiser"],
+    request: Request,
+) -> dict[str, Any]:
+    conn = open_request_db(request)
+    try:
+        ad = AdRepository(conn).get(ad_id)
+        if ad is None:
+            raise HTTPException(status_code=404, detail="ad not found")
+        marketing = MarketingEntityRepository(conn).get(ad_id)
+        name = _target_name(target, ad, marketing)
+        if not name:
+            raise HTTPException(status_code=400, detail=f"{target} name is not available")
+        normalized = normalize_profile_name(name)
+        if normalized:
+            BrandProfileRepository(conn).delete(normalized)
+        conn.commit()
+        return {"target": target, "deleted": bool(normalized)}
     finally:
         conn.close()
 
@@ -120,3 +185,27 @@ def _brand_profile_client(request: Request) -> WikimediaBrandProfileClient:
         max_candidates=profile_config.max_candidates,
         max_parent_depth=profile_config.max_parent_depth,
     )
+
+
+def _fetch_brand_profile(
+    client,
+    name: str,
+    *,
+    context: SearchContext,
+    search_query: str | None,
+    wikipedia_title: str | None,
+    wikidata_qid: str | None,
+):
+    kwargs: dict[str, Any] = {"context": context}
+    parameters = inspect.signature(client.fetch).parameters
+    if "search_query" in parameters:
+        kwargs["search_query"] = search_query
+    elif search_query and "query" in parameters:
+        kwargs["query"] = search_query
+    if "wikipedia_title" in parameters:
+        kwargs["wikipedia_title"] = wikipedia_title
+    if "wikidata_qid" in parameters:
+        kwargs["wikidata_qid"] = wikidata_qid
+    if "allow_non_brand" in parameters:
+        kwargs["allow_non_brand"] = bool(wikipedia_title or wikidata_qid)
+    return client.fetch(name, **kwargs)

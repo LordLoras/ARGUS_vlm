@@ -819,6 +819,180 @@ def test_brand_profile_refresh_deletes_stale_cache_when_lookup_not_found(config_
         assert after.json()["brand_profile"] is None
 
 
+def test_brand_profile_manual_search_select_and_reset(config_path: Path):
+    class SearchableBrandProfileClient:
+        def search_wikipedia_candidates(self, query: str):
+            return [
+                {
+                    "title": "Thor Motor Coach",
+                    "pageid": 123,
+                    "snippet": "American recreational vehicle manufacturer",
+                    "url": "https://en.wikipedia.org/wiki/Thor_Motor_Coach",
+                }
+            ]
+
+        def fetch(
+            self,
+            name: str,
+            *,
+            context=None,
+            search_query=None,
+            wikipedia_title=None,
+            wikidata_qid=None,
+            allow_non_brand=False,
+        ) -> BrandProfile:
+            now = utc_now()
+            return BrandProfile(
+                normalized_name="thor",
+                query_name=name,
+                display_name=wikipedia_title,
+                description="American recreational vehicle manufacturer",
+                wikipedia_title=wikipedia_title,
+                wikipedia_url="https://en.wikipedia.org/wiki/Thor_Motor_Coach",
+                wikidata_qid="QTHORCOACH",
+                source_json={
+                    "search_query": search_query,
+                    "manual_title": wikipedia_title,
+                    "allow_non_brand": allow_non_brand,
+                },
+                fetched_at=now,
+                expires_at=now + timedelta(days=90),
+            )
+
+    app = create_app(
+        config_path=config_path,
+        brand_profile_client_factory=lambda _config: SearchableBrandProfileClient(),
+    )
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name,
+                primary_category, subcategory
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_profile_select",
+                "/tmp/thor.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Thor",
+                "automotive",
+                "RV",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with TestClient(app) as profile_client:
+        search = profile_client.get(
+            "/api/ads/ad_profile_select/brand-profile/search",
+            params={"target": "brand", "q": "Thor RV"},
+        )
+        assert search.status_code == 200, search.text
+        assert search.json()["items"][0]["title"] == "Thor Motor Coach"
+
+        enrich = profile_client.post(
+            "/api/ads/ad_profile_select/brand-profile/enrich",
+            json={
+                "target": "brand",
+                "force": True,
+                "query": "Thor RV",
+                "wikipedia_title": "Thor Motor Coach",
+            },
+        )
+        assert enrich.status_code == 200, enrich.text
+        assert enrich.json()["profile"]["display_name"] == "Thor Motor Coach"
+
+        reset = profile_client.delete("/api/ads/ad_profile_select/brand-profile/brand")
+        assert reset.status_code == 200, reset.text
+        detail = profile_client.get("/api/ads/ad_profile_select")
+        assert detail.status_code == 200
+        assert detail.json()["brand_profile"] is None
+
+
+def test_patch_ad_updates_manual_iab_projection_and_classification(client: TestClient, config_path: Path):
+    load = client.post("/api/knowledge/load-taxonomies", json={})
+    assert load.status_code == 200, load.text
+
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name,
+                primary_category, iab_unique_id, iab_content_ids
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_iab_edit",
+                "/tmp/iab.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "FOX5",
+                "other",
+                "338",
+                "338,641",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO classifications (
+                ad_id, primary_category, risk_labels_json, confidence,
+                ocr_quality_json, vlm_raw_json, evidence_json,
+                vlm_model, vlm_prompt_version, embedder_text_model,
+                embedder_visual_model, pipeline_version, created_at,
+                iab_category_json, iab_content_categories_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_iab_edit",
+                "other",
+                "[]",
+                0.8,
+                None,
+                "{}",
+                "[]",
+                "model",
+                "prompt",
+                "text",
+                "visual",
+                "test",
+                datetime.now(UTC).isoformat(),
+                None,
+                "[]",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.patch(
+        "/api/ads/ad_iab_edit",
+        json={
+            "primary_category": "entertainment_media",
+            "iab_product_id": "1429",
+            "iab_content_ids": ["483"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["primary_category"] == "entertainment_media"
+    assert payload["iab_unique_id"] == "1429"
+    assert payload["iab_content_ids"] == "483"
+
+    detail = client.get("/api/ads/ad_iab_edit")
+    assert detail.status_code == 200
+    classification = detail.json()["classification"]
+    assert classification["primary_category"] == "entertainment_media"
+    assert classification["iab_category"]["iab_unique_id"] == "1429"
+    assert classification["iab_content_categories"][0]["iab_unique_id"] == "483"
+
+
 def test_search_keyword_returns_preview(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:

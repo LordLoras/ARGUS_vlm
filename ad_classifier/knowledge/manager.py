@@ -191,12 +191,13 @@ class KnowledgeManager:
     def lookup_brand_rule(self, brand_name: str) -> BrandCategoryRule | None:
         if not brand_name:
             return None
+        normalized = brand_name.strip().lower()
         with self._connect(readonly=True) as conn:
             row = conn.execute(
                 """SELECT * FROM brand_category_rules
-                   WHERE brand_name = ? AND active = 1
+                   WHERE LOWER(brand_name) = ? AND active = 1
                    ORDER BY priority DESC, confidence DESC LIMIT 1""",
-                (brand_name.strip(),),
+                (normalized,),
             ).fetchone()
             return _row_to_brand_rule(row) if row else None
 
@@ -256,17 +257,27 @@ class KnowledgeManager:
 
     # ── Taxonomy Overrides ──────────────────────────────────
 
-    def list_overrides(self, *, override_type: str | None = None) -> list[TaxonomyOverride]:
+    def list_overrides(
+        self,
+        *,
+        override_type: str | None = None,
+        active_only: bool = False,
+    ) -> list[TaxonomyOverride]:
         with self._connect(readonly=True) as conn:
+            clauses: list[str] = []
+            params: list[Any] = []
             if override_type:
-                rows = conn.execute(
-                    "SELECT * FROM taxonomy_overrides WHERE override_type = ? ORDER BY pattern",
-                    (override_type,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM taxonomy_overrides ORDER BY override_type, pattern"
-                ).fetchall()
+                clauses.append("override_type = ?")
+                params.append(override_type)
+            if active_only:
+                clauses.append("active = 1")
+            where = " AND ".join(clauses) if clauses else "1=1"
+            rows = conn.execute(
+                f"""SELECT * FROM taxonomy_overrides
+                    WHERE {where}
+                    ORDER BY priority DESC, override_type, pattern""",
+                params,
+            ).fetchall()
             return [_row_to_override(r) for r in rows]
 
     def upsert_override(self, override: TaxonomyOverride) -> TaxonomyOverride:
@@ -325,7 +336,9 @@ class KnowledgeManager:
                 params.append(taxonomy_type)
             where = " AND ".join(clauses) if clauses else "1=1"
             rows = conn.execute(
-                f"SELECT * FROM inference_rules WHERE {where} ORDER BY taxonomy_type, target_id",
+                f"""SELECT * FROM inference_rules
+                    WHERE {where}
+                    ORDER BY taxonomy_type, priority DESC, target_id""",
                 params,
             ).fetchall()
             return [_row_to_inference_rule(r) for r in rows]
@@ -396,7 +409,12 @@ class KnowledgeManager:
         known brand, creates/updates a brand_category_rule so future ads with the
         same brand auto-classify correctly.
         """
-        if entry.field not in ("primary_category", "iab_product_id") or not entry.new_value:
+        if entry.field not in (
+            "primary_category",
+            "iab_product_id",
+            "iab_content_ids",
+            "subcategory",
+        ) or not entry.new_value:
             return None
 
         # We need the brand from the ad — caller should set old_value to the brand name
@@ -405,7 +423,8 @@ class KnowledgeManager:
         if not brand_name:
             return None
 
-        rule = BrandCategoryRule(
+        existing = self.lookup_brand_rule(brand_name)
+        rule = existing.model_copy(update={"source": "correction"}) if existing else BrandCategoryRule(
             brand_name=brand_name,
             source="correction",
             confidence=0.9,
@@ -415,6 +434,12 @@ class KnowledgeManager:
             rule.primary_category = entry.new_value
         elif entry.field == "iab_product_id":
             rule.iab_product_id = entry.new_value
+        elif entry.field == "iab_content_ids":
+            rule.iab_content_ids = [
+                item.strip() for item in entry.new_value.split(",") if item.strip()
+            ]
+        elif entry.field == "subcategory":
+            rule.subcategory = entry.new_value
 
         return self.upsert_brand_rule(rule)
 
@@ -455,6 +480,66 @@ class KnowledgeManager:
                     f"{entry.full_path}"
                 )
             return "\n".join(lines)
+
+    def render_runtime_guidance_for_prompt(self, *, limit: int = 80) -> str:
+        """Render editable knowledge rules as concise VLM guidance."""
+        with self._connect(readonly=True) as conn:
+            lines: list[str] = []
+            brand_rows = conn.execute(
+                """SELECT * FROM brand_category_rules
+                   WHERE active = 1
+                   ORDER BY priority DESC, confidence DESC, brand_name
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            for row in brand_rows:
+                rule = _row_to_brand_rule(row)
+                lines.append(
+                    "- brand_rule | "
+                    f"brand={rule.brand_name} | primary={rule.primary_category or '-'} | "
+                    f"product_iab={rule.iab_product_id or '-'} | "
+                    f"content_iab={','.join(rule.iab_content_ids) or '-'} | "
+                    f"subcategory={rule.subcategory or '-'}"
+                )
+
+            remaining = max(0, limit - len(lines))
+            if remaining:
+                override_rows = conn.execute(
+                    """SELECT * FROM taxonomy_overrides
+                       WHERE active = 1
+                       ORDER BY priority DESC, override_type, pattern
+                       LIMIT ?""",
+                    (remaining,),
+                ).fetchall()
+                for row in override_rows:
+                    override = _row_to_override(row)
+                    lines.append(
+                        "- override | "
+                        f"type={override.override_type} | pattern={override.pattern} | "
+                        f"primary={override.primary_category or '-'} | "
+                        f"product_iab={override.iab_product_id or '-'} | "
+                        f"content_iab={','.join(override.iab_content_ids) or '-'}"
+                    )
+
+            remaining = max(0, limit - len(lines))
+            if remaining:
+                inference_rows = conn.execute(
+                    """SELECT * FROM inference_rules
+                       WHERE active = 1
+                       ORDER BY taxonomy_type, priority DESC, target_id
+                       LIMIT ?""",
+                    (remaining,),
+                ).fetchall()
+                for row in inference_rows:
+                    rule = _row_to_inference_rule(row)
+                    lines.append(
+                        "- inference | "
+                        f"type={rule.taxonomy_type} | target_iab={rule.target_id} | "
+                        f"terms={', '.join(rule.terms[:8])} | "
+                        f"context={', '.join(rule.context_terms[:6]) or '-'}"
+                    )
+
+            return "\n".join(lines) if lines else "- no editable taxonomy rules configured"
 
     # ── Stats ───────────────────────────────────────────────
 

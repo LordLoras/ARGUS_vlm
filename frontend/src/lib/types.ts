@@ -216,6 +216,13 @@ export type BrandProfileEnrichmentResponse = {
   profile: BrandProfile;
 };
 
+export type BrandProfileCandidate = {
+  title: string;
+  pageid?: number | null;
+  snippet?: string | null;
+  url?: string | null;
+};
+
 export type Campaign = {
   id: string;
   name: string;

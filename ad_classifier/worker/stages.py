@@ -226,6 +226,7 @@ def run_pipeline_for_job(
         max_frames=config.vlm.max_frames_in_bundle,
         metadata=ingest.metadata.model_dump() if ingest.metadata else {},
     )
+    knowledge_manager = _knowledge_manager_for_pipeline(config, config_file)
     vlm = components.vlm_verifier or HTTPVLMVerifier(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
@@ -239,7 +240,7 @@ def run_pipeline_for_job(
         response_format=config.vlm.endpoint.response_format,
         image_max_dim=config.vlm.image_max_dim,
         stream=config.vlm.endpoint.stream,
-        knowledge_manager=_knowledge_manager_for_pipeline(config, config_file),
+        knowledge_manager=knowledge_manager,
     )
     vlm_result = vlm.verify(bundle)
 
@@ -329,6 +330,7 @@ def run_pipeline_for_job(
         pipeline_version="0.1.0",
         selected_frames=selected_debug,
         dropped_frames=dropped_debug,
+        knowledge_manager=knowledge_manager,
     )
     final.marketing_entities = enrich_marketing_entities(
         final.marketing_entities,

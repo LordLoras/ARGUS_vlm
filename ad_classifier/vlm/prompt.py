@@ -49,6 +49,10 @@ def render_verifier_prompt(
     if knowledge_manager is not None:
         iab_taxonomy = knowledge_manager.render_product_taxonomy_for_prompt()
         iab_content_taxonomy = knowledge_manager.render_content_taxonomy_for_prompt()
+        render_guidance = getattr(knowledge_manager, "render_runtime_guidance_for_prompt", None)
+        runtime_guidance = (
+            render_guidance() if render_guidance else "- no editable taxonomy rules configured"
+        )
         if "no IAB product taxonomy loaded" in iab_taxonomy:
             iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
         if "no IAB content taxonomy loaded" in iab_content_taxonomy:
@@ -56,9 +60,11 @@ def render_verifier_prompt(
     else:
         iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
         iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
+        runtime_guidance = "- no editable taxonomy rules configured"
 
     return (
         template.replace("{ALLOWED_CATEGORIES}", allowed_categories)
         .replace("{IAB_PRODUCT_TAXONOMY}", iab_taxonomy)
         .replace("{IAB_CONTENT_TAXONOMY}", iab_content_taxonomy)
+        .replace("{TAXONOMY_RUNTIME_GUIDANCE}", runtime_guidance)
     )

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+from ad_classifier.knowledge.manager import KnowledgeManager
+from ad_classifier.knowledge.models import BrandCategoryRule
 from ad_classifier.models.iab import IABCategory, IABContentCategory
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.rules.models import RuleTrigger
@@ -104,6 +110,35 @@ def test_iab_content_categories_are_canonicalized_from_vlm_id():
         "1",
         "2",
     ]
+
+
+def test_knowledge_brand_rule_applies_to_fresh_aggregation(tmp_path: Path):
+    kb = KnowledgeManager(tmp_path / "knowledge.db")
+    kb.load_taxonomies()
+    if kb.get_product_entry("1429") is None or kb.get_content_entry("483") is None:
+        pytest.skip("IAB taxonomy entries unavailable")
+
+    kb.upsert_brand_rule(
+        BrandCategoryRule(
+            brand_name="FOX5",
+            primary_category="entertainment_media",
+            iab_product_id="1429",
+            iab_content_ids=["483"],
+            subcategory="Sports promo",
+            confidence=0.95,
+            priority=10,
+        )
+    )
+    vlm = _vlm(primary_category="other")
+    vlm.marketing_entities.brand.name = "FOX5"
+
+    result = aggregate("ad_knowledge", vlm, [], knowledge_manager=kb)
+
+    assert result.primary_category == "entertainment_media"
+    assert result.marketing_entities.subcategory == "Sports promo"
+    assert result.iab_category is not None
+    assert result.iab_category.iab_unique_id == "1429"
+    assert [item.iab_unique_id for item in result.iab_content_categories] == ["483"]
 
 
 def test_iab_content_skin_care_fallback_when_vlm_omits_secondary_category():
