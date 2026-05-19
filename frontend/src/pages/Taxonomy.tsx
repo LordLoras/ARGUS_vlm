@@ -153,7 +153,7 @@ function TaxonomyTab({ type }: { type: "product" | "content" }) {
 
   const loadRoot = useCallback(() => {
     setLoading(true);
-    listFn({ active_only: false })
+    listFn({ active_only: false, roots_only: false })
       .then(setTiers)
       .finally(() => setLoading(false));
   }, [listFn]);
@@ -200,7 +200,11 @@ function TaxonomyTab({ type }: { type: "product" | "content" }) {
           <div className="dcard-head"><span>Search Results ({searchResults.length})</span></div>
           <div style={{ maxHeight: 300, overflow: "auto" }}>
             {searchResults.map(e => (
-              <TaxonomyRow key={e.unique_id} entry={e} onToggle={toggle} />
+              <TaxonomyRow
+                key={e.unique_id}
+                entry={e}
+                onToggle={() => void toggle(e.unique_id, e.active)}
+              />
             ))}
           </div>
         </div>

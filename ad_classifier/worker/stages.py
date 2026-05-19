@@ -8,7 +8,7 @@ from pathlib import Path
 import structlog
 
 from ad_classifier._env import resolve_api_key
-from ad_classifier.config import AppConfig
+from ad_classifier.config import AppConfig, resolve_config_path
 from ad_classifier.db.connection import load_sqlite_vec
 from ad_classifier.db.repositories import AdRepository
 from ad_classifier.db.repositories.classifications import ClassificationRepository
@@ -21,6 +21,7 @@ from ad_classifier.embeddings.text.base import TextEmbedder
 from ad_classifier.embeddings.text.sentence_transformer import SentenceTransformerEmbedder
 from ad_classifier.ingest.models import IngestArtifacts, IngestEvent, WhisperTranscript
 from ad_classifier.ingest.service import IngestService
+from ad_classifier.knowledge.manager import KnowledgeManager
 from ad_classifier.marketing.extract import enrich_marketing_entities
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 from ad_classifier.pipeline.aggregation.policy import aggregate
@@ -238,6 +239,7 @@ def run_pipeline_for_job(
         response_format=config.vlm.endpoint.response_format,
         image_max_dim=config.vlm.image_max_dim,
         stream=config.vlm.endpoint.stream,
+        knowledge_manager=_knowledge_manager_for_pipeline(config, config_file),
     )
     vlm_result = vlm.verify(bundle)
 
@@ -402,6 +404,22 @@ def run_pipeline_for_job(
     )
     conn.commit()
     emit("completed", 1.0, "job completed")
+
+
+def _knowledge_manager_for_pipeline(
+    config: AppConfig,
+    config_file: Path,
+) -> KnowledgeManager | None:
+    try:
+        db_path = resolve_config_path(config.paths.sqlite_path, config_file)
+        return KnowledgeManager(db_path.parent / "knowledge.db")
+    except Exception as exc:
+        _logger.warning(
+            "knowledge_manager_unavailable",
+            stage="vlm",
+            error=str(exc),
+        )
+        return None
 
 
 def _run_ingest(

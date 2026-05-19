@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import structlog
 
@@ -18,13 +19,11 @@ from ad_classifier.knowledge.loader import (
     seed_default_inference_rules,
 )
 from ad_classifier.knowledge.models import (
-    BackfillSuggestion,
     BrandCategoryRule,
     CorrectionEntry,
     IABTaxonomyEntry,
     InferenceRule,
     TaxonomyOverride,
-    TaxonomyVersion,
 )
 from ad_classifier.knowledge.schema import initialize_knowledge_db
 
@@ -85,6 +84,7 @@ class KnowledgeManager:
         parent_id: str | None = None,
         active_only: bool = True,
         tier_1: str | None = None,
+        roots_only: bool = True,
     ) -> list[IABTaxonomyEntry]:
         with self._connect(readonly=True) as conn:
             clauses: list[str] = []
@@ -94,7 +94,7 @@ class KnowledgeManager:
             if parent_id is not None:
                 clauses.append("parent_id = ?")
                 params.append(parent_id)
-            elif parent_id is None and not tier_1:
+            elif roots_only and parent_id is None and not tier_1:
                 clauses.append("parent_id IS NULL")
             if tier_1 is not None:
                 clauses.append("tier_1 = ?")
@@ -143,6 +143,7 @@ class KnowledgeManager:
         parent_id: str | None = None,
         active_only: bool = True,
         tier_1: str | None = None,
+        roots_only: bool = True,
     ) -> list[IABTaxonomyEntry]:
         with self._connect(readonly=True) as conn:
             clauses: list[str] = []
@@ -152,7 +153,7 @@ class KnowledgeManager:
             if parent_id is not None:
                 clauses.append("parent_id = ?")
                 params.append(parent_id)
-            elif parent_id is None and not tier_1:
+            elif roots_only and parent_id is None and not tier_1:
                 clauses.append("parent_id IS NULL")
             if tier_1 is not None:
                 clauses.append("tier_1 = ?")

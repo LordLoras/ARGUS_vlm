@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -110,9 +109,13 @@ def list_product_taxonomy(
     parent_id: str | None = None,
     tier_1: str | None = None,
     active_only: bool = True,
+    roots_only: bool = True,
 ) -> list[dict[str, Any]]:
     entries = _kb(request).list_product_taxonomy(
-        parent_id=parent_id, tier_1=tier_1, active_only=active_only,
+        parent_id=parent_id,
+        tier_1=tier_1,
+        active_only=active_only,
+        roots_only=roots_only,
     )
     return [e.model_dump() for e in entries]
 
@@ -152,9 +155,13 @@ def list_content_taxonomy(
     parent_id: str | None = None,
     tier_1: str | None = None,
     active_only: bool = True,
+    roots_only: bool = True,
 ) -> list[dict[str, Any]]:
     entries = _kb(request).list_content_taxonomy(
-        parent_id=parent_id, tier_1=tier_1, active_only=active_only,
+        parent_id=parent_id,
+        tier_1=tier_1,
+        active_only=active_only,
+        roots_only=roots_only,
     )
     return [e.model_dump() for e in entries]
 

@@ -7,6 +7,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx

@@ -119,8 +119,8 @@ export const knowledgeApi = {
     ),
 
   // Product taxonomy
-  listProduct: (opts?: { parent_id?: string; tier_1?: string; active_only?: boolean }) =>
-    kbFetch<IABEntry[]>(`/taxonomy/product${params(opts as Record<string, unknown>)}`),
+  listProduct: (opts?: { parent_id?: string; tier_1?: string; active_only?: boolean; roots_only?: boolean }) =>
+    kbFetch<IABEntry[]>(`/taxonomy/product${params(opts ?? {})}`),
   getProduct: (id: string) => kbFetch<IABEntry>(`/taxonomy/product/${id}`),
   searchProduct: (q: string) => kbFetch<IABEntry[]>(`/taxonomy/product-search${params({ q })}`),
   toggleProduct: (id: string, active: boolean) =>
@@ -129,8 +129,8 @@ export const knowledgeApi = {
     }),
 
   // Content taxonomy
-  listContent: (opts?: { parent_id?: string; tier_1?: string; active_only?: boolean }) =>
-    kbFetch<IABEntry[]>(`/taxonomy/content${params(opts as Record<string, unknown>)}`),
+  listContent: (opts?: { parent_id?: string; tier_1?: string; active_only?: boolean; roots_only?: boolean }) =>
+    kbFetch<IABEntry[]>(`/taxonomy/content${params(opts ?? {})}`),
   getContent: (id: string) => kbFetch<IABEntry>(`/taxonomy/content/${id}`),
   searchContent: (q: string) => kbFetch<IABEntry[]>(`/taxonomy/content-search${params({ q })}`),
   toggleContent: (id: string, active: boolean) =>

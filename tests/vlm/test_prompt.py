@@ -78,3 +78,17 @@ def test_prompt_rejects_incidental_music_and_animation_content_labels():
     assert "Do not output Music merely because the ad has background music" in prompt
     assert "Do not output Animation & Anime merely because the ad is a TV/program spot" in prompt
     assert "omit it" in prompt
+
+
+def test_prompt_falls_back_when_knowledge_taxonomy_is_empty():
+    class EmptyKnowledge:
+        def render_product_taxonomy_for_prompt(self) -> str:
+            return "- no IAB product taxonomy loaded"
+
+        def render_content_taxonomy_for_prompt(self) -> str:
+            return "- no IAB content taxonomy loaded"
+
+    prompt = render_verifier_prompt(knowledge_manager=EmptyKnowledge())
+
+    assert "1554 | parent=1553 | depth=3 | Vehicles > Automotive Ownership" in prompt
+    assert "6 | parent=2 | depth=3 | Automotive > Auto Body Styles > SUV" in prompt

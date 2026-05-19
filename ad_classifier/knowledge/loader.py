@@ -9,8 +9,6 @@ from pathlib import Path
 
 import structlog
 
-from ad_classifier.knowledge.schema import initialize_knowledge_db
-
 logger = structlog.get_logger(__name__)
 
 DEFAULT_IAB_PRODUCT_PATH = Path(__file__).parent.parent.parent / "Ad Product Taxonomy 2.0.tsv"

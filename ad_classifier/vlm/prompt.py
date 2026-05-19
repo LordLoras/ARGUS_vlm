@@ -49,6 +49,10 @@ def render_verifier_prompt(
     if knowledge_manager is not None:
         iab_taxonomy = knowledge_manager.render_product_taxonomy_for_prompt()
         iab_content_taxonomy = knowledge_manager.render_content_taxonomy_for_prompt()
+        if "no IAB product taxonomy loaded" in iab_taxonomy:
+            iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
+        if "no IAB content taxonomy loaded" in iab_content_taxonomy:
+            iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
     else:
         iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
         iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
