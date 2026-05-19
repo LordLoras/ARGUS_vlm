@@ -182,7 +182,8 @@ export function Library() {
       target: "brand" | "advertiser";
       force?: boolean;
     }) => api.enrichBrandProfile(adId, { target, force }),
-    onSuccess: async (_result, variables) => {
+    onSettled: async (_result, _error, variables) => {
+      if (!variables) return;
       await queryClient.invalidateQueries({ queryKey: ["ad-detail", variables.adId] });
     }
   });

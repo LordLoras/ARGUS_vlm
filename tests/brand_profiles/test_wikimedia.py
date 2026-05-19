@@ -68,6 +68,20 @@ def test_wikimedia_client_rejects_family_name_entity():
     http_client.close()
 
 
+def test_wikimedia_client_rejects_exact_historic_site_entity():
+    transport = httpx.MockTransport(_historic_site_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
+        client.fetch("Prillaman Homestead")
+
+    http_client.close()
+
+
 def _wikimedia_handler(request: httpx.Request) -> httpx.Response:
     if request.url.host == "en.wikipedia.org" and request.url.path == "/w/api.php":
         if request.url.params.get("list") == "search":
@@ -215,6 +229,51 @@ def _family_name_handler(request: httpx.Request) -> httpx.Response:
                         "id": "Q37527325",
                         "label": "Prillaman",
                         "description": "family name",
+                    }
+                ]
+            },
+        )
+    return httpx.Response(404, request=request, json={"error": "not mocked"})
+
+
+def _historic_site_handler(request: httpx.Request) -> httpx.Response:
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("list") == "search"
+    ):
+        return _json(
+            request,
+            {
+                "query": {
+                    "search": [
+                        {
+                            "title": "Star Wars: Episode I - The Phantom Menace",
+                            "pageid": 50793,
+                            "snippet": "News and Past Events - Prillaman.net.",
+                        },
+                        {
+                            "title": "Stanley Furniture",
+                            "pageid": 25058748,
+                            "snippet": "Glenn Prillaman resigned from his role as CEO.",
+                        },
+                    ]
+                }
+            },
+        )
+    if (
+        request.url.host == "www.wikidata.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("action") == "wbsearchentities"
+    ):
+        return _json(
+            request,
+            {
+                "search": [
+                    {
+                        "id": "Q105887726",
+                        "label": "Prillaman Homestead",
+                        "description": "historic site",
                     }
                 ]
             },

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ad_classifier.api.deps import get_config, open_request_db
 from ad_classifier.brand_profiles.matching import SearchContext
 from ad_classifier.brand_profiles.wikimedia import (
+    BrandProfileNotFoundError,
     WikimediaBrandProfileClient,
     normalize_profile_name,
 )
@@ -67,6 +68,11 @@ def enrich_brand_profile(
         )
         try:
             profile = client.fetch(name, context=search_context)
+        except BrandProfileNotFoundError as exc:
+            if body.force or cached is not None:
+                repo.delete(normalized)
+                conn.commit()
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except httpx.HTTPError as exc:

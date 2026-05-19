@@ -13,6 +13,7 @@ from ad_classifier.brand_profiles.matching import (
     first_unseen,
     int_or_none,
     is_disambiguation,
+    is_non_brand_detail,
     normalize_profile_name,
     select_wikidata_candidate,
     select_wikipedia_candidate,
@@ -43,6 +44,10 @@ WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_SUMMARY_API = "https://en.wikipedia.org/api/rest_v1/page/summary"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 WIKIDATA_ENTITY_DATA = "https://www.wikidata.org/wiki/Special:EntityData"
+
+
+class BrandProfileNotFoundError(ValueError):
+    pass
 
 
 class WikimediaBrandProfileClient:
@@ -121,7 +126,7 @@ class WikimediaBrandProfileClient:
                     detail="no candidate title or label matched the requested name",
                 )
             )
-            raise ValueError(f"no relevant Wikimedia profile found for {name}")
+            raise BrandProfileNotFoundError(f"no relevant Wikimedia profile found for {name}")
 
         entity = self._wikidata_entity(str(qid), steps) if qid else {}
         labels = self._resolve_labels(collect_label_qids(entity), steps)
@@ -133,6 +138,16 @@ class WikimediaBrandProfileClient:
 
         display_name = entity_label(entity) or page_info.get("title") or selected_title(selected)
         description = entity_description(entity) or summary.get("description")
+        if description and is_non_brand_detail(description):
+            steps.append(
+                BrandProfileLookupStep(
+                    source="wikidata",
+                    action="rejected_non_brand_entity",
+                    qid=str(qid) if qid else None,
+                    detail=description,
+                )
+            )
+            raise BrandProfileNotFoundError(f"no relevant Wikimedia profile found for {name}")
         wikipedia_url = (
             page_info.get("fullurl")
             or summary.get("content_urls", {}).get("desktop", {}).get("page")

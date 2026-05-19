@@ -10,8 +10,10 @@ from fastapi.testclient import TestClient
 
 from ad_classifier.agent.client import AgentMessage, MockAgentClient
 from ad_classifier.api.app import create_app
+from ad_classifier.brand_profiles.wikimedia import BrandProfileNotFoundError
 from ad_classifier.db.connection import load_sqlite_vec, open_database
 from ad_classifier.db.repositories import JobRepository
+from ad_classifier.db.repositories.brand_profiles import BrandProfileRepository
 from ad_classifier.models.ads import utc_now
 from ad_classifier.models.brand_profiles import BrandProfile, BrandProfileLookupStep
 from ad_classifier.models.jobs import JobRecord
@@ -757,6 +759,64 @@ def test_brand_profile_enrichment_persists_cache_and_returns_on_detail(config_pa
         assert cached.status_code == 200
         assert cached.json()["cached"] is True
         assert calls == ["Jeep"]
+
+
+def test_brand_profile_refresh_deletes_stale_cache_when_lookup_not_found(config_path: Path):
+    class MissingBrandProfileClient:
+        def fetch(self, name: str, *, context=None) -> BrandProfile:
+            raise BrandProfileNotFoundError(f"no relevant Wikimedia profile found for {name}")
+
+    app = create_app(
+        config_path=config_path,
+        brand_profile_client_factory=lambda _config: MissingBrandProfileClient(),
+    )
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (
+                id, source_path, ingested_at, status, brand_name
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_profile_missing",
+                "/tmp/profile.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Prillaman Homestead",
+            ),
+        )
+        now = utc_now()
+        BrandProfileRepository(conn).upsert(
+            BrandProfile(
+                normalized_name="prillaman homestead",
+                query_name="Prillaman Homestead",
+                display_name="Prillaman Homestead",
+                description="historic site",
+                wikidata_qid="Q105887726",
+                fetched_at=now,
+                expires_at=now + timedelta(days=90),
+            )
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with TestClient(app) as profile_client:
+        before = profile_client.get("/api/ads/ad_profile_missing")
+        assert before.status_code == 200
+        assert before.json()["brand_profile"]["description"] == "historic site"
+
+        response = profile_client.post(
+            "/api/ads/ad_profile_missing/brand-profile/enrich",
+            json={"target": "brand", "force": True},
+        )
+        assert response.status_code == 404
+
+        after = profile_client.get("/api/ads/ad_profile_missing")
+        assert after.status_code == 200
+        assert after.json()["brand_profile"] is None
 
 
 def test_search_keyword_returns_preview(client: TestClient, config_path: Path):

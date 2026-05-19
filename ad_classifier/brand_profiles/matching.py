@@ -19,7 +19,12 @@ _DISAMBIG_PHRASES = re.compile(
 _NON_BRAND_DETAIL_RE = re.compile(
     r"\b("
     r"family name|surname|given name|male given name|female given name|"
-    r"human name|patronymic|matronymic|wikimedia disambiguation page"
+    r"human name|patronymic|matronymic|wikimedia disambiguation page|"
+    r"historic site|historical site|heritage site|archaeological site|"
+    r"historic house|historic building|building in|house in|"
+    r"unincorporated community|census-designated place|municipality|"
+    r"town in|village in|city in|county in|river in|mountain in|"
+    r"film directed|television episode|fictional character"
     r")\b",
     flags=re.IGNORECASE,
 )
