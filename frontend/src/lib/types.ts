@@ -238,6 +238,13 @@ export type CampaignCount = {
   share?: number | null;
 };
 
+export type CampaignProductFamily = CampaignCount & {
+  ad_count?: number | null;
+  total_duration_ms?: number | null;
+  ad_ids?: string[];
+  variants?: CampaignCount[];
+};
+
 export type CampaignInsight = {
   kind?: string | null;
   title: string;
@@ -287,12 +294,14 @@ export type CampaignResearch = {
   };
   messaging: {
     top_products: CampaignCount[];
+    product_families?: CampaignProductFamily[];
     top_offers: CampaignCount[];
     top_ctas: CampaignCount[];
     top_prices: CampaignCount[];
     campaign_signals: CampaignCount[];
   };
   creative: {
+    runtime_buckets?: CampaignCount[];
     aspect_ratios: CampaignCount[];
     formats: CampaignCount[];
     voiceover_ads: number;

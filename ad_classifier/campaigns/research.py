@@ -19,6 +19,8 @@ from ad_classifier.campaigns.research_helpers import (
     json_value,
     mean,
     price_values,
+    product_family_counts,
+    runtime_bucket_counts,
     small_print_count,
     span_days,
     split_products,
@@ -247,7 +249,9 @@ def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> di
         float(ad["confidence"]) for ad in ads if isinstance(ad.get("confidence"), int | float)
     ]
     first_seen, last_seen = date_range([ad.get("ingested_at") for ad in ads])
-    assignments = Counter(clean(ad.get("assigned_by")) for ad in ads if clean(ad.get("assigned_by")))
+    assignments = Counter(
+        clean(ad.get("assigned_by")) for ad in ads if clean(ad.get("assigned_by"))
+    )
 
     summary = {
         "ad_count": ad_count,
@@ -276,6 +280,7 @@ def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> di
             (value for ad in ads for value in ad.get("products", [])),
             limit=None,
         ),
+        "product_families": product_family_counts(ads, limit=None),
         "top_offers": top_counts(value for ad in ads for value in ad.get("offers", [])),
         "top_ctas": top_counts(value for ad in ads for value in ad.get("ctas", [])),
         "top_prices": top_counts(value for ad in ads for value in ad.get("prices", [])),
@@ -286,14 +291,13 @@ def _research_payload(campaign: CampaignRecord, ads: list[dict[str, Any]]) -> di
     }
 
     creative = {
+        "runtime_buckets": runtime_bucket_counts(ads),
         "aspect_ratios": top_counts(
             creative_value(ad, "aspect_ratio", "aspect_ratio") for ad in ads
         ),
         "formats": top_counts(creative_value(ad, None, "format") for ad in ads),
         "voiceover_ads": sum(1 for ad in ads if creative_bool(ad, "has_voiceover", "voiceover")),
-        "on_screen_text_ads": sum(
-            1 for ad in ads if creative_bool(ad, "has_on_screen_text", None)
-        ),
+        "on_screen_text_ads": sum(1 for ad in ads if creative_bool(ad, "has_on_screen_text", None)),
         "disclaimer_ads": sum(1 for ad in ads if int(ad.get("disclaimer_count") or 0) > 0),
         "small_print_ads": sum(1 for ad in ads if int(ad.get("small_print_count") or 0) > 0),
         "disclaimer_density": top_counts(

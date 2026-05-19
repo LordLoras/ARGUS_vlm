@@ -61,12 +61,14 @@ export function emptyResearch(adCount: number): CampaignResearch {
     },
     messaging: {
       top_products: emptyCounts,
+      product_families: [],
       top_offers: emptyCounts,
       top_ctas: emptyCounts,
       top_prices: emptyCounts,
       campaign_signals: emptyCounts
     },
     creative: {
+      runtime_buckets: [],
       aspect_ratios: emptyCounts,
       formats: emptyCounts,
       voiceover_ads: 0,

@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Clock3, Megaphone, MousePointerClick, Package, Tags } from "lucide-react";
 
 import { EditIcon, PlusIcon, TrashIcon, XIcon } from "../../lib/icons";
+import { formatDuration } from "../../lib/format";
 import type {
   CampaignAd,
   CampaignCount,
   CampaignDeepResearch,
   CampaignDetail,
   CampaignInsight,
+  CampaignProductFamily,
   CampaignResearch
 } from "../../lib/types";
 import { CampaignAgentPanel } from "./CampaignAgentPanel";
-import { buildSignalCards, emptyResearch, formatRange, formatScore } from "./campaignDetailUtils";
+import { emptyResearch, formatRange, formatScore } from "./campaignDetailUtils";
 
 const TABS = ["Overview", "Ads", "Research", "Agent"] as const;
 type CampaignTab = (typeof TABS)[number];
@@ -60,7 +63,6 @@ export function CampaignDetailPanel({
   const campaign = detail.campaign;
   const ads = detail.ads ?? [];
   const research = detail.research ?? emptyResearch(ads.length);
-  const signals = buildSignalCards(research);
 
   const submitAssignment = () => {
     const adIds = adIdsText
@@ -139,8 +141,8 @@ export function CampaignDetailPanel({
 
       {tab === "Overview" ? (
         <OverviewTab
-          insights={research.insights.slice(0, 3)}
-          signals={signals}
+          ads={ads}
+          research={research}
           description={campaign.description}
         />
       ) : null}
@@ -171,30 +173,236 @@ export function CampaignDetailPanel({
 }
 
 function OverviewTab({
-  insights,
-  signals,
+  ads,
+  research,
   description
 }: {
-  insights: CampaignInsight[];
-  signals: Array<{ label: string; value: string; detail: string; items?: CampaignCount[] }>;
+  ads: CampaignAd[];
+  research: CampaignResearch;
   description?: string | null;
 }) {
+  const insights = research.insights.slice(0, 3);
+  const runtimeBuckets = (research.creative.runtime_buckets?.length
+    ? research.creative.runtime_buckets
+    : buildRuntimeBucketsFromAds(ads));
+  const productFamilies = (research.messaging.product_families?.length
+    ? research.messaging.product_families
+    : fallbackProductFamilies(research.messaging.top_products));
+  const topOffer = research.messaging.top_offers[0];
+  const topCta = research.messaging.top_ctas[0];
+  const topPrice = research.messaging.top_prices[0];
+  const topObservation = research.watchouts.risk_labels[0];
+
   return (
-    <div className="campaign-tab-pane">
-      {description ? <p className="campaign-description compact">{description}</p> : null}
-      <section className="campaign-section first">
-        <div className="section-title">Executive read</div>
-        <InsightList insights={insights} compact />
-      </section>
-      <section className="campaign-section">
-        <div className="section-title">Key signals</div>
-        <div className="campaign-signal-grid">
-          {signals.map((signal) => (
-            <SignalCard key={signal.label} signal={signal} />
-          ))}
+    <div className="campaign-tab-pane campaign-overview">
+      <section className="campaign-overview-band">
+        <div>
+          <span className="overview-eyebrow">Overview</span>
+          <h3>Run mix, product exposure, and response signals</h3>
+          {description ? <p>{description}</p> : <p>Campaign-level rollup from assigned ads and extracted marketing entities.</p>}
+        </div>
+        <div className="overview-score-row">
+          <OverviewScore label="Assigned ads" value={String(research.summary.ad_count)} />
+          <OverviewScore
+            label="Runtime cuts"
+            value={String(runtimeBuckets.filter((item) => item.value !== "Unknown").length)}
+          />
+          <OverviewScore label="Product families" value={String(productFamilies.length)} />
+          <OverviewScore label="Signal confidence" value={formatScore(research.summary.avg_confidence)} />
         </div>
       </section>
+
+      <section className="campaign-overview-section runtime-section">
+        <SectionHeader
+          icon={<Clock3 size={15} />}
+          title="Runtime mix"
+          detail="Count of assigned ads by finished cut length."
+        />
+        <RuntimeMix buckets={runtimeBuckets} totalAds={research.summary.ad_count} />
+      </section>
+
+      <section className="campaign-overview-section">
+        <SectionHeader
+          icon={<Package size={15} />}
+          title="Product exposure"
+          detail="Model-year prefixes are collapsed so 2025 and 2026 variants roll up together."
+        />
+        <ProductExposure families={productFamilies} />
+      </section>
+
+      <section className="campaign-overview-section">
+        <SectionHeader
+          icon={<Megaphone size={15} />}
+          title="Message leaders"
+          detail="The strongest repeated offer, CTA, price, and observation signals."
+        />
+        <div className="campaign-leader-grid">
+          <LeaderCard
+            icon={<Tags size={14} />}
+            label="Top offer"
+            item={topOffer}
+            empty="No repeated offer"
+            items={research.messaging.top_offers}
+          />
+          <LeaderCard
+            icon={<MousePointerClick size={14} />}
+            label="Top CTA"
+            item={topCta}
+            empty="No repeated CTA"
+            items={research.messaging.top_ctas}
+          />
+          <LeaderCard
+            icon={<Tags size={14} />}
+            label="Top price"
+            item={topPrice}
+            empty="No price signal"
+            items={research.messaging.top_prices}
+          />
+          <LeaderCard
+            icon={<Tags size={14} />}
+            label="Observation"
+            item={topObservation}
+            empty="No repeated tags"
+            items={research.watchouts.risk_labels}
+          />
+        </div>
+      </section>
+
+      <section className="campaign-overview-section">
+        <SectionHeader
+          icon={<Tags size={15} />}
+          title="Executive read"
+          detail="Automatically generated campaign-level patterns."
+        />
+        <InsightList insights={insights} compact />
+      </section>
     </div>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  detail
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div className="campaign-overview-section-head">
+      <span className="campaign-overview-icon">{icon}</span>
+      <div>
+        <div className="section-title">{title}</div>
+        <p>{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function OverviewScore({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="overview-score">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function RuntimeMix({ buckets, totalAds }: { buckets: CampaignCount[]; totalAds: number }) {
+  if (!buckets.length) {
+    return <div className="obs-empty">No runtime metadata available.</div>;
+  }
+  const denominator = Math.max(totalAds, buckets.reduce((sum, item) => sum + item.count, 0), 1);
+  const maxCount = Math.max(...buckets.map((item) => item.count));
+  return (
+    <div className="runtime-mix-grid">
+      {buckets.map((bucket) => {
+        const percent = Math.max(6, Math.round((bucket.count / denominator) * 100));
+        return (
+          <details key={bucket.value} className="runtime-cut" open={bucket.count === maxCount}>
+            <summary>
+              <span className="runtime-cut-length">{bucket.value}</span>
+              <span className="runtime-cut-count">{bucket.count} ads</span>
+            </summary>
+            <div className="runtime-cut-track" aria-hidden="true">
+              <span style={{ width: `${percent}%` }} />
+            </div>
+            <p>
+              {bucket.share != null ? `${Math.round(bucket.share * 100)}% of assigned ads` : "Share unavailable"} in this cut length.
+            </p>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProductExposure({ families }: { families: CampaignProductFamily[] }) {
+  if (!families.length) {
+    return <div className="obs-empty">No product entities detected for this campaign.</div>;
+  }
+  return (
+    <div className="product-exposure-grid">
+      {families.slice(0, 6).map((family, index) => (
+        <details key={family.value} className="product-exposure" open={index < 2}>
+          <summary>
+            <span className="product-name">{family.value}</span>
+            <span className="product-stats">
+              <b>{family.count}</b> mentions
+              <em>{family.ad_count ?? family.count} ads</em>
+              <em>{formatShortDuration(family.total_duration_ms)} runtime</em>
+            </span>
+          </summary>
+          <div className="product-exposure-body">
+            <CountList title="Variants" items={family.variants ?? []} />
+            {family.ad_ids?.length ? (
+              <div className="product-ad-ids">
+                <span>Ads</span>
+                <p className="mono">{family.ad_ids.slice(0, 8).join(", ")}</p>
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ))}
+    </div>
+  );
+}
+
+function LeaderCard({
+  icon,
+  label,
+  item,
+  empty,
+  items
+}: {
+  icon: ReactNode;
+  label: string;
+  item?: CampaignCount;
+  empty: string;
+  items: CampaignCount[];
+}) {
+  return (
+    <details className="leader-card" open={Boolean(item)}>
+      <summary>
+        <span className="leader-icon">{icon}</span>
+        <span className="leader-copy">
+          <small>{label}</small>
+          <strong>{item?.value ?? "-"}</strong>
+        </span>
+        <span className="leader-count">{item ? `${item.count} ads` : empty}</span>
+      </summary>
+      {items.length ? (
+        <div className="leader-detail-list">
+          {items.slice(0, 6).map((value) => (
+            <span key={value.value}>
+              <b>{value.value}</b>
+              <em>{value.count}</em>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </details>
   );
 }
 
@@ -257,6 +465,7 @@ function ResearchTab({ research }: { research: CampaignResearch }) {
         <section className="campaign-section first">
           <div className="section-title">Message stack</div>
           <CountList title="Products" items={research.messaging.top_products} />
+          <CountList title="Product families" items={research.messaging.product_families ?? []} />
           <CountList title="Offers" items={research.messaging.top_offers} />
           <CountList title="CTAs" items={research.messaging.top_ctas} />
           <CountList title="Campaign language" items={research.messaging.campaign_signals} />
@@ -264,6 +473,7 @@ function ResearchTab({ research }: { research: CampaignResearch }) {
 
         <section className="campaign-section first">
           <div className="section-title">Creative footprint</div>
+          <CountList title="Runtime cuts" items={research.creative.runtime_buckets ?? []} />
           <CountList title="Brands" items={research.summary.brands} />
           <CountList title="Categories" items={research.summary.categories} />
           <CountList title="Observation tags" items={research.watchouts.risk_labels} />
@@ -275,34 +485,6 @@ function ResearchTab({ research }: { research: CampaignResearch }) {
           </div>
         </section>
       </div>
-    </div>
-  );
-}
-
-function SignalCard({
-  signal
-}: {
-  signal: { label: string; value: string; detail: string; items?: CampaignCount[] };
-}) {
-  const expandableItems = signal.items ?? [];
-  return (
-    <div className="campaign-signal">
-      <span>{signal.label}</span>
-      <strong>{signal.value}</strong>
-      <small>{signal.detail}</small>
-      {expandableItems.length > 1 ? (
-        <details className="campaign-signal-details">
-          <summary>All products</summary>
-          <div>
-            {expandableItems.map((item) => (
-              <span key={item.value}>
-                <b>{item.value}</b>
-                <em>{item.count}</em>
-              </span>
-            ))}
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }
@@ -366,6 +548,44 @@ function CountList({ title, items }: { title: string; items: CampaignCount[] }) 
       )}
     </div>
   );
+}
+
+function fallbackProductFamilies(items: CampaignCount[]): CampaignProductFamily[] {
+  return items.map((item) => ({
+    ...item,
+    ad_count: item.count,
+    variants: [item]
+  }));
+}
+
+function buildRuntimeBucketsFromAds(ads: CampaignAd[]): CampaignCount[] {
+  const counts = new Map<string, number>();
+  ads.forEach((ad) => {
+    const seconds = ad.duration_ms ? Math.round(ad.duration_ms / 1000) : null;
+    const value = seconds ? `${seconds}s` : "Unknown";
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  });
+  const total = ads.length || Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+  return Array.from(counts.entries())
+    .sort(([left], [right]) => runtimeSortKey(left) - runtimeSortKey(right))
+    .map(([value, count]) => ({
+      value,
+      count,
+      share: total ? count / total : 0
+    }));
+}
+
+function runtimeSortKey(value: string) {
+  if (value === "Unknown") return Number.MAX_SAFE_INTEGER;
+  const parsed = Number(value.replace(/s$/, ""));
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER - 1;
+}
+
+function formatShortDuration(ms?: number | null) {
+  if (!ms) return "-";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return formatDuration(ms);
 }
 
 function AdRow({
