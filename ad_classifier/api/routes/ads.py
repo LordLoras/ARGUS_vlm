@@ -348,6 +348,10 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
 
         conn.commit()
         updated = repo.get(ad_id)
+
+        # Record corrections in knowledge base
+        _record_corrections(request, ad_id, current, patch)
+
         return _dump(updated)
     finally:
         conn.close()
@@ -441,3 +445,36 @@ def _cached_profile(repo: BrandProfileRepository, name: str | None):
         return None
     normalized = normalize_profile_name(name)
     return repo.get(normalized) if normalized else None
+
+
+def _record_corrections(request: Request, ad_id: str, current: AdRecord, patch: AdPatch) -> None:
+    """Record field-level corrections in the knowledge base for learning."""
+    kb = getattr(request.app.state, "knowledge_manager", None)
+    if kb is None:
+        return
+
+    corrections: list[tuple[str, str | None, str | None]] = []
+
+    if patch.primary_category is not None and patch.primary_category != current.primary_category:
+        corrections.append(("primary_category", current.primary_category, patch.primary_category))
+
+    if patch.subcategory is not None and patch.subcategory != current.subcategory:
+        corrections.append(("subcategory", current.subcategory, patch.subcategory))
+
+    if patch.brand_name is not None and patch.brand_name != current.brand_name:
+        corrections.append(("brand_name", current.brand_name, patch.brand_name))
+
+    brand = patch.brand_name or current.brand_name
+    for field, old_val, new_val in corrections:
+        from ad_classifier.knowledge.models import CorrectionEntry
+
+        entry = CorrectionEntry(
+            ad_id=ad_id,
+            field=field,
+            old_value=brand if field in ("primary_category", "subcategory") else old_val,
+            new_value=new_val,
+            source="manual",
+        )
+        kb.record_correction(entry)
+        if field in ("primary_category",):
+            kb.learn_from_correction(entry)

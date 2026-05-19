@@ -15,10 +15,12 @@ from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.creative_panel import router as creative_panel_router
 from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
+from ad_classifier.api.routes.knowledge import router as knowledge_router
 from ad_classifier.api.routes.search import router as search_router
 from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
+from ad_classifier.knowledge.manager import KnowledgeManager
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 
@@ -75,6 +77,10 @@ def create_app(
     app.state.creative_panel_client_factory = creative_panel_client_factory
     app.state.brand_profile_client_factory = brand_profile_client_factory
 
+    kb_path = resolved_db.parent / "knowledge.db"
+    kb = KnowledgeManager(kb_path)
+    app.state.knowledge_manager = kb
+
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "ad-classifier"}
@@ -105,6 +111,7 @@ def create_app(
     app.include_router(creative_panel_router, prefix="/api")
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")
+    app.include_router(knowledge_router, prefix="/api")
 
     data_root = resolve_config_path(config.paths.data_root, config_file)
     data_root.mkdir(parents=True, exist_ok=True)

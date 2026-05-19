@@ -8,6 +8,7 @@ import { Campaigns } from "./pages/Campaigns";
 import { DebatePanel } from "./pages/DebatePanel";
 import { Library } from "./pages/Library";
 import { SearchPage } from "./pages/SearchPage";
+import { Taxonomy } from "./pages/Taxonomy";
 import { Upload } from "./pages/Upload";
 
 function Placeholder({ title, hint }: { title: string; hint?: string }) {
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/agent" element={<Agent />} />
         <Route path="/debate" element={<DebatePanel />} />
+        <Route path="/taxonomy" element={<Taxonomy />} />
         <Route path="/pipelines" element={<Placeholder title="Pipelines" />} />
         <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />

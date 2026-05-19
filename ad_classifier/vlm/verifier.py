@@ -475,6 +475,7 @@ class HTTPVLMVerifier(VLMVerifier):
         response_format: str = "json_object",
         image_max_dim: int = 512,
         stream: bool = True,
+        knowledge_manager: Any | None = None,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("VLM endpoint must be provided")
@@ -491,7 +492,9 @@ class HTTPVLMVerifier(VLMVerifier):
         self._response_format = response_format
         self._image_max_dim = image_max_dim
         self._stream = stream
-        self._system_prompt = prompt_override or render_verifier_prompt()
+        self._system_prompt = prompt_override or render_verifier_prompt(
+            knowledge_manager=knowledge_manager,
+        )
 
         api_key = resolve_api_key(api_key_env)
         self._headers: dict[str, str] = {"Content-Type": "application/json"}

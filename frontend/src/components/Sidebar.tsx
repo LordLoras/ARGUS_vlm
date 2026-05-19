@@ -45,6 +45,10 @@ const disabledSystem: { label: string; icon: IconComponent }[] = [
   { label: "Settings", icon: SettingsIcon }
 ];
 
+const system: NavEntry[] = [
+  { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon }
+];
+
 export function Sidebar() {
   const health = useApiHealth();
   const healthy = health.status === "success";
@@ -68,6 +72,9 @@ export function Sidebar() {
           <DisabledItem key={entry.label} label={entry.label} Icon={entry.icon} />
         ))}
         <div className="nav-section">System</div>
+        {system.map((entry) => (
+          <NavItem key={entry.to} entry={entry} />
+        ))}
         {disabledSystem.map((entry) => (
           <DisabledItem key={entry.label} label={entry.label} Icon={entry.icon} />
         ))}

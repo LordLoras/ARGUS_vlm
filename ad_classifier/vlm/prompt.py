@@ -37,6 +37,7 @@ def render_verifier_prompt(
     taxonomy_path: Path = _TAXONOMY_PATH,
     iab_taxonomy_path: Path = DEFAULT_IAB_TAXONOMY_PATH,
     iab_content_taxonomy_path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
+    knowledge_manager: Any | None = None,
 ) -> str:
     template = prompt_path.read_text(encoding="utf-8")
     taxonomy = _load_taxonomy(taxonomy_path)
@@ -45,8 +46,12 @@ def render_verifier_prompt(
 
     allowed_categories = "\n".join(f"- {c['id']}" for c in categories)
 
-    iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
-    iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
+    if knowledge_manager is not None:
+        iab_taxonomy = knowledge_manager.render_product_taxonomy_for_prompt()
+        iab_content_taxonomy = knowledge_manager.render_content_taxonomy_for_prompt()
+    else:
+        iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
+        iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
 
     return (
         template.replace("{ALLOWED_CATEGORIES}", allowed_categories)
