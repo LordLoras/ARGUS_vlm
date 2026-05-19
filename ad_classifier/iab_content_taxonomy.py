@@ -146,6 +146,41 @@ _DIRECT_SUPPORT_RULES: tuple[IABContentInferenceRule, ...] = (
     ),
 )
 
+_INCIDENTAL_CONTENT_RE: dict[str, re.Pattern[str]] = {
+    "338": re.compile(
+        r"\b(?:background|incidental|generic|theme|soundtrack|score)\s+music\b|"
+        r"\bmusic\s+(?:plays|bed|under|underneath)\b",
+        re.IGNORECASE,
+    ),
+    "641": re.compile(
+        r"\banimated\s+(?:graphics|logo|text|background|transition|card|bumper)s?\b|"
+        r"\banimation\s+(?:style|effect|graphics)\b",
+        re.IGNORECASE,
+    ),
+}
+
+_STRONG_CONTENT_TERMS: dict[str, frozenset[str]] = {
+    "338": frozenset(
+        {
+            "song",
+            "single",
+            "album",
+            "artist",
+            "band",
+            "concert",
+            "tour",
+            "playlist",
+            "radio",
+            "dj",
+            "singer",
+            "rapper",
+            "orchestra",
+            "music video",
+        }
+    ),
+    "641": frozenset({"anime", "manga", "cartoon"}),
+}
+
 
 def load_iab_content_taxonomy(
     path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
@@ -341,12 +376,17 @@ def _filter_supported_existing(
             matched_terms = _matched_terms(evidence_blob, support_rule.terms)
             if not matched_terms:
                 continue
+            if _matched_terms_are_incidental(support_rule.unique_id, matched_terms, evidence_blob):
+                continue
         filtered.append(category)
     return filtered
 
 
 def _support_rule_for(category: IABContentCategory) -> IABContentInferenceRule | None:
-    category_ids = {category.iab_unique_id, *(node.iab_unique_id for node in category.parent_categories)}
+    category_ids = {
+        category.iab_unique_id,
+        *(node.iab_unique_id for node in category.parent_categories),
+    }
     path = _inference_blob([category.full_path, category.selected_category])
     for rule in _DIRECT_SUPPORT_RULES:
         if rule.unique_id in category_ids:
@@ -356,6 +396,18 @@ def _support_rule_for(category: IABContentCategory) -> IABContentInferenceRule |
     if "music" in path and "musical instruments" not in path:
         return next(rule for rule in _DIRECT_SUPPORT_RULES if rule.unique_id == "338")
     return None
+
+
+def _matched_terms_are_incidental(
+    unique_id: str,
+    matched_terms: list[str],
+    evidence_blob: str,
+) -> bool:
+    incidental_re = _INCIDENTAL_CONTENT_RE.get(unique_id)
+    if incidental_re is None or not incidental_re.search(evidence_blob):
+        return False
+    strong_terms = _STRONG_CONTENT_TERMS.get(unique_id, frozenset())
+    return not any(term in strong_terms for term in matched_terms)
 
 
 def _find_entry(

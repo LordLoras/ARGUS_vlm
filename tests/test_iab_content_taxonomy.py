@@ -133,6 +133,22 @@ def test_infer_iab_content_categories_keeps_music_when_directly_supported():
     assert [category.iab_unique_id for category in result] == ["338"]
 
 
+def test_infer_iab_content_categories_drops_background_music_only_support():
+    sports = iab_content_category_from_id("483", confidence="high", reason="hockey promo")
+    music = iab_content_category_from_id("338", confidence="high", reason="music is heard")
+
+    result = infer_iab_content_categories(
+        existing=[sports, music],
+        primary_category="entertainment_media",
+        subcategory="Sports Broadcasting",
+        products=["Hockey in the Desert Weekly"],
+        product_iab_path="Media > Live Television",
+        evidence_texts=["background music plays under Golden Knights playoff highlights"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["483"]
+
+
 def test_infer_iab_content_categories_keeps_animation_when_directly_supported():
     animation = iab_content_category_from_id(
         "641",
@@ -147,3 +163,23 @@ def test_infer_iab_content_categories_keeps_animation_when_directly_supported():
     )
 
     assert [category.iab_unique_id for category in result] == ["641"]
+
+
+def test_infer_iab_content_categories_drops_animated_graphics_only_support():
+    sports = iab_content_category_from_id("483", confidence="high", reason="hockey promo")
+    animation = iab_content_category_from_id(
+        "641",
+        confidence="high",
+        reason="animated graphics appear in the spot",
+    )
+
+    result = infer_iab_content_categories(
+        existing=[sports, animation],
+        primary_category="entertainment_media",
+        subcategory="Sports Broadcasting",
+        products=["Hockey in the Desert Weekly"],
+        product_iab_path="Media > Live Television",
+        evidence_texts=["animated graphics transition into Golden Knights playoff highlights"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["483"]
