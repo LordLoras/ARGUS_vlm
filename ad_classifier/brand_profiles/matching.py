@@ -24,7 +24,10 @@ _NON_BRAND_DETAIL_RE = re.compile(
     r"historic house|historic building|building in|house in|"
     r"unincorporated community|census-designated place|municipality|"
     r"town in|village in|city in|county in|river in|mountain in|"
-    r"film directed|television episode|fictional character"
+    r"film directed|film series|television episode|television series|"
+    r"anime television series|manga series|animated television series|"
+    r"fictional character|song by|single by|album by|"
+    r"studio album|compilation album|musical group|rock band|pop band"
     r")\b",
     flags=re.IGNORECASE,
 )

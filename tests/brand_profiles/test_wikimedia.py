@@ -82,6 +82,20 @@ def test_wikimedia_client_rejects_exact_historic_site_entity():
     http_client.close()
 
 
+def test_wikimedia_client_rejects_exact_creative_work_entity():
+    transport = httpx.MockTransport(_creative_work_handler)
+    http_client = httpx.Client(transport=transport, base_url="https://example.test")
+    client = WikimediaBrandProfileClient(
+        user_agent="ARGUS tests",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ValueError, match="no relevant Wikimedia profile"):
+        client.fetch("Decoy")
+
+    http_client.close()
+
+
 def _wikimedia_handler(request: httpx.Request) -> httpx.Response:
     if request.url.host == "en.wikipedia.org" and request.url.path == "/w/api.php":
         if request.url.params.get("list") == "search":
@@ -274,6 +288,46 @@ def _historic_site_handler(request: httpx.Request) -> httpx.Response:
                         "id": "Q105887726",
                         "label": "Prillaman Homestead",
                         "description": "historic site",
+                    }
+                ]
+            },
+        )
+    return httpx.Response(404, request=request, json={"error": "not mocked"})
+
+
+def _creative_work_handler(request: httpx.Request) -> httpx.Response:
+    if (
+        request.url.host == "en.wikipedia.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("list") == "search"
+    ):
+        return _json(
+            request,
+            {
+                "query": {
+                    "search": [
+                        {
+                            "title": "Decoy",
+                            "pageid": 12345,
+                            "snippet": "Decoy is a song by Example Artist.",
+                        },
+                    ]
+                }
+            },
+        )
+    if (
+        request.url.host == "www.wikidata.org"
+        and request.url.path == "/w/api.php"
+        and request.url.params.get("action") == "wbsearchentities"
+    ):
+        return _json(
+            request,
+            {
+                "search": [
+                    {
+                        "id": "Q12345",
+                        "label": "Decoy",
+                        "description": "song by Example Artist",
                     }
                 ]
             },

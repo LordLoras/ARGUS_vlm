@@ -86,3 +86,64 @@ def test_infer_iab_content_categories_does_not_duplicate_existing():
 
     assert [category.iab_unique_id for category in result] == ["559"]
     assert result[0].confidence == "high"
+
+
+def test_infer_iab_content_categories_drops_negated_music_and_animation():
+    sports = iab_content_category_from_id(
+        "483",
+        confidence="high",
+        reason="hockey and playoff action are visible and spoken",
+    )
+    music = iab_content_category_from_id(
+        "338",
+        confidence="medium",
+        reason="Music is not the focus and only accompanies the spot. Excluded.",
+    )
+    animation = iab_content_category_from_id(
+        "641",
+        confidence="high",
+        reason="The ad is a spot for a weekly television program.",
+    )
+
+    result = infer_iab_content_categories(
+        existing=[sports, music, animation],
+        primary_category="entertainment_media",
+        subcategory="Sports Broadcasting",
+        products=["Hockey in the Desert Weekly", "Vegas+"],
+        product_iab_path="Media > Live Television",
+        evidence_texts=["Golden Knights hockey playoff action on FOX 5"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["483"]
+
+
+def test_infer_iab_content_categories_keeps_music_when_directly_supported():
+    music = iab_content_category_from_id(
+        "338",
+        confidence="high",
+        reason="The ad promotes a live concert broadcast.",
+    )
+
+    result = infer_iab_content_categories(
+        existing=[music],
+        primary_category="entertainment_media",
+        evidence_texts=["Tonight live concert music special with featured artists"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["338"]
+
+
+def test_infer_iab_content_categories_keeps_animation_when_directly_supported():
+    animation = iab_content_category_from_id(
+        "641",
+        confidence="high",
+        reason="The ad promotes an anime series.",
+    )
+
+    result = infer_iab_content_categories(
+        existing=[animation],
+        primary_category="entertainment_media",
+        evidence_texts=["New anime series streaming tonight"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["641"]

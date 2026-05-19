@@ -14,6 +14,7 @@ def test_empty_string_returns_none():
 def test_known_alias_resolves():
     assert brand_normalize("mcdonalds") == "McDonald's"
     assert brand_normalize("McDonald's") == "McDonald's"
+    assert brand_normalize("Lancome") == "Lancôme"
 
 
 def test_symbol_stripping_in_key():

@@ -110,6 +110,42 @@ _INFERENCE_RULES: tuple[IABContentInferenceRule, ...] = (
     ),
 )
 
+_NEGATED_REASON_RE = re.compile(
+    r"\b("
+    r"excluded|not\s+the\s+focus|not\s+focus|not\s+directly\s+supported|"
+    r"not\s+supported|not\s+primary|secondary\s+only|background\s+only|"
+    r"merely\s+accompanies|only\s+accompanies|incidental"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_DIRECT_SUPPORT_RULES: tuple[IABContentInferenceRule, ...] = (
+    IABContentInferenceRule(
+        unique_id="338",
+        terms=(
+            "music",
+            "song",
+            "single",
+            "album",
+            "artist",
+            "band",
+            "concert",
+            "tour",
+            "playlist",
+            "radio",
+            "dj",
+            "singer",
+            "rapper",
+            "orchestra",
+            "music video",
+        ),
+    ),
+    IABContentInferenceRule(
+        unique_id="641",
+        terms=("animation", "animated", "anime", "manga", "cartoon"),
+    ),
+)
+
 
 def load_iab_content_taxonomy(
     path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
@@ -255,7 +291,6 @@ def infer_iab_content_categories(
     path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
 ) -> list[IABContentCategory]:
     normalized = normalize_iab_content_categories(existing, path)
-    seen = {category.iab_unique_id for category in normalized}
     blob = _inference_blob(
         [
             primary_category,
@@ -265,6 +300,8 @@ def infer_iab_content_categories(
             *(evidence_texts or []),
         ]
     )
+    normalized = _filter_supported_existing(normalized, blob)
+    seen = {category.iab_unique_id for category in normalized}
     if not blob:
         return normalized
 
@@ -289,6 +326,36 @@ def infer_iab_content_categories(
             seen.add(category.iab_unique_id)
 
     return normalized
+
+
+def _filter_supported_existing(
+    categories: list[IABContentCategory],
+    evidence_blob: str,
+) -> list[IABContentCategory]:
+    filtered: list[IABContentCategory] = []
+    for category in categories:
+        if _NEGATED_REASON_RE.search(category.reason or ""):
+            continue
+        support_rule = _support_rule_for(category)
+        if support_rule is not None and evidence_blob:
+            matched_terms = _matched_terms(evidence_blob, support_rule.terms)
+            if not matched_terms:
+                continue
+        filtered.append(category)
+    return filtered
+
+
+def _support_rule_for(category: IABContentCategory) -> IABContentInferenceRule | None:
+    category_ids = {category.iab_unique_id, *(node.iab_unique_id for node in category.parent_categories)}
+    path = _inference_blob([category.full_path, category.selected_category])
+    for rule in _DIRECT_SUPPORT_RULES:
+        if rule.unique_id in category_ids:
+            return rule
+    if "animation anime" in path:
+        return next(rule for rule in _DIRECT_SUPPORT_RULES if rule.unique_id == "641")
+    if "music" in path and "musical instruments" not in path:
+        return next(rule for rule in _DIRECT_SUPPORT_RULES if rule.unique_id == "338")
+    return None
 
 
 def _find_entry(

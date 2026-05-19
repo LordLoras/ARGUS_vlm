@@ -71,3 +71,10 @@ def test_prompt_guides_beauty_content_categories():
     assert "For beauty/personal-care ads" in prompt
     assert "Skin Care" in prompt
     assert "use Skin Care instead of broad Cosmetics" in prompt
+
+
+def test_prompt_rejects_incidental_music_and_animation_content_labels():
+    prompt = render_verifier_prompt()
+    assert "Do not output Music merely because the ad has background music" in prompt
+    assert "Do not output Animation & Anime merely because the ad is a TV/program spot" in prompt
+    assert "omit it" in prompt
