@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -82,6 +83,31 @@ def render_iab_taxonomy_for_prompt(path: Path = DEFAULT_IAB_TAXONOMY_PATH) -> st
     return "\n".join(lines)
 
 
+def iab_category_from_id(
+    unique_id: str,
+    *,
+    confidence: str = "medium",
+    path: Path = DEFAULT_IAB_TAXONOMY_PATH,
+) -> IABCategory | None:
+    entries = load_iab_taxonomy(path)
+    entry = entries.get(unique_id)
+    if entry is None:
+        return None
+    return IABCategory(
+        iab_unique_id=entry.unique_id,
+        iab_parent_id=entry.parent_id,
+        tier_1=entry.tier_1,
+        tier_2=entry.tier_2,
+        tier_3=entry.tier_3,
+        selected_depth=entry.selected_depth,
+        selected_category=entry.selected_category,
+        full_path=entry.full_path,
+        confidence=confidence,
+        parent_categories=_parent_categories(entry, entries),
+        alternative_categories=[],
+    )
+
+
 def normalize_iab_category(
     category: IABCategory | dict | None,
     path: Path = DEFAULT_IAB_TAXONOMY_PATH,
@@ -114,6 +140,38 @@ def normalize_iab_category(
         confidence=category.confidence,
         parent_categories=_parent_categories(entry, entries),
         alternative_categories=_normalize_alternatives(category.alternative_categories, entries),
+    )
+
+
+def infer_iab_category(
+    category: IABCategory | dict | None,
+    *,
+    primary_category: str | None = None,
+    subcategory: str | None = None,
+    products: list[str] | None = None,
+    evidence_texts: list[str] | None = None,
+    path: Path = DEFAULT_IAB_TAXONOMY_PATH,
+) -> IABCategory | None:
+    normalized = normalize_iab_category(category, path)
+    blob = _inference_blob(
+        [
+            primary_category,
+            subcategory,
+            normalized.full_path if normalized else None,
+            *(products or []),
+            *(evidence_texts or []),
+        ]
+    )
+    if not _has_skin_care_signal(blob):
+        return normalized
+    if normalized and normalized.iab_unique_id in {"1244", "1246"}:
+        return normalized
+    if normalized and normalized.iab_unique_id not in {"1123", "1138"}:
+        return normalized
+    return iab_category_from_id(
+        "1244",
+        confidence=normalized.confidence if normalized else "medium",
+        path=path,
     )
 
 
@@ -189,3 +247,30 @@ def _clean(value: str | None) -> str:
 
 def _key(value: str | None) -> str:
     return " ".join((value or "").casefold().split())
+
+
+def _inference_blob(values: list[str | None]) -> str:
+    text = " ".join(value for value in values if value)
+    normalized = re.sub(r"[_\-/]+", " ", text.casefold())
+    normalized = re.sub(r"[^a-z0-9& ]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _has_skin_care_signal(blob: str) -> bool:
+    if not blob:
+        return False
+    padded = f" {blob} "
+    return any(
+        f" {term} " in padded
+        for term in (
+            "skin care",
+            "skincare",
+            "visible aging",
+            "fine lines",
+            "moisturizer",
+            "moisturiser",
+            "facial cream",
+            "skin cream",
+            "serum",
+        )
+    )

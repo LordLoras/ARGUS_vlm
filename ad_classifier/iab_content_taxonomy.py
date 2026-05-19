@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -46,6 +47,68 @@ class IABContentTaxonomyEntry:
         return " > ".join(
             part for part in (self.tier_1, self.tier_2, self.tier_3, self.tier_4) if part
         )
+
+
+@dataclass(frozen=True)
+class IABContentInferenceRule:
+    unique_id: str
+    terms: tuple[str, ...]
+    context_terms: tuple[str, ...] = ()
+
+
+_BEAUTY_CONTEXT_TERMS = (
+    "beauty personal care",
+    "beauty",
+    "cosmetic",
+    "cosmetics",
+    "consumer packaged goods",
+    "personal care",
+    "skin care",
+    "skincare",
+    "style fashion",
+)
+
+_INFERENCE_RULES: tuple[IABContentInferenceRule, ...] = (
+    IABContentInferenceRule(
+        unique_id="559",
+        terms=(
+            "skin care",
+            "skincare",
+            "anti aging",
+            "visible aging",
+            "fine lines",
+            "firmness",
+            "radiance",
+            "smoothness",
+            "moisturizer",
+            "moisturiser",
+            "serum",
+            "facial cream",
+            "skin cream",
+        ),
+        context_terms=_BEAUTY_CONTEXT_TERMS,
+    ),
+    IABContentInferenceRule(
+        unique_id="558",
+        terms=("perfume", "fragrance", "cologne", "eau de parfum", "eau de toilette"),
+        context_terms=_BEAUTY_CONTEXT_TERMS,
+    ),
+    IABContentInferenceRule(
+        unique_id="554",
+        terms=("hair care", "shampoo", "conditioner", "hair serum", "hair color"),
+        context_terms=_BEAUTY_CONTEXT_TERMS,
+    ),
+    IABContentInferenceRule(
+        unique_id="555",
+        terms=("makeup", "mascara", "lipstick", "foundation", "concealer", "eyeliner", "blush"),
+        context_terms=_BEAUTY_CONTEXT_TERMS,
+    ),
+    IABContentInferenceRule(
+        unique_id="556",
+        terms=("nail care", "nail polish", "manicure", "pedicure"),
+        context_terms=_BEAUTY_CONTEXT_TERMS,
+    ),
+)
 
 
 def load_iab_content_taxonomy(
@@ -105,6 +168,33 @@ def render_iab_content_taxonomy_for_prompt(
     return "\n".join(lines)
 
 
+def iab_content_category_from_id(
+    unique_id: str,
+    *,
+    confidence: str = "medium",
+    reason: str = "",
+    path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
+) -> IABContentCategory | None:
+    entries = load_iab_content_taxonomy(path)
+    entry = entries.get(unique_id)
+    if entry is None:
+        return None
+    return IABContentCategory(
+        iab_unique_id=entry.unique_id,
+        iab_parent_id=entry.parent_id,
+        tier_1=entry.tier_1,
+        tier_2=entry.tier_2,
+        tier_3=entry.tier_3,
+        tier_4=entry.tier_4,
+        selected_depth=entry.selected_depth,
+        selected_category=entry.selected_category,
+        full_path=entry.full_path,
+        confidence=confidence,
+        reason=reason,
+        parent_categories=_parent_categories(entry, entries),
+    )
+
+
 def normalize_iab_content_categories(
     categories: Iterable[IABContentCategory | dict] | None,
     path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
@@ -154,6 +244,53 @@ def normalize_iab_content_categories(
     return normalized
 
 
+def infer_iab_content_categories(
+    *,
+    existing: Iterable[IABContentCategory | dict] | None = None,
+    primary_category: str | None = None,
+    subcategory: str | None = None,
+    products: Iterable[str] | None = None,
+    product_iab_path: str | None = None,
+    evidence_texts: Iterable[str] | None = None,
+    path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
+) -> list[IABContentCategory]:
+    normalized = normalize_iab_content_categories(existing, path)
+    seen = {category.iab_unique_id for category in normalized}
+    blob = _inference_blob(
+        [
+            primary_category,
+            subcategory,
+            product_iab_path,
+            *(products or []),
+            *(evidence_texts or []),
+        ]
+    )
+    if not blob:
+        return normalized
+
+    for rule in _INFERENCE_RULES:
+        if rule.unique_id in seen:
+            continue
+        if rule.context_terms and not _any_term_matches(blob, rule.context_terms):
+            continue
+        matched_terms = _matched_terms(blob, rule.terms)
+        if not matched_terms:
+            continue
+        category = iab_content_category_from_id(
+            rule.unique_id,
+            confidence="medium",
+            reason=(
+                "Deterministic fallback matched extracted ad text: " + ", ".join(matched_terms[:3])
+            ),
+            path=path,
+        )
+        if category is not None:
+            normalized.append(category)
+            seen.add(category.iab_unique_id)
+
+    return normalized
+
+
 def _find_entry(
     category: IABContentCategory,
     entries: dict[str, IABContentTaxonomyEntry],
@@ -198,3 +335,23 @@ def _clean(value: str | None) -> str:
 
 def _key(value: str | None) -> str:
     return " ".join((value or "").casefold().split())
+
+
+def _inference_blob(values: Iterable[str | None]) -> str:
+    text = " ".join(value for value in values if value)
+    normalized = re.sub(r"[_\-/]+", " ", text.casefold())
+    normalized = re.sub(r"[^a-z0-9& ]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _any_term_matches(blob: str, terms: Iterable[str]) -> bool:
+    return bool(_matched_terms(blob, terms))
+
+
+def _matched_terms(blob: str, terms: Iterable[str]) -> list[str]:
+    matched: list[str] = []
+    for term in terms:
+        normalized = _inference_blob([term])
+        if normalized and f" {normalized} " in f" {blob} ":
+            matched.append(term)
+    return matched

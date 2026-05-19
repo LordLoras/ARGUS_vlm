@@ -6,8 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from ad_classifier.iab_content_taxonomy import normalize_iab_content_categories
-from ad_classifier.iab_taxonomy import normalize_iab_category
+from ad_classifier.iab_content_taxonomy import infer_iab_content_categories
+from ad_classifier.iab_taxonomy import infer_iab_category
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
 from ad_classifier.marketing._utils import format_price as _format_price
 from ad_classifier.marketing.brand import brand_normalize
@@ -496,12 +496,27 @@ def aggregate(
     }
 
     risk_labels = _risk_labels(vlm_result, rules_triggered)
+    iab_category = infer_iab_category(
+        vlm_result.iab_category,
+        primary_category=category,
+        subcategory=marketing_entities.subcategory,
+        products=marketing_entities.products,
+        evidence_texts=[item.text for item in evidence],
+    )
+    iab_content_categories = infer_iab_content_categories(
+        existing=vlm_result.iab_content_categories,
+        primary_category=category,
+        subcategory=marketing_entities.subcategory,
+        products=marketing_entities.products,
+        product_iab_path=iab_category.full_path if iab_category else None,
+        evidence_texts=[item.text for item in evidence],
+    )
 
     return FinalAdClassification(
         ad_id=ad_id,
         primary_category=category,
-        iab_category=normalize_iab_category(vlm_result.iab_category),
-        iab_content_categories=normalize_iab_content_categories(vlm_result.iab_content_categories),
+        iab_category=iab_category,
+        iab_content_categories=iab_content_categories,
         risk_labels=risk_labels,
         confidence=vlm_result.confidence,
         sensitive_category=sensitive,

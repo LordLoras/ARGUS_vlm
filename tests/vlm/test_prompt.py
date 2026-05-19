@@ -37,6 +37,7 @@ def test_contains_iab_content_taxonomy():
     prompt = render_verifier_prompt()
     assert "Allowed IAB content taxonomy entries" in prompt
     assert "6 | parent=2 | depth=3 | Automotive > Auto Body Styles > SUV" in prompt
+    assert "559 | parent=553 | depth=3 | Style & Fashion > Beauty > Skin Care" in prompt
 
 
 def test_sensitive_categories_included():
@@ -63,3 +64,10 @@ def test_prompt_extracts_partnership_badges_and_disclosures():
     assert "America 250" in prompt
     assert "partnership marks" in prompt
     assert "AI-generated performers" in prompt
+
+
+def test_prompt_guides_beauty_content_categories():
+    prompt = render_verifier_prompt()
+    assert "For beauty/personal-care ads" in prompt
+    assert "Skin Care" in prompt
+    assert "use Skin Care instead of broad Cosmetics" in prompt

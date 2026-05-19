@@ -106,6 +106,37 @@ def test_iab_content_categories_are_canonicalized_from_vlm_id():
     ]
 
 
+def test_iab_content_skin_care_fallback_when_vlm_omits_secondary_category():
+    from ad_classifier.vlm.models import VLMEvidence
+
+    vlm = _vlm(primary_category="beauty_personal_care")
+    vlm.iab_category = IABCategory(
+        iab_unique_id="1138",
+        selected_depth=2,
+        selected_category="Cosmetics",
+        full_path="Consumer Packaged Goods > Cosmetics",
+    )
+    vlm.marketing_entities.subcategory = "skincare"
+    vlm.marketing_entities.products = ["Absolue Longevity MD Reset The Cream"]
+    vlm.evidence = [
+        VLMEvidence(
+            time_ms=5000,
+            frame_index=10,
+            source="vlm",
+            text="NOW IN SKINCARE",
+            reason="visible text",
+        )
+    ]
+
+    result = aggregate("ad_macy", vlm, [])
+
+    assert [category.iab_unique_id for category in result.iab_content_categories] == ["559"]
+    assert result.iab_content_categories[0].full_path == "Style & Fashion > Beauty > Skin Care"
+    assert result.iab_category is not None
+    assert result.iab_category.iab_unique_id == "1244"
+    assert result.iab_category.full_path == "Consumer Packaged Goods > Skin Care"
+
+
 def test_zero_amount_prices_are_not_mapped():
     from ad_classifier.vlm.models import VLMPrice
 

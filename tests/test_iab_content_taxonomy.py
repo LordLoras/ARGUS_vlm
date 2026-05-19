@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from ad_classifier.iab_content_taxonomy import (
+    iab_content_category_from_id,
+    infer_iab_content_categories,
     load_iab_content_taxonomy,
     normalize_iab_content_categories,
 )
@@ -47,3 +49,40 @@ def test_normalize_iab_content_categories_canonicalizes_and_dedupes():
     assert result[0].tier_3 == "SUV"
     assert result[0].confidence == "high"
     assert [node.iab_unique_id for node in result[0].parent_categories] == ["1", "2"]
+
+
+def test_iab_content_category_from_id_builds_canonical_node():
+    category = iab_content_category_from_id("559", reason="matched skincare")
+
+    assert category is not None
+    assert category.iab_unique_id == "559"
+    assert category.iab_parent_id == "553"
+    assert category.full_path == "Style & Fashion > Beauty > Skin Care"
+    assert [node.iab_unique_id for node in category.parent_categories] == ["552", "553"]
+
+
+def test_infer_iab_content_categories_adds_skin_care_from_evidence():
+    result = infer_iab_content_categories(
+        primary_category="beauty_personal_care",
+        subcategory="skincare",
+        products=["Absolue Longevity MD Reset The Cream"],
+        product_iab_path="Consumer Packaged Goods > Cosmetics",
+        evidence_texts=["NOW IN SKINCARE", "Reverse skin visible aging signs and fine lines"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["559"]
+    assert result[0].full_path == "Style & Fashion > Beauty > Skin Care"
+    assert "skincare" in result[0].reason
+
+
+def test_infer_iab_content_categories_does_not_duplicate_existing():
+    existing = iab_content_category_from_id("559", confidence="high", reason="vlm selected")
+    result = infer_iab_content_categories(
+        existing=[existing],
+        primary_category="beauty_personal_care",
+        subcategory="skincare",
+        evidence_texts=["skin care serum"],
+    )
+
+    assert [category.iab_unique_id for category in result] == ["559"]
+    assert result[0].confidence == "high"
