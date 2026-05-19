@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from ad_classifier.iab_content_taxonomy import normalize_iab_content_categories
 from ad_classifier.iab_taxonomy import normalize_iab_category
 from ad_classifier.vlm.models import (
     VLMVerificationResult,
@@ -39,6 +40,7 @@ def validate_vlm_output(
         result.confidence = min(result.confidence, 0.3)
 
     result.iab_category = normalize_iab_category(result.iab_category)
+    result.iab_content_categories = normalize_iab_content_categories(result.iab_content_categories)
 
     me.prices = [p for p in me.prices if _valid_price(p.amount)]
     me.prices = _filter_non_vehicle_prices(

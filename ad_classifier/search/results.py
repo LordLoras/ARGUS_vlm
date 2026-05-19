@@ -104,16 +104,14 @@ def filter_hits(
         clauses.append("primary_category = ?")
         params.append(category)
     if risk_label:
-        clauses.append(
-            """
+        clauses.append("""
             EXISTS (
               SELECT 1
               FROM classifications c, json_each(c.risk_labels_json)
               WHERE c.ad_id = ads.id
                 AND json_each.value = ?
             )
-            """
-        )
+            """)
         params.append(risk_label)
     if status:
         clauses.append("status = ?")
@@ -219,6 +217,8 @@ def _ad_text_by_id(conn, ad_ids: list[str]) -> dict[str, str]:
           a.iab_tier_3,
           a.iab_selected_category,
           a.iab_full_path,
+          a.iab_content_ids,
+          a.iab_content_paths,
           a.website_domain,
           a.phone_number,
           a.landing_page_domain,
@@ -257,6 +257,8 @@ def _ad_text_by_id(conn, ad_ids: list[str]) -> dict[str, str]:
                 "iab_tier_3",
                 "iab_selected_category",
                 "iab_full_path",
+                "iab_content_ids",
+                "iab_content_paths",
                 "website_domain",
                 "phone_number",
                 "landing_page_domain",

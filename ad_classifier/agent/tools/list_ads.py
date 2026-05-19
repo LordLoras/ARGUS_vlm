@@ -12,7 +12,7 @@ class ListAdsTool(AgentTool):
     description = (
         "List ads filtered by brand, advertiser, primary_category, subcategory, "
         "status, or a free-text substring (matches id, brand, advertiser, products, "
-        "category, IAB product taxonomy, website, phone, landing page domain; expands common shorthand "
+        "category, IAB product/content taxonomy, website, phone, landing page domain; expands common shorthand "
         "such as HVAC or services). Returns products_text so product/model questions "
         "can usually be answered without get_ad. For counts, prefer count_ads."
     )
@@ -36,6 +36,10 @@ class ListAdsTool(AgentTool):
                     "description": "Exact IAB product taxonomy unique ID.",
                 },
                 "iab_tier_1": {"type": "string", "description": "IAB top-level taxonomy bucket."},
+                "iab_content_id": {
+                    "type": "string",
+                    "description": "Exact secondary IAB content taxonomy unique ID, such as 6 for SUV.",
+                },
                 "status": {
                     "type": "string",
                     "enum": [
@@ -63,6 +67,7 @@ class ListAdsTool(AgentTool):
             subcategory=args.get("subcategory"),
             iab_unique_id=args.get("iab_unique_id"),
             iab_tier_1=args.get("iab_tier_1"),
+            iab_content_id=args.get("iab_content_id"),
             status=args.get("status"),
             q=args.get("q"),
             limit=limit + 1,
@@ -83,6 +88,8 @@ class ListAdsTool(AgentTool):
                     "iab_unique_id": ad.iab_unique_id,
                     "iab_full_path": ad.iab_full_path,
                     "iab_selected_category": ad.iab_selected_category,
+                    "iab_content_ids": ad.iab_content_ids,
+                    "iab_content_paths": ad.iab_content_paths,
                     "status": ad.status,
                     "duration_ms": ad.duration_ms,
                     "products": ad.products_text,

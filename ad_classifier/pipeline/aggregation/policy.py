@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from ad_classifier.iab_content_taxonomy import normalize_iab_content_categories
 from ad_classifier.iab_taxonomy import normalize_iab_category
 from ad_classifier.marketing._utils import currency_symbol as _currency_symbol
 from ad_classifier.marketing._utils import format_price as _format_price
@@ -500,6 +501,7 @@ def aggregate(
         ad_id=ad_id,
         primary_category=category,
         iab_category=normalize_iab_category(vlm_result.iab_category),
+        iab_content_categories=normalize_iab_content_categories(vlm_result.iab_content_categories),
         risk_labels=risk_labels,
         confidence=vlm_result.confidence,
         sensitive_category=sensitive,

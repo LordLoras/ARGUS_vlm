@@ -133,6 +133,7 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
     for key in (
         "primary_category",
         "iab_category",
+        "iab_content_categories",
         "confidence",
         "ocr_quality",
         "evidence",

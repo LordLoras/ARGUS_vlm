@@ -8,7 +8,7 @@ import pytest
 from ad_classifier.db.connection import apply_migrations, open_database
 from ad_classifier.db.repositories.classifications import ClassificationRepository
 from ad_classifier.models.classification import ClassificationRecord
-from ad_classifier.models.iab import IABCategory
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 
 
 @pytest.fixture()
@@ -53,6 +53,20 @@ def test_upsert_and_get(conn):
         full_path="Vehicles > Automotive Ownership > New Vehicle Ownership",
         confidence="high",
     )
+    record.iab_content_categories = [
+        IABContentCategory(
+            iab_unique_id="6",
+            iab_parent_id="2",
+            tier_1="Automotive",
+            tier_2="Auto Body Styles",
+            tier_3="SUV",
+            selected_depth=3,
+            selected_category="SUV",
+            full_path="Automotive > Auto Body Styles > SUV",
+            confidence="high",
+            reason="SUV visible in on-screen text",
+        )
+    ]
     repo.upsert(record)
     conn.commit()
 
@@ -65,6 +79,9 @@ def test_upsert_and_get(conn):
     assert (
         result.iab_category.full_path == "Vehicles > Automotive Ownership > New Vehicle Ownership"
     )
+    assert len(result.iab_content_categories) == 1
+    assert result.iab_content_categories[0].iab_unique_id == "6"
+    assert result.iab_content_categories[0].full_path == "Automotive > Auto Body Styles > SUV"
     assert result.risk_labels == []
 
 

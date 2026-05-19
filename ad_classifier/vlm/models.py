@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ad_classifier.models.classification import OcrQualityLevel
-from ad_classifier.models.iab import IABCategory
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 from ad_classifier.models.marketing import (
     AppStorePlatform,
     AspectRatio,
@@ -254,6 +254,7 @@ class VLMConflict(_VLMBase):
 class VLMVerificationResult(_VLMBase):
     primary_category: str = "other"
     iab_category: IABCategory | None = None
+    iab_content_categories: list[IABContentCategory] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     ocr_quality: VLMOCRQuality = Field(default_factory=VLMOCRQuality)
     evidence: list[VLMEvidence] = Field(default_factory=list)
@@ -263,6 +264,11 @@ class VLMVerificationResult(_VLMBase):
     parse_ok: bool = True
     raw_response: str | None = None
     parse_error: str | None = None
+
+    @field_validator("iab_content_categories", mode="before")
+    @classmethod
+    def _empty_content_categories(cls, value: object) -> object:
+        return [] if value is None else value
 
     @classmethod
     def parse_failure(cls, raw_response: str, error: str) -> VLMVerificationResult:

@@ -69,6 +69,7 @@ class AdRepository:
         risk_label: str | None = None,
         iab_unique_id: str | None = None,
         iab_tier_1: str | None = None,
+        iab_content_id: str | None = None,
         q: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -97,16 +98,14 @@ class AdRepository:
             clauses.append("status = ?")
             params.append(status)
         if risk_label:
-            clauses.append(
-                """
+            clauses.append("""
                 EXISTS (
                   SELECT 1
                   FROM classifications c, json_each(c.risk_labels_json)
                   WHERE c.ad_id = ads.id
                     AND json_each.value = ?
                 )
-                """
-            )
+                """)
             params.append(risk_label)
         if iab_unique_id:
             clauses.append("iab_unique_id = ?")
@@ -114,6 +113,9 @@ class AdRepository:
         if iab_tier_1:
             clauses.append("LOWER(iab_tier_1) = LOWER(?)")
             params.append(iab_tier_1)
+        if iab_content_id:
+            clauses.append("(',' || COALESCE(iab_content_ids, '') || ',') LIKE ?")
+            params.append(f"%,{iab_content_id},%")
         if q:
             loose_clause, loose_params = build_loose_like_clause(q)
             if loose_clause:
@@ -238,6 +240,9 @@ class AdRepository:
         iab_selected_category: str | None = None,
         iab_full_path: str | None = None,
         iab_confidence: str | None = None,
+        iab_content_ids: str | None = None,
+        iab_content_paths: str | None = None,
+        iab_content_categories_json: str | None = None,
     ) -> None:
         self.conn.execute(
             """
@@ -259,7 +264,10 @@ class AdRepository:
                 iab_selected_depth = ?,
                 iab_selected_category = ?,
                 iab_full_path = ?,
-                iab_confidence = ?
+                iab_confidence = ?,
+                iab_content_ids = ?,
+                iab_content_paths = ?,
+                iab_content_categories_json = ?
             WHERE id = ?
             """,
             (
@@ -281,6 +289,9 @@ class AdRepository:
                 iab_selected_category,
                 iab_full_path,
                 iab_confidence,
+                iab_content_ids,
+                iab_content_paths,
+                iab_content_categories_json,
                 ad_id,
             ),
         )

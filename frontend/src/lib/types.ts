@@ -25,6 +25,9 @@ export type AdRecord = {
   iab_selected_category?: string | null;
   iab_full_path?: string | null;
   iab_confidence?: string | null;
+  iab_content_ids?: string | null;
+  iab_content_paths?: string | null;
+  iab_content_categories_json?: string | null;
   source_hash?: string | null;
   phash_mean?: string | null;
   duplicate_of?: string | null;
@@ -55,6 +58,26 @@ export type IABCategory = {
   }>;
 };
 
+export type IABContentCategory = {
+  iab_unique_id: string;
+  iab_parent_id?: string | null;
+  tier_1?: string | null;
+  tier_2?: string | null;
+  tier_3?: string | null;
+  tier_4?: string | null;
+  selected_depth: number;
+  selected_category: string;
+  full_path: string;
+  confidence?: string | null;
+  reason?: string | null;
+  parent_categories?: Array<{
+    iab_unique_id: string;
+    name: string;
+    depth: number;
+    full_path: string;
+  }>;
+};
+
 export type EvidenceItem = {
   time_ms?: number | null;
   frame_index?: number | null;
@@ -69,6 +92,7 @@ export type ClassificationRecord = {
   ad_id: string;
   primary_category?: string | null;
   iab_category?: IABCategory | null;
+  iab_content_categories?: IABContentCategory[];
   risk_labels?: string[];
   confidence?: number | null;
   evidence?: EvidenceItem[];

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import type { AdDetail } from "../../lib/types";
+import type { AdDetail, IABContentCategory } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
 
 export function ResultPanel({
@@ -26,6 +26,9 @@ export function ResultPanel({
   const ctas = ent?.ctas ?? [];
   const disclaimers = ent?.disclaimers ?? [];
   const iab = cls?.iab_category;
+  const iabContentCategories = cls?.iab_content_categories?.length
+    ? cls.iab_content_categories
+    : parseIabContentCategories(detail.ad.iab_content_categories_json);
 
   return (
     <div className="result-panel">
@@ -65,6 +68,12 @@ export function ResultPanel({
           <dd>{products.length ? products.join(", ") : "—"}</dd>
           <dt>IAB</dt>
           <dd>{iab?.full_path || detail.ad.iab_full_path || "—"}</dd>
+          <dt>IAB content</dt>
+          <dd>
+            {iabContentCategories.length
+              ? iabContentCategories.map((item) => item.full_path).join(", ")
+              : "—"}
+          </dd>
         </dl>
       </div>
 
@@ -123,4 +132,20 @@ export function ResultPanel({
       </div>
     </div>
   );
+}
+
+function parseIabContentCategories(raw?: string | null): IABContentCategory[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isIabContentCategory) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isIabContentCategory(value: unknown): value is IABContentCategory {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<IABContentCategory>;
+  return Boolean(candidate.iab_unique_id && candidate.selected_category && candidate.full_path);
 }

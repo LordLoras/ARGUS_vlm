@@ -130,6 +130,7 @@ def list_ads(
     risk_label: str | None = None,
     iab_unique_id: str | None = None,
     iab_tier_1: str | None = None,
+    iab_content_id: str | None = None,
     status: str | None = None,
     q: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
@@ -143,6 +144,7 @@ def list_ads(
             risk_label=risk_label,
             iab_unique_id=iab_unique_id,
             iab_tier_1=iab_tier_1,
+            iab_content_id=iab_content_id,
             status=status,
             q=q,
             limit=limit,
@@ -303,6 +305,9 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             iab_selected_category=current.iab_selected_category,
             iab_full_path=current.iab_full_path,
             iab_confidence=current.iab_confidence,
+            iab_content_ids=current.iab_content_ids,
+            iab_content_paths=current.iab_content_paths,
+            iab_content_categories_json=current.iab_content_categories_json,
         )
 
         marketing_repo = MarketingEntityRepository(conn)

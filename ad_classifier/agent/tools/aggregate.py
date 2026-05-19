@@ -13,6 +13,7 @@ _ALLOWED_GROUP = {
     "iab_tier_1",
     "iab_selected_category",
     "iab_full_path",
+    "iab_content_paths",
 }
 
 
@@ -20,7 +21,7 @@ class AggregateTool(AgentTool):
     name = "aggregate"
     description = (
         "Group ads by an allowed dimension (brand_name, primary_category, status, "
-        "advertiser_name, iab_tier_1, iab_selected_category, iab_full_path) and return a count per group. Use this for 'top N "
+        "advertiser_name, iab_tier_1, iab_selected_category, iab_full_path, iab_content_paths) and return a count per group. Use this for 'top N "
         "brands' or 'how many ads per category' questions."
     )
 

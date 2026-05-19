@@ -158,6 +158,20 @@ def test_http_verifier_parses_iab_category():
             "full_path": "Vehicles > Automotive Ownership > New Vehicle Ownership",
             "confidence": "high",
         },
+        "iab_content_categories": [
+            {
+                "iab_unique_id": "6",
+                "iab_parent_id": "2",
+                "tier_1": "Automotive",
+                "tier_2": "Auto Body Styles",
+                "tier_3": "SUV",
+                "selected_depth": 3,
+                "selected_category": "SUV",
+                "full_path": "Automotive > Auto Body Styles > SUV",
+                "confidence": "high",
+                "reason": "SUV visible in the ad",
+            }
+        ],
         "confidence": 0.85,
         "summary": "vehicle ad",
     }
@@ -169,6 +183,8 @@ def test_http_verifier_parses_iab_category():
     assert result.iab_category is not None
     assert result.iab_category.iab_unique_id == "1554"
     assert result.iab_category.selected_depth == 3
+    assert len(result.iab_content_categories) == 1
+    assert result.iab_content_categories[0].iab_unique_id == "6"
 
 
 def test_http_verifier_requests_structured_output():

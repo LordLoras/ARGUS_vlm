@@ -15,6 +15,7 @@ def test_placeholders_replaced():
     assert "{ALLOWED_RISK_LABELS}" not in prompt
     assert "{SENSITIVE_CATEGORIES}" not in prompt
     assert "{IAB_PRODUCT_TAXONOMY}" not in prompt
+    assert "{IAB_CONTENT_TAXONOMY}" not in prompt
 
 
 def test_contains_known_category():
@@ -30,6 +31,12 @@ def test_contains_iab_product_taxonomy():
         "1554 | parent=1553 | depth=3 | Vehicles > Automotive Ownership > New Vehicle Ownership"
         in prompt
     )
+
+
+def test_contains_iab_content_taxonomy():
+    prompt = render_verifier_prompt()
+    assert "Allowed IAB content taxonomy entries" in prompt
+    assert "6 | parent=2 | depth=3 | Automotive > Auto Body Styles > SUV" in prompt
 
 
 def test_sensitive_categories_included():

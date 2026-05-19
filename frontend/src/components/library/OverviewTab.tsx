@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 
 import { formatPrice, priceContext } from "../../lib/marketing-display";
-import type { AdDetail, BrandProfile } from "../../lib/types";
+import type { AdDetail, BrandProfile, IABContentCategory } from "../../lib/types";
 import { ObservationTagPill } from "../shared/ObservationTagPill";
 import { TimestampChip } from "../shared/TimestampChip";
 
@@ -48,6 +48,9 @@ export function OverviewTab({
       : null
   );
   const iabConfidence = displayIabConfidence(iab?.confidence);
+  const iabContentCategories = cls?.iab_content_categories?.length
+    ? cls.iab_content_categories
+    : parseIabContentCategories(detail.ad.iab_content_categories_json);
 
   return (
     <>
@@ -96,6 +99,43 @@ export function OverviewTab({
                   ))}
                 </div>
               ) : null}
+            </details>
+          </div>
+        ) : null}
+        {iabContentCategories.length ? (
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>IAB content taxonomy</div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {iabContentCategories.map((category) => (
+                <span
+                  key={`${category.iab_unique_id}-${category.full_path}`}
+                  className="badge badge-mono"
+                  title={category.full_path}
+                >
+                  {category.iab_unique_id} {category.selected_category}
+                </span>
+              ))}
+            </div>
+            <details>
+              <summary style={{ cursor: "pointer", color: "var(--accent-2)", fontSize: 12 }}>
+                Secondary categories
+              </summary>
+              <dl className="kv" style={{ marginTop: 8 }}>
+                {iabContentCategories.map((category) => (
+                  <Fragment key={`${category.iab_unique_id}-detail`}>
+                    <dt>{category.iab_unique_id}</dt>
+                    <dd>
+                      {category.full_path}
+                      {displayIabConfidence(category.confidence) ? (
+                        <span className="mono" style={{ color: "var(--fg-mute)" }}>
+                          {" "}
+                          / {displayIabConfidence(category.confidence)}
+                        </span>
+                      ) : null}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
             </details>
           </div>
         ) : null}
@@ -336,6 +376,22 @@ function displayIabConfidence(value?: string | null) {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
   return normalized === "unknown" ? null : normalized;
+}
+
+function parseIabContentCategories(raw?: string | null): IABContentCategory[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isIabContentCategory) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isIabContentCategory(value: unknown): value is IABContentCategory {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<IABContentCategory>;
+  return Boolean(candidate.iab_unique_id && candidate.selected_category && candidate.full_path);
 }
 
 function Card({

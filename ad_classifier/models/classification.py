@@ -7,7 +7,7 @@ from pydantic import Field
 
 from ad_classifier.models.ads import utc_now
 from ad_classifier.models.common import EvidenceItem, StrictModel
-from ad_classifier.models.iab import IABCategory
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 
 OcrQualityLevel = Literal["good", "mixed", "poor"]
 
@@ -22,6 +22,7 @@ class ClassificationRecord(StrictModel):
     ad_id: str
     primary_category: str | None = None
     iab_category: IABCategory | None = None
+    iab_content_categories: list[IABContentCategory] = Field(default_factory=list)
     risk_labels: list[str] = Field(default_factory=list)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     sensitive_category: bool = False

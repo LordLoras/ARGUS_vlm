@@ -15,6 +15,8 @@ DEFAULT_AD_SEARCH_COLUMNS = (
     "iab_tier_3",
     "iab_selected_category",
     "iab_full_path",
+    "iab_content_ids",
+    "iab_content_paths",
     "website_domain",
     "phone_number",
     "landing_page_domain",

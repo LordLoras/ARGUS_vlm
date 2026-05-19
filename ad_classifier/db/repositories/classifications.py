@@ -5,7 +5,7 @@ import sqlite3
 
 from ad_classifier.db.repositories.base import db_value, row_to_dict
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
-from ad_classifier.models.iab import IABCategory
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 
 
 def _to_record(row: sqlite3.Row) -> ClassificationRecord:
@@ -18,6 +18,13 @@ def _to_record(row: sqlite3.Row) -> ClassificationRecord:
     iab_raw = data.get("iab_category_json")
     iab_dict = json.loads(iab_raw) if iab_raw else None
     data["iab_category"] = IABCategory.model_validate(iab_dict) if iab_dict else None
+    iab_content_raw = data.get("iab_content_categories_json")
+    iab_content_items = json.loads(iab_content_raw) if iab_content_raw else []
+    data["iab_content_categories"] = [
+        IABContentCategory.model_validate(item)
+        for item in iab_content_items
+        if isinstance(item, dict)
+    ]
 
     ocr_raw = data.get("ocr_quality_json")
     if ocr_raw:
@@ -33,6 +40,7 @@ def _to_record(row: sqlite3.Row) -> ClassificationRecord:
         "vlm_raw_json",
         "ocr_quality_json",
         "iab_category_json",
+        "iab_content_categories_json",
         "decision",
         "needs_human_review",
     ):
@@ -49,14 +57,16 @@ class ClassificationRepository:
         self.conn.execute(
             """
             INSERT INTO classifications (
-              ad_id, primary_category, iab_category_json, risk_labels_json, confidence,
+              ad_id, primary_category, iab_category_json, iab_content_categories_json,
+              risk_labels_json, confidence,
               ocr_quality_json, vlm_raw_json, evidence_json,
               vlm_model, vlm_prompt_version, embedder_text_model, embedder_visual_model,
               pipeline_version, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               primary_category = excluded.primary_category,
               iab_category_json = excluded.iab_category_json,
+              iab_content_categories_json = excluded.iab_content_categories_json,
               risk_labels_json = excluded.risk_labels_json,
               confidence = excluded.confidence,
               ocr_quality_json = excluded.ocr_quality_json,
@@ -73,6 +83,7 @@ class ClassificationRepository:
                 record.ad_id,
                 record.primary_category,
                 json.dumps(record.iab_category.model_dump()) if record.iab_category else None,
+                json.dumps([item.model_dump() for item in record.iab_content_categories]),
                 json.dumps(record.risk_labels),
                 record.confidence,
                 json.dumps(record.ocr_quality.model_dump() if record.ocr_quality else None),

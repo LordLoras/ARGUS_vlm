@@ -349,10 +349,12 @@ def run_pipeline_for_job(
             embedder_visual_model=image_embedder.model_name,
             pipeline_version=final.pipeline_version,
             iab_category=final.iab_category,
+            iab_content_categories=final.iab_content_categories,
         )
     )
     MarketingEntityRepository(conn).upsert(ad_id, final.marketing_entities)
     iab = final.iab_category
+    iab_content_json = json.dumps([item.model_dump() for item in final.iab_content_categories])
     AdRepository(conn).update_projection(
         ad_id,
         brand_name=final.marketing_entities.brand.name,
@@ -373,6 +375,11 @@ def run_pipeline_for_job(
         iab_selected_category=iab.selected_category if iab else None,
         iab_full_path=iab.full_path if iab else None,
         iab_confidence=iab.confidence if iab else None,
+        iab_content_ids=",".join(item.iab_unique_id for item in final.iab_content_categories)
+        or None,
+        iab_content_paths=" | ".join(item.full_path for item in final.iab_content_categories)
+        or None,
+        iab_content_categories_json=iab_content_json if final.iab_content_categories else None,
     )
     AdRepository(conn).update_status(ad_id, "completed")
     fts_update(
@@ -387,6 +394,9 @@ def run_pipeline_for_job(
             {
                 "marketing_entities": final.marketing_entities.model_dump(),
                 "iab_category": final.iab_category.model_dump() if final.iab_category else None,
+                "iab_content_categories": [
+                    item.model_dump() for item in final.iab_content_categories
+                ],
             }
         ),
     )

@@ -33,6 +33,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "007_iab_taxonomy",
         "008_brand_profiles",
         "009_brand_profiles_alter",
+        "010_iab_content_taxonomy",
     ]
 
     conn = open_database(db_path)
@@ -70,11 +71,15 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "iab_unique_id",
             "iab_full_path",
             "iab_tier_1",
+            "iab_content_ids",
+            "iab_content_paths",
+            "iab_content_categories_json",
         }.issubset(ad_columns)
         classification_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(classifications)").fetchall()
         }
         assert "iab_category_json" in classification_columns
+        assert "iab_content_categories_json" in classification_columns
         marketing_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(marketing_entities)").fetchall()
         }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ad_classifier.models.iab import IABCategory
+from ad_classifier.models.iab import IABCategory, IABContentCategory
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.models import VLMVerificationResult
@@ -76,6 +76,33 @@ def test_iab_category_is_canonicalized_from_vlm_id():
     assert [node.iab_unique_id for node in result.iab_category.parent_categories] == [
         "1551",
         "1553",
+    ]
+
+
+def test_iab_content_categories_are_canonicalized_from_vlm_id():
+    vlm = _vlm(primary_category="automotive")
+    vlm.iab_content_categories = [
+        IABContentCategory(
+            iab_unique_id="6",
+            iab_parent_id="wrong",
+            tier_1="Automotive",
+            selected_depth=1,
+            selected_category="Automotive",
+            full_path="Automotive",
+            confidence="high",
+            reason="SUV shown in on-screen text",
+        )
+    ]
+
+    result = aggregate("ad_1", vlm, [])
+
+    assert len(result.iab_content_categories) == 1
+    assert result.iab_content_categories[0].iab_parent_id == "2"
+    assert result.iab_content_categories[0].selected_depth == 3
+    assert result.iab_content_categories[0].full_path == "Automotive > Auto Body Styles > SUV"
+    assert [node.iab_unique_id for node in result.iab_content_categories[0].parent_categories] == [
+        "1",
+        "2",
     ]
 
 

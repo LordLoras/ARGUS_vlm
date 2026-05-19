@@ -5,6 +5,10 @@ from typing import Any
 
 import yaml
 
+from ad_classifier.iab_content_taxonomy import (
+    DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
+    render_iab_content_taxonomy_for_prompt,
+)
 from ad_classifier.iab_taxonomy import (
     DEFAULT_IAB_TAXONOMY_PATH,
     render_iab_taxonomy_for_prompt,
@@ -32,6 +36,7 @@ def render_verifier_prompt(
     prompt_path: Path = _PROMPT_PATH,
     taxonomy_path: Path = _TAXONOMY_PATH,
     iab_taxonomy_path: Path = DEFAULT_IAB_TAXONOMY_PATH,
+    iab_content_taxonomy_path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
 ) -> str:
     template = prompt_path.read_text(encoding="utf-8")
     taxonomy = _load_taxonomy(taxonomy_path)
@@ -41,7 +46,10 @@ def render_verifier_prompt(
     allowed_categories = "\n".join(f"- {c['id']}" for c in categories)
 
     iab_taxonomy = render_iab_taxonomy_for_prompt(iab_taxonomy_path)
+    iab_content_taxonomy = render_iab_content_taxonomy_for_prompt(iab_content_taxonomy_path)
 
-    return template.replace("{ALLOWED_CATEGORIES}", allowed_categories).replace(
-        "{IAB_PRODUCT_TAXONOMY}", iab_taxonomy
+    return (
+        template.replace("{ALLOWED_CATEGORIES}", allowed_categories)
+        .replace("{IAB_PRODUCT_TAXONOMY}", iab_taxonomy)
+        .replace("{IAB_CONTENT_TAXONOMY}", iab_content_taxonomy)
     )

@@ -41,6 +41,9 @@ class AdRecord(StrictModel):
     iab_selected_category: str | None = None
     iab_full_path: str | None = None
     iab_confidence: str | None = None
+    iab_content_ids: str | None = None
+    iab_content_paths: str | None = None
+    iab_content_categories_json: str | None = None
     source_hash: str | None = None
     phash_mean: str | None = None
     duplicate_of: str | None = None
