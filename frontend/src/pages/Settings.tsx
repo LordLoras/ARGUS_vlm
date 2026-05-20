@@ -5,6 +5,7 @@ import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
 import { ApiKeySettings } from "../components/settings/ApiKeySettings";
+import { CostCalculator } from "../components/settings/CostCalculator";
 import { ModelSettings } from "../components/settings/ModelSettings";
 import { OcrSettings } from "../components/settings/OcrSettings";
 import { PipelineSettings } from "../components/settings/PipelineSettings";
@@ -14,10 +15,11 @@ import { CheckIcon } from "../lib/icons";
 import type { SettingsConfig } from "../lib/types";
 import { cn } from "../lib/utils";
 
-type SettingsTab = "models" | "ocr" | "pipeline" | "keys";
+type SettingsTab = "models" | "cost" | "ocr" | "pipeline" | "keys";
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: "models", label: "Models" },
+  { id: "cost", label: "Cost" },
   { id: "ocr", label: "OCR" },
   { id: "pipeline", label: "Pipeline" },
   { id: "keys", label: "API Keys" }
@@ -128,6 +130,8 @@ export function Settings() {
                   responseFormats={settingsQuery.data.options.response_formats}
                   updateDraft={updateDraft}
                 />
+              ) : tab === "cost" ? (
+                <CostCalculator config={draft} />
               ) : tab === "ocr" ? (
                 <OcrSettings config={draft} apiKeys={apiKeys} updateDraft={updateDraft} />
               ) : tab === "pipeline" ? (

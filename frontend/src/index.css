@@ -4377,10 +4377,84 @@ button.ts-link:hover {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.cost-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.cost-stat {
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  border-radius: 7px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+.cost-stat span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-quiet);
+  font-weight: 600;
+}
+.cost-stat strong {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+}
+.cost-table {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.cost-table-head,
+.cost-table-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 110px 110px 110px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 11px;
+}
+.cost-table-head {
+  background: var(--bg-2);
+  color: var(--fg-quiet);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.cost-table-row {
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.cost-table-row > span:first-child {
+  font-weight: 600;
+}
+.cost-notes {
+  display: grid;
+  gap: 8px;
+}
+.cost-notes span {
+  color: var(--fg-mute);
+  font-size: 12px;
+  padding-left: 12px;
+  position: relative;
+}
+.cost-notes span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
 
 @media (max-width: 1180px) {
   .settings-grid,
-  .settings-endpoints {
+  .settings-endpoints,
+  .cost-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -4402,7 +4476,12 @@ button.ts-link:hover {
   .settings-endpoints,
   .settings-endpoints.compact,
   .settings-mode-grid,
-  .settings-secret-form {
+  .settings-secret-form,
+  .cost-summary {
+    grid-template-columns: 1fr;
+  }
+  .cost-table-head,
+  .cost-table-row {
     grid-template-columns: 1fr;
   }
   .settings-secret-save {
