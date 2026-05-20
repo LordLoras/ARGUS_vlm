@@ -6,6 +6,7 @@ import { EmptyState } from "./components/shared/EmptyState";
 import { Agent } from "./pages/Agent";
 import { Campaigns } from "./pages/Campaigns";
 import { DebatePanel } from "./pages/DebatePanel";
+import { Jobs } from "./pages/Jobs";
 import { Library } from "./pages/Library";
 import { SearchPage } from "./pages/SearchPage";
 import { Taxonomy } from "./pages/Taxonomy";
@@ -45,7 +46,7 @@ export default function App() {
         <Route path="/agent" element={<Agent />} />
         <Route path="/debate" element={<DebatePanel />} />
         <Route path="/taxonomy" element={<Taxonomy />} />
-        <Route path="/pipelines" element={<Placeholder title="Pipelines" />} />
+        <Route path="/pipelines" element={<Jobs />} />
         <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />
         <Route path="/settings" element={<Placeholder title="Settings" />} />
       </Route>

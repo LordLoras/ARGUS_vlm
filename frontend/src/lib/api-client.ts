@@ -197,10 +197,19 @@ export const api = {
 
   getJob: (jobId: string) => apiFetch<JobRecord>(`/api/jobs/${jobId}`),
 
+  listJobs: (query: { state?: string; limit?: number; offset?: number } = {}) =>
+    apiFetch<{ items: JobRecord[]; limit: number; offset: number }>(`/api/jobs${params(query)}`),
+
   cancelJob: (jobId: string) =>
     apiFetch<{ cancelled: boolean; job: JobRecord }>(`/api/jobs/${jobId}/cancel`, {
       method: "POST"
     }),
+
+  deleteJob: (jobId: string, cleanupArtifacts = true) =>
+    apiFetch<{ deleted: string; ad_id?: string | null; artifacts_removed: string[] }>(
+      `/api/jobs/${jobId}${params({ cleanup_artifacts: cleanupArtifacts })}`,
+      { method: "DELETE" }
+    ),
 
   search: (query: {
     q?: string;

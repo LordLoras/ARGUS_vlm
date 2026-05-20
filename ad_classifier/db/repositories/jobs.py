@@ -26,6 +26,47 @@ class JobRepository:
         data = row_to_dict(row)
         return JobRecord.model_validate(data) if data is not None else None
 
+    def list(
+        self,
+        *,
+        state: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if state:
+            clauses.append("j.state = ?")
+            params.append(state)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.conn.execute(
+            f"""
+            SELECT
+              j.*,
+              a.status AS ad_status,
+              a.source_path AS source_path,
+              a.brand_name AS brand_name,
+              a.primary_category AS primary_category,
+              a.ingested_at AS ingested_at
+            FROM jobs j
+            LEFT JOIN ads a ON a.id = j.ad_id
+            {where}
+            ORDER BY
+              CASE j.state
+                WHEN 'running' THEN 0
+                WHEN 'queued' THEN 1
+                WHEN 'failed' THEN 2
+                WHEN 'cancelled' THEN 3
+                WHEN 'completed' THEN 4
+                ELSE 5
+              END,
+              j.rowid DESC
+            LIMIT ? OFFSET ?
+            """,
+            (*params, limit, offset),
+        ).fetchall()
+        return [row_to_dict(row) or {} for row in rows]
+
     def next_queued(self) -> JobRecord | None:
         row = self.conn.execute("""
             SELECT *
@@ -83,3 +124,23 @@ class JobRepository:
             (message, job_id),
         )
         return cur.rowcount > 0
+
+    def delete(self, job_id: str) -> bool:
+        cur = self.conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        return cur.rowcount > 0
+
+    def requeue_running(self, *, message: str = "requeued after restart") -> int:
+        cur = self.conn.execute(
+            """
+            UPDATE jobs
+            SET state = 'queued',
+                progress = 0.0,
+                message = ?,
+                error = NULL,
+                started_at = NULL,
+                finished_at = NULL
+            WHERE state = 'running'
+            """,
+            (message,),
+        )
+        return cur.rowcount

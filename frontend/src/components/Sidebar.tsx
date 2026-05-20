@@ -37,7 +37,6 @@ const intelligence: NavEntry[] = [
 ];
 
 const disabledIntelligence: { label: string; icon: IconComponent }[] = [
-  { label: "Pipelines", icon: FlowIcon },
   { label: "Embeddings", icon: LayersIcon }
 ];
 
@@ -46,6 +45,7 @@ const disabledSystem: { label: string; icon: IconComponent }[] = [
 ];
 
 const system: NavEntry[] = [
+  { to: "/pipelines", label: "Jobs", icon: FlowIcon },
   { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon }
 ];
 

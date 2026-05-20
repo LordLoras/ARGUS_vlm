@@ -106,6 +106,44 @@ def worker(
     runner.run_forever()
 
 
+def recover_jobs(
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config.yaml. Defaults to ./config.yaml or ./config.example.yaml.",
+        ),
+    ] = None,
+    db_path: Annotated[
+        Path | None,
+        typer.Option("--db-path", help="Override the configured SQLite database path."),
+    ] = None,
+) -> None:
+    """Requeue interrupted running jobs after a local service restart."""
+    from ad_classifier.config import resolve_sqlite_path
+    from ad_classifier.db.connection import initialize_database, open_database
+    from ad_classifier.db.repositories import JobRepository
+
+    target = resolve_sqlite_path(config, db_path)
+    initialize_database(target, require_sqlite_vec=False)
+    conn = open_database(target)
+    try:
+        conn.execute(
+            """
+            UPDATE ads
+            SET status = 'new'
+            WHERE status = 'processing'
+              AND id IN (SELECT ad_id FROM jobs WHERE state = 'running')
+            """
+        )
+        jobs_requeued = JobRepository(conn).requeue_running()
+        conn.commit()
+    finally:
+        conn.close()
+    typer.echo(f"jobs_requeued={jobs_requeued}")
+
+
 def reindex_visual_frames(
     config: Annotated[
         Path | None,

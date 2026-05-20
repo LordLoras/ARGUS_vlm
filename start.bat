@@ -19,6 +19,7 @@ set "PORT_WEB=5173"
 
 REM Kill leftover processes before starting new ones.
 call :kill_existing
+call :recover_jobs
 
 echo [start.bat] Starting ARGUS API, worker, and frontend...
 
@@ -61,6 +62,12 @@ for /f "tokens=2" %%P in ('wmic process where "commandline like '%%ad_classifier
   set "_wk_killed=1"
 )
 if defined _wk_killed timeout /t 1 /nobreak >nul
+exit /b 0
+
+
+:recover_jobs
+echo [start.bat] Requeueing interrupted jobs, if any
+"%~dp0.venv\Scripts\python.exe" -m ad_classifier recover-jobs
 exit /b 0
 
 

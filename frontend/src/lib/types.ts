@@ -414,11 +414,18 @@ export type FrameRecord = {
 
 export type JobRecord = {
   id: string;
-  ad_id: string;
+  ad_id?: string | null;
   state: string;
   progress?: number | null;
   message?: string | null;
   error?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  ad_status?: string | null;
+  source_path?: string | null;
+  brand_name?: string | null;
+  primary_category?: string | null;
+  ingested_at?: string | null;
 };
 
 export type JobStreamEvent =

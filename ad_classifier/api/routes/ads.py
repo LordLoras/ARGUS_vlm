@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import uuid
 from pathlib import Path
 from typing import Annotated, Any
@@ -10,6 +9,7 @@ import structlog
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from ad_classifier.api.artifacts import cleanup_ad_artifacts
 from ad_classifier.api.deps import get_config, get_config_file, get_upload_probe, open_request_db
 from ad_classifier.brand_profiles.wikimedia import normalize_profile_name
 from ad_classifier.config import resolve_config_path
@@ -431,50 +431,13 @@ def delete_ad(
 
     removed: list[str] = []
     if cleanup_artifacts:
-        removed = _cleanup_artifacts(config, config_file, ad_id, ad.source_path)
+        removed = cleanup_ad_artifacts(config, config_file, ad_id, ad.source_path)
     return {"deleted": ad_id, "artifacts_removed": removed}
-
-
-def _cleanup_artifacts(config, config_file: Path, ad_id: str, source_path: str) -> list[str]:
-    roots = [
-        resolve_config_path(config.paths.uploads, config_file),
-        resolve_config_path(config.paths.frames, config_file),
-        resolve_config_path(config.paths.audio, config_file),
-        resolve_config_path(config.paths.whisper, config_file),
-        resolve_config_path(config.paths.out, config_file),
-    ]
-    targets = [
-        roots[1] / ad_id,
-        roots[2] / ad_id,
-        roots[3] / ad_id,
-        roots[4] / ad_id,
-        Path(source_path),
-    ]
-    removed: list[str] = []
-    for target in targets:
-        resolved = target.expanduser().resolve()
-        if not any(_is_relative_to(resolved, root.expanduser().resolve()) for root in roots):
-            continue
-        if resolved.is_dir():
-            shutil.rmtree(resolved)
-            removed.append(str(resolved))
-        elif resolved.exists():
-            resolved.unlink()
-            removed.append(str(resolved))
-    return removed
 
 
 def _safe_suffix(filename: str | None) -> str:
     suffix = Path(filename or "upload.mp4").suffix.lower()
     return suffix if suffix in {".mp4", ".mov", ".webm"} else ".mp4"
-
-
-def _is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
 
 
 def _dump(value):

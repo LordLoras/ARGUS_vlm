@@ -144,3 +144,52 @@ def test_worker_does_not_overwrite_duplicate_ad_status(tmp_path: Path):
         conn.close()
 
     assert ad.status == "duplicate"
+
+
+def test_worker_stops_when_job_cancelled_during_progress(tmp_path: Path):
+    db_path = tmp_path / "worker.db"
+    conn = open_database(db_path)
+    apply_migrations(conn)
+    AdRepository(conn).create(
+        AdRecord(
+            id="ad_cancel",
+            source_path="/tmp/ad.mp4",
+            ingested_at=datetime.now(UTC),
+            status="new",
+        )
+    )
+    JobRepository(conn).create(JobRecord(id="job_cancel", ad_id="ad_cancel", state="queued"))
+    conn.commit()
+    conn.close()
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"paths": {"sqlite_path": str(db_path)}}), encoding="utf-8"
+    )
+    config, config_file = load_config(config_path)
+
+    calls = 0
+
+    def fake_runner(conn, ad_id, progress):
+        nonlocal calls
+        assert ad_id == "ad_cancel"
+        JobRepository(conn).cancel("job_cancel")
+        conn.commit()
+        calls += 1
+        progress("fake", 0.5, "halfway")
+        calls += 1
+
+    worker = PipelineWorker(
+        config=config, config_file=config_file, db_path=db_path, runner=fake_runner
+    )
+    assert worker.run_once() is True
+
+    conn = open_database(db_path)
+    try:
+        job = JobRepository(conn).get("job_cancel")
+    finally:
+        conn.close()
+
+    assert calls == 1
+    assert job is not None
+    assert job.state == "cancelled"

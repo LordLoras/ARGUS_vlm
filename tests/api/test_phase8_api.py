@@ -668,6 +668,74 @@ def test_cancel_job_endpoint(client: TestClient, config_path: Path):
     assert response.json()["job"]["state"] == "cancelled"
 
 
+def test_list_jobs_endpoint_includes_ad_context(client: TestClient, config_path: Path):
+    conn = _db(config_path)
+    try:
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            "INSERT INTO ads (id, source_path, ingested_at, status, brand_name) VALUES (?, ?, ?, ?, ?)",
+            ("ad_job", "/tmp/ad.mp4", now, "processing", "Test Brand"),
+        )
+        JobRepository(conn).create(
+            JobRecord(id="job_running", ad_id="ad_job", state="running", progress=0.25)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/api/jobs")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["id"] == "job_running"
+    assert item["ad_id"] == "ad_job"
+    assert item["ad_status"] == "processing"
+    assert item["brand_name"] == "Test Brand"
+
+
+def test_delete_job_removes_ad_rows_and_artifacts(client: TestClient, config_path: Path):
+    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    data_root = Path(cfg["paths"]["data_root"])
+    upload = data_root / "uploads" / "ad_job.mp4"
+    frame_dir = data_root / "frames" / "ad_job"
+    out_dir = data_root / "out" / "ad_job"
+    upload.parent.mkdir(parents=True, exist_ok=True)
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    upload.write_bytes(b"video")
+    (frame_dir / "frame.png").write_bytes(b"frame")
+    (out_dir / "evidence.json").write_text("{}", encoding="utf-8")
+
+    conn = _db(config_path)
+    try:
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            "INSERT INTO ads (id, source_path, ingested_at, status) VALUES (?, ?, ?, ?)",
+            ("ad_job", str(upload), now, "processing"),
+        )
+        JobRepository(conn).create(
+            JobRecord(id="job_running", ad_id="ad_job", state="running", progress=0.5)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.delete("/api/jobs/job_running")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["ad_id"] == "ad_job"
+    assert not upload.exists()
+    assert not frame_dir.exists()
+    assert not out_dir.exists()
+
+    conn = _db(config_path)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM jobs WHERE id = 'job_running'").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM ads WHERE id = 'ad_job'").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
 def test_vector_search_route_loads_sqlite_vec(client: TestClient):
     response = client.get("/api/search", params={"mode": "visual", "ad_id": "missing"})
 

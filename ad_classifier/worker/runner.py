@@ -16,6 +16,10 @@ JobRunner = Callable[[sqlite3.Connection, str, Callable[[str, float, str], None]
 logger = logging.getLogger(__name__)
 
 
+class JobCancelled(RuntimeError):
+    pass
+
+
 class PipelineWorker:
     def __init__(
         self,
@@ -67,6 +71,9 @@ class PipelineWorker:
                 raise ValueError("job has no ad_id")
 
             def progress(stage: str, value: float, message: str) -> None:
+                current = jobs.get(job.id)
+                if current is None or current.state == "cancelled":
+                    raise JobCancelled(job.id)
                 jobs.update_state(job.id, state="running", progress=value, message=message)
                 conn.commit()
 
@@ -97,6 +104,9 @@ class PipelineWorker:
             ad = AdRepository(conn).get(job.ad_id)
             if ad is not None and ad.status not in {"duplicate", "failed"}:
                 AdRepository(conn).update_status(job.ad_id, "completed")
+            conn.commit()
+            return True
+        except JobCancelled:
             conn.commit()
             return True
         except Exception as exc:
