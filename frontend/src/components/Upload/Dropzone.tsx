@@ -2,9 +2,14 @@ import { useRef, useState } from "react";
 
 import { UploadIcon } from "../../lib/icons";
 
-export function Dropzone({ onFile }: { onFile: (file: File) => void }) {
+export function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
+  const choose = (files: FileList | null | undefined) => {
+    const selected = Array.from(files ?? []);
+    if (selected.length) onFiles(selected);
+  };
+
   return (
     <div
       className={`dropzone ${drag ? "drag" : ""}`}
@@ -14,16 +19,15 @@ export function Dropzone({ onFile }: { onFile: (file: File) => void }) {
       onDrop={(e) => {
         e.preventDefault();
         setDrag(false);
-        const file = e.dataTransfer.files?.[0];
-        if (file) onFile(file);
+        choose(e.dataTransfer.files);
       }}
     >
       <div className="dropzone-glow" />
       <div className="dropzone-glyph">
         <UploadIcon size={24} />
       </div>
-      <h3>Drop a video here</h3>
-      <p className="dropzone-p">or click to browse</p>
+      <h3>Drop videos here</h3>
+      <p className="dropzone-p">or click to browse. Multiple clips are queued as separate jobs.</p>
       <div className="dropzone-hints">
         <span>MP4</span>
         <span>MOV</span>
@@ -33,11 +37,12 @@ export function Dropzone({ onFile }: { onFile: (file: File) => void }) {
       <input
         ref={input}
         type="file"
+        multiple
         accept="video/mp4,video/quicktime,video/webm"
         style={{ display: "none" }}
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFile(file);
+          choose(e.target.files);
+          e.currentTarget.value = "";
         }}
       />
     </div>

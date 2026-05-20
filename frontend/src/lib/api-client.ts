@@ -207,12 +207,12 @@ export const api = {
       { method: "DELETE" }
     ),
 
-  uploadAd: (file: File) => {
+  uploadAd: (file: File, signal?: AbortSignal) => {
     const form = new FormData();
     form.append("file", file);
     return apiFetch<{ ad_id: string; job_id: string | null; state: string; duplicate_of?: string }>(
       "/api/ads/upload",
-      { method: "POST", body: form }
+      { method: "POST", body: form, signal }
     );
   },
 
