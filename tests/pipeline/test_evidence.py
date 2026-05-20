@@ -121,6 +121,39 @@ def test_build_splits_fine_print_from_main_ocr():
     assert bundle.frame_summaries[0].fine_print_ocr_items[0].text.startswith("Offer excludes")
 
 
+def test_build_separates_broadcast_overlay_from_main_ocr(tmp_path):
+    from PIL import Image
+
+    path = tmp_path / "frame.png"
+    Image.new("RGB", (640, 480), "black").save(path)
+    frames = [_fa(0, 0, path)]
+    ocr = {
+        0: [
+            _ocr(0, "FLASH FLOOD WARNING", bbox=[25, 84, 99, 84, 99, 95, 25, 95]),
+            _ocr(0, "Austin Area", bbox=[113, 30, 171, 30, 171, 41, 113, 41]),
+            _ocr(0, "Volvo", bbox=[138, 40, 161, 40, 161, 47, 138, 47]),
+            _ocr(0, "SEIZE THE AWKWARD", bbox=[244, 157, 396, 157, 396, 181, 244, 181]),
+        ]
+    }
+
+    bundle = build_evidence_bundle(
+        ad_id="ad_001",
+        kept_frames=frames,
+        transcript=_transcript(),
+        rules_triggered=[],
+        ocr_by_frame=ocr,
+        max_frames=12,
+    )
+
+    summary = bundle.frame_summaries[0]
+    assert [item.text for item in summary.ocr_items] == ["SEIZE THE AWKWARD"]
+    assert {item.text for item in summary.broadcast_overlay_ocr_items} == {
+        "FLASH FLOOD WARNING",
+        "Austin Area",
+        "Volvo",
+    }
+
+
 def test_build_keeps_small_nonlegal_dealer_text_as_main_ocr():
     frames = [_fa(0, 0)]
     ocr = {
@@ -144,6 +177,33 @@ def test_build_keeps_small_nonlegal_dealer_text_as_main_ocr():
 
     assert [item.text for item in bundle.frame_summaries[0].ocr_items] == ["Kelly GMC Jeep"]
     assert bundle.frame_summaries[0].fine_print_ocr_items == []
+
+
+def test_build_keeps_top_left_logo_without_broadcast_context(tmp_path):
+    from PIL import Image
+
+    path = tmp_path / "frame.png"
+    Image.new("RGB", (640, 480), "black").save(path)
+    frames = [_fa(0, 0, path)]
+    ocr = {
+        0: [
+            _ocr(0, "Kelly GMC Jeep", bbox=[24, 30, 150, 30, 150, 48, 24, 48]),
+            _ocr(0, "Shop now", bbox=[250, 230, 390, 230, 390, 260, 250, 260]),
+        ]
+    }
+
+    bundle = build_evidence_bundle(
+        ad_id="ad_001",
+        kept_frames=frames,
+        transcript=_transcript(),
+        rules_triggered=[],
+        ocr_by_frame=ocr,
+        max_frames=12,
+    )
+
+    summary = bundle.frame_summaries[0]
+    assert [item.text for item in summary.ocr_items] == ["Kelly GMC Jeep", "Shop now"]
+    assert summary.broadcast_overlay_ocr_items == []
 
 
 def test_build_attaches_nearby_transcript():

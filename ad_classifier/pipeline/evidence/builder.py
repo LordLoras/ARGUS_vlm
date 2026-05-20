@@ -3,6 +3,7 @@ from __future__ import annotations
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.alignment import align_transcript_to_frame
 from ad_classifier.pipeline.evidence.models import EvidenceBundle, FrameSummary
+from ad_classifier.pipeline.ocr.broadcast_overlay import split_broadcast_overlay
 from ad_classifier.pipeline.ocr.fine_print import split_fine_print
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
@@ -72,13 +73,7 @@ def _select_frames(
         [
             (
                 f.frame_index,
-                sum(
-                    len(item.text)
-                    for item in split_fine_print(
-                        ocr_by_frame.get(f.frame_index, []),
-                        frame_path=f.path,
-                    )[0]
-                ),
+                sum(len(item.text) for item in _main_ocr_for_frame(ocr_by_frame, f)),
             )
             for f in kept_frames
             if f.frame_index not in selected
@@ -149,8 +144,12 @@ def build_evidence_bundle(
 
     summaries: list[FrameSummary] = []
     for frame, reason in selected:
-        ocr_items, fine_print_ocr_items = split_fine_print(
+        non_overlay_items, broadcast_overlay_ocr_items = split_broadcast_overlay(
             ocr_by_frame.get(frame.frame_index, []),
+            frame_path=frame.path,
+        )
+        ocr_items, fine_print_ocr_items = split_fine_print(
+            non_overlay_items,
             frame_path=frame.path,
         )
         paddlevl = paddlevl_by_frame.get(frame.frame_index)
@@ -161,6 +160,7 @@ def build_evidence_bundle(
                 time_ms=frame.time_ms,
                 path=frame.path,
                 ocr_items=ocr_items,
+                broadcast_overlay_ocr_items=broadcast_overlay_ocr_items,
                 fine_print_ocr_items=fine_print_ocr_items,
                 paddlevl_output=paddlevl,
                 transcript_nearby=nearby,
@@ -176,3 +176,18 @@ def build_evidence_bundle(
         rules_triggered=rules_triggered,
         metadata=metadata or {},
     )
+
+
+def _main_ocr_for_frame(
+    ocr_by_frame: dict[int, list[OCRItem]],
+    frame: FrameAnalysis,
+) -> list[OCRItem]:
+    non_overlay_items, _broadcast_overlay = split_broadcast_overlay(
+        ocr_by_frame.get(frame.frame_index, []),
+        frame_path=frame.path,
+    )
+    main_items, _fine_print = split_fine_print(
+        non_overlay_items,
+        frame_path=frame.path,
+    )
+    return main_items

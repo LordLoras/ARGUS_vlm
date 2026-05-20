@@ -96,6 +96,43 @@ def test_build_content_separates_fine_print_ocr():
     assert "do not infer brand/product/category" in text
 
 
+def test_build_content_marks_broadcast_overlay_as_excluded():
+    from pathlib import Path
+
+    from ad_classifier.ingest.models import WhisperTranscript
+    from ad_classifier.pipeline.evidence.models import EvidenceBundle, FrameSummary
+    from ad_classifier.pipeline.ocr.models import OCRItem
+
+    bundle = EvidenceBundle(
+        ad_id="ad_test",
+        frame_summaries=[
+            FrameSummary(
+                frame_index=0,
+                time_ms=0,
+                path=Path("/tmp/missing.jpg"),
+                ocr_items=[OCRItem(frame_index=0, time_ms=0, text="MAIN AD", engine="mock")],
+                broadcast_overlay_ocr_items=[
+                    OCRItem(
+                        frame_index=0,
+                        time_ms=0,
+                        text="FLASH FLOOD WARNING",
+                        engine="mock",
+                    )
+                ],
+            )
+        ],
+        frame_image_paths=[],
+        full_transcript=WhisperTranscript(segments=[], text=""),
+    )
+
+    text = _build_content(bundle)[0]["text"]
+
+    assert "OCR: ocr: MAIN AD" in text
+    assert "BroadcastOverlayOCR:" in text
+    assert "excluded from marketing/category extraction" in text
+    assert "FLASH FLOOD WARNING" not in text
+
+
 def test_mock_verifier_returns_default_result():
     verifier = MockVLMVerifier()
     bundle = _make_bundle()

@@ -426,6 +426,12 @@ def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dic
                     "expiry, APR/financing terms, exclusions, eligibility, fees, or legal "
                     f"disclaimers; do not infer brand/product/category from it: {fine_print}"
                 )
+        if fs.broadcast_overlay_ocr_items:
+            seg += (
+                "\nBroadcastOverlayOCR: non-ad TV/weather/radar overlay detected and "
+                "excluded from marketing/category extraction. Ignore the matching visible "
+                "corner overlay unless the same signal also appears in the main ad creative."
+            )
         if fs.transcript_nearby:
             seg += f"\nTranscript: {' | '.join(s.text for s in fs.transcript_nearby)}"
         text_parts.append(seg)

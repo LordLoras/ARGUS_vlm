@@ -26,6 +26,7 @@ from ad_classifier.marketing.extract import enrich_marketing_entities
 from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.evidence import build_evidence_bundle
+from ad_classifier.pipeline.ocr.broadcast_overlay import split_broadcast_overlay
 from ad_classifier.pipeline.ocr.engine import OCREngine, PaddleOCREngine
 from ad_classifier.pipeline.ocr.fine_print import split_fine_print
 from ad_classifier.pipeline.ocr.models import FrameRef, OCRItem
@@ -344,9 +345,13 @@ def run_pipeline_for_job(
         dropped_frames=dropped_debug,
         knowledge_manager=knowledge_manager,
     )
+    marketing_ocr_items = _main_ocr_items(
+        [*rule_ocr_items, *corrected_ocr_items],
+        preprocess_result.kept_frames,
+    )
     final.marketing_entities = enrich_marketing_entities(
         final.marketing_entities,
-        ocr_items=[*rule_ocr_items, *corrected_ocr_items],
+        ocr_items=marketing_ocr_items,
         transcript=ingest.transcript,
     )
     ClassificationRepository(conn).upsert(
@@ -612,8 +617,12 @@ def _main_ocr_items(
     frame_paths = {frame.frame_index: frame.path for frame in kept_frames}
     main: list[OCRItem] = []
     for frame_index, frame_items in _ocr_by_frame(items).items():
-        frame_main, _fine_print = split_fine_print(
+        non_overlay_items, _broadcast_overlay = split_broadcast_overlay(
             frame_items,
+            frame_path=frame_paths.get(frame_index),
+        )
+        frame_main, _fine_print = split_fine_print(
+            non_overlay_items,
             frame_path=frame_paths.get(frame_index),
         )
         main.extend(frame_main)
