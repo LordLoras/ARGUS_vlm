@@ -15,6 +15,7 @@ import structlog
 
 from ad_classifier._env import resolve_api_key
 from ad_classifier.pipeline.evidence.models import EvidenceBundle
+from ad_classifier.pipeline.ocr.fine_print import fine_print_notice
 from ad_classifier.vlm.http import chat_completion
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.prompt import get_prompt_version as _get_prompt_version
@@ -417,6 +418,14 @@ def _build_content(bundle: EvidenceBundle, image_max_dim: int = 512) -> list[dic
             if pv_text:
                 label = fs.paddlevl_output.engine or "paddlevl"
                 seg += f"\nDocumentOCR[{label}]: {pv_text}"
+        if fs.fine_print_ocr_items:
+            fine_print = fine_print_notice(fs.fine_print_ocr_items)
+            if fine_print:
+                seg += (
+                    "\nFinePrintOCR: small/dense legal text tucked away. Use only for "
+                    "expiry, APR/financing terms, exclusions, eligibility, fees, or legal "
+                    f"disclaimers; do not infer brand/product/category from it: {fine_print}"
+                )
         if fs.transcript_nearby:
             seg += f"\nTranscript: {' | '.join(s.text for s in fs.transcript_nearby)}"
         text_parts.append(seg)

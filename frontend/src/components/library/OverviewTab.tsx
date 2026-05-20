@@ -43,6 +43,8 @@ export function OverviewTab({
     ? detail.ad.products_text.split(/,\s*/).filter(Boolean)
     : ent?.products ?? [];
   const disclaimers = ent?.disclaimers ?? [];
+  const mainDisclaimers = disclaimers.filter((disclaimer) => !disclaimer.is_small_print);
+  const smallPrintDisclaimers = disclaimers.filter((disclaimer) => disclaimer.is_small_print);
   const subcategory = detail.ad.subcategory ?? ent?.subcategory ?? null;
   const brandName = detail.ad.brand_name || ent?.brand?.name || null;
   const advertiserName = detail.ad.advertiser_name || ent?.advertiser?.advertiser_name || null;
@@ -261,20 +263,60 @@ export function OverviewTab({
         {disclaimers.length === 0 ? (
           <div className="obs-empty">No disclaimers extracted.</div>
         ) : (
-          disclaimers.map((disclaimer, idx) => {
-            const evidence = disclaimer.evidence?.[0];
-            const timeMs = disclaimer.time_ms ?? evidence?.time_ms;
-            return (
-              <div key={`disclaimer-${idx}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                <TimestampChip timeMs={timeMs} onSeek={onSeek} />
-                <span style={{ flex: 1 }}>{disclaimer.text || "—"}</span>
-                {disclaimer.is_small_print ? <span className="badge badge-mono">small print</span> : null}
-              </div>
-            );
-          })
+          <>
+            {(mainDisclaimers.length ? mainDisclaimers : []).map((disclaimer, idx) => (
+              <DisclaimerRow
+                key={`disclaimer-main-${idx}`}
+                disclaimer={disclaimer}
+                onSeek={onSeek}
+              />
+            ))}
+            {mainDisclaimers.length === 0 && smallPrintDisclaimers.length > 0 ? (
+              <div className="obs-empty">Only small-print disclaimers extracted.</div>
+            ) : null}
+            {smallPrintDisclaimers.length > 0 ? (
+              <details style={{ marginTop: 8 }}>
+                <summary style={{ cursor: "pointer", color: "var(--accent-2)", fontSize: 12 }}>
+                  Fine print ({smallPrintDisclaimers.length})
+                </summary>
+                <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+                  {smallPrintDisclaimers.map((disclaimer, idx) => (
+                    <DisclaimerRow
+                      key={`disclaimer-small-${idx}`}
+                      disclaimer={disclaimer}
+                      onSeek={onSeek}
+                      small
+                    />
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </>
         )}
       </Card>
     </>
+  );
+}
+
+function DisclaimerRow({
+  disclaimer,
+  onSeek,
+  small = false
+}: {
+  disclaimer: { text?: string | null; time_ms?: number | null; evidence?: Array<{ time_ms?: number | null }>; is_small_print?: boolean | null };
+  onSeek?: (timeMs: number) => void;
+  small?: boolean;
+}) {
+  const evidence = disclaimer.evidence?.[0];
+  const timeMs = disclaimer.time_ms ?? evidence?.time_ms;
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+      <TimestampChip timeMs={timeMs} onSeek={onSeek} />
+      <span style={{ flex: 1, color: small ? "var(--fg-mute)" : "var(--fg)" }}>
+        {disclaimer.text || "—"}
+      </span>
+      {small ? <span className="badge badge-mono">small print</span> : null}
+    </div>
   );
 }
 

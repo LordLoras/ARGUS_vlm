@@ -22,6 +22,7 @@ from ad_classifier.models.marketing import (
     SocialHandleEntity,
     WebsiteEntity,
 )
+from ad_classifier.pipeline.ocr.fine_print import split_fine_print
 from ad_classifier.pipeline.ocr.models import OCRItem
 
 _URL_PATTERN = re.compile(
@@ -94,6 +95,8 @@ def extract_tracking_entities(
         text = normalize_ocr_text(evidence.text)
         normalized_evidence = evidence.model_copy(update={"text": text})
         if not _is_reliable_tracking_evidence(evidence):
+            continue
+        if _is_fine_print_evidence(evidence):
             continue
 
         for raw_url in _URL_PATTERN.findall(text):
@@ -241,7 +244,9 @@ def _evidence_from_sources(
     transcript: WhisperTranscript,
 ) -> list[EvidenceItem]:
     ocr_list = list(ocr_items)
-    evidence = _joined_ocr_evidence(ocr_list)
+    main_ocr, fine_print_ocr = _split_ocr_for_marketing(ocr_list)
+    evidence = _joined_ocr_evidence(main_ocr)
+    evidence.extend(_joined_fine_print_evidence(fine_print_ocr))
     evidence.extend(
         EvidenceItem(
             time_ms=item.time_ms,
@@ -251,7 +256,20 @@ def _evidence_from_sources(
             bbox=item.bbox,
             confidence=item.confidence,
         )
-        for item in ocr_list
+        for item in main_ocr
+        if item.text
+    )
+    evidence.extend(
+        EvidenceItem(
+            time_ms=item.time_ms,
+            frame_index=item.frame_index,
+            source=_ocr_evidence_source(item.engine),
+            text=item.text,
+            bbox=item.bbox,
+            confidence=item.confidence,
+            reason="fine_print OCR; use for disclaimers and legal terms only",
+        )
+        for item in fine_print_ocr
         if item.text
     )
     evidence.extend(
@@ -265,6 +283,20 @@ def _evidence_from_sources(
         if segment.text
     )
     return evidence
+
+
+def _split_ocr_for_marketing(ocr_items: list[OCRItem]) -> tuple[list[OCRItem], list[OCRItem]]:
+    by_frame: dict[int, list[OCRItem]] = {}
+    for item in ocr_items:
+        by_frame.setdefault(item.frame_index, []).append(item)
+
+    main: list[OCRItem] = []
+    fine_print: list[OCRItem] = []
+    for frame_index in sorted(by_frame):
+        frame_main, frame_fine = split_fine_print(by_frame[frame_index])
+        main.extend(frame_main)
+        fine_print.extend(frame_fine)
+    return main, fine_print
 
 
 def _ocr_evidence_source(engine: str) -> str:
@@ -302,6 +334,26 @@ def _joined_ocr_evidence(ocr_items: list[OCRItem]) -> list[EvidenceItem]:
             )
         )
     return joined
+
+
+def _joined_fine_print_evidence(ocr_items: list[OCRItem]) -> list[EvidenceItem]:
+    joined = _joined_ocr_evidence(ocr_items)
+    return [
+        item.model_copy(
+            update={"reason": "fine_print joined OCR frame text; use for disclaimers and legal terms only"}
+        )
+        for item in joined
+    ]
+
+
+def _is_fine_print_evidence(evidence: EvidenceItem) -> bool:
+    reason = (evidence.reason or "").casefold()
+    if "fine_print" in reason or "small_print" in reason:
+        return True
+    if evidence.bbox and len(evidence.bbox) >= 4:
+        ys = [float(value) for value in evidence.bbox[1::2]]
+        return max(ys) - min(ys) <= 16
+    return False
 
 
 def _website_from_match(raw_url: str, evidence: EvidenceItem) -> WebsiteEntity | None:

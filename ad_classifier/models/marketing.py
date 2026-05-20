@@ -69,6 +69,7 @@ class SocialProof(StrictModel):
 class DisclaimerEntity(StrictModel):
     text: str
     evidence: list[EvidenceItem] = Field(default_factory=list)
+    is_small_print: bool = False
 
 
 class CreativeFormat(StrictModel):

@@ -261,6 +261,7 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
                     text=d.text,
                 )
             ],
+            is_small_print=d.is_small_print,
         )
         for d in me.disclaimers
     ]

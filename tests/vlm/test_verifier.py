@@ -10,6 +10,7 @@ from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.verifier import (
     HTTPVLMVerifier,
     MockVLMVerifier,
+    _build_content,
     _extract_json,
     _normalize_chat_endpoint,
     _parse_vlm_content,
@@ -54,6 +55,45 @@ def _make_bundle():
         rules_triggered=[],
         metadata={},
     )
+
+
+def test_build_content_separates_fine_print_ocr():
+    from pathlib import Path
+
+    from ad_classifier.ingest.models import WhisperTranscript
+    from ad_classifier.pipeline.evidence.models import EvidenceBundle, FrameSummary
+    from ad_classifier.pipeline.ocr.models import OCRItem
+
+    bundle = EvidenceBundle(
+        ad_id="ad_test",
+        frame_summaries=[
+            FrameSummary(
+                frame_index=0,
+                time_ms=0,
+                path=Path("/tmp/missing.jpg"),
+                ocr_items=[
+                    OCRItem(frame_index=0, time_ms=0, text="MAIN OFFER", engine="mock")
+                ],
+                fine_print_ocr_items=[
+                    OCRItem(
+                        frame_index=0,
+                        time_ms=0,
+                        text="Offer excludes leases. See dealer for details.",
+                        engine="mock",
+                    )
+                ],
+            )
+        ],
+        frame_image_paths=[],
+        full_transcript=WhisperTranscript(segments=[], text=""),
+    )
+
+    content = _build_content(bundle)
+    text = content[0]["text"]
+
+    assert "OCR: ocr: MAIN OFFER" in text
+    assert "FinePrintOCR:" in text
+    assert "do not infer brand/product/category" in text
 
 
 def test_mock_verifier_returns_default_result():

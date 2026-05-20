@@ -3,6 +3,7 @@ from __future__ import annotations
 from ad_classifier.ingest.models import WhisperTranscript
 from ad_classifier.pipeline.alignment import align_transcript_to_frame
 from ad_classifier.pipeline.evidence.models import EvidenceBundle, FrameSummary
+from ad_classifier.pipeline.ocr.fine_print import split_fine_print
 from ad_classifier.pipeline.ocr.models import OCRItem
 from ad_classifier.pipeline.paddlevl.models import PaddleVLOutput
 from ad_classifier.pipeline.preprocess.models import FrameAnalysis
@@ -69,7 +70,16 @@ def _select_frames(
     # 3. High OCR density (chars per frame, descending; tiebreak ascending index)
     density = sorted(
         [
-            (f.frame_index, sum(len(i.text) for i in ocr_by_frame.get(f.frame_index, [])))
+            (
+                f.frame_index,
+                sum(
+                    len(item.text)
+                    for item in split_fine_print(
+                        ocr_by_frame.get(f.frame_index, []),
+                        frame_path=f.path,
+                    )[0]
+                ),
+            )
             for f in kept_frames
             if f.frame_index not in selected
         ],
@@ -139,7 +149,10 @@ def build_evidence_bundle(
 
     summaries: list[FrameSummary] = []
     for frame, reason in selected:
-        ocr_items = ocr_by_frame.get(frame.frame_index, [])
+        ocr_items, fine_print_ocr_items = split_fine_print(
+            ocr_by_frame.get(frame.frame_index, []),
+            frame_path=frame.path,
+        )
         paddlevl = paddlevl_by_frame.get(frame.frame_index)
         nearby = align_transcript_to_frame(transcript, frame.time_ms, alignment_window_ms)
         summaries.append(
@@ -148,6 +161,7 @@ def build_evidence_bundle(
                 time_ms=frame.time_ms,
                 path=frame.path,
                 ocr_items=ocr_items,
+                fine_print_ocr_items=fine_print_ocr_items,
                 paddlevl_output=paddlevl,
                 transcript_nearby=nearby,
                 selection_reason=reason,

@@ -25,6 +25,8 @@ export function ResultPanel({
   const offers = ent?.offers ?? [];
   const ctas = ent?.ctas ?? [];
   const disclaimers = ent?.disclaimers ?? [];
+  const mainDisclaimers = disclaimers.filter((item) => !item.is_small_print);
+  const smallPrintDisclaimers = disclaimers.filter((item) => item.is_small_print);
   const iab = cls?.iab_category;
   const iabContentCategories = cls?.iab_content_categories?.length
     ? cls.iab_content_categories
@@ -114,11 +116,26 @@ export function ResultPanel({
       {disclaimers.length > 0 ? (
         <div className="result-section">
           <div className="result-section-title">Disclaimers</div>
-          {disclaimers.map((d, i) => (
+          {(mainDisclaimers.length ? mainDisclaimers : []).map((d, i) => (
             <div key={`d-${i}`} className="result-disclaimer">
               {d.text || "—"}
             </div>
           ))}
+          {mainDisclaimers.length === 0 && smallPrintDisclaimers.length > 0 ? (
+            <div className="result-disclaimer">Only small-print disclaimers extracted.</div>
+          ) : null}
+          {smallPrintDisclaimers.length > 0 ? (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: "pointer" }}>
+                Fine print ({smallPrintDisclaimers.length})
+              </summary>
+              {smallPrintDisclaimers.map((d, i) => (
+                <div key={`sd-${i}`} className="result-disclaimer">
+                  {d.text || "—"}
+                </div>
+              ))}
+            </details>
+          ) : null}
         </div>
       ) : null}
 

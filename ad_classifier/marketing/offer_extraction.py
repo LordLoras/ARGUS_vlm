@@ -114,6 +114,7 @@ def extract_commercial_entities(evidence_items: Iterable[EvidenceItem]) -> Marke
     for evidence in evidence_items:
         text = normalize_ocr_text(evidence.text)
         normalized_evidence = evidence.model_copy(update={"text": text})
+        is_small_print = _is_small_print_evidence(evidence)
         _extract_disclaimer_signal(
             text,
             normalized_evidence,
@@ -122,6 +123,16 @@ def extract_commercial_entities(evidence_items: Iterable[EvidenceItem]) -> Marke
             allow_exact_text=_is_reliable_commercial_evidence(evidence),
         )
         if not _is_reliable_commercial_evidence(evidence):
+            continue
+        if is_small_print:
+            _extract_financing(
+                text,
+                normalized_evidence,
+                entities,
+                seen_offers,
+                allow_offer=False,
+            )
+            _extract_expiry(text, normalized_evidence, entities)
             continue
         _extract_generic_products(text, entities)
         _extract_prices(text, normalized_evidence, entities, seen_prices, seen_offers)
@@ -197,9 +208,11 @@ def _extract_financing(
     evidence: EvidenceItem,
     entities: MarketingEntities,
     seen_offers: set[str],
+    *,
+    allow_offer: bool = True,
 ) -> None:
     match = _FINANCING_CONTEXT_PATTERN.search(text)
-    if match:
+    if match and allow_offer:
         offer_text = _trim_offer_text(match.group(0))
         _append_offer(offer_text, evidence, entities, seen_offers)
 
@@ -286,6 +299,7 @@ def _extract_disclaimer_signal(
             DisclaimerEntity(
                 text=disclaimer_text,
                 evidence=[evidence.model_copy(update={"text": disclaimer_text})],
+                is_small_print=_is_small_print_evidence(evidence),
             )
         )
 
@@ -538,6 +552,16 @@ def _disclaimer_quality(disclaimer: DisclaimerEntity) -> int:
 def _is_garbled_disclaimer_text(text: str) -> bool:
     lower = text.lower()
     return bool(re.search(r"\b(?:sery|tfan|resi)\b", lower))
+
+
+def _is_small_print_evidence(evidence: EvidenceItem) -> bool:
+    reason = (evidence.reason or "").casefold()
+    if "fine_print" in reason or "small_print" in reason:
+        return True
+    if evidence.bbox and len(evidence.bbox) >= 4:
+        ys = [float(value) for value in evidence.bbox[1::2]]
+        return max(ys) - min(ys) <= 16
+    return False
 
 
 def _fuzzy_dedupe_offers(offers: list[OfferEntity]) -> list[OfferEntity]:

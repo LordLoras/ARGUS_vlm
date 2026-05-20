@@ -16,6 +16,7 @@ class FrameSummary(StrictModel):
     time_ms: int = Field(ge=0)
     path: Path
     ocr_items: list[OCRItem] = Field(default_factory=list)
+    fine_print_ocr_items: list[OCRItem] = Field(default_factory=list)
     paddlevl_output: PaddleVLOutput | None = None
     transcript_nearby: list[TranscriptSegment] = Field(default_factory=list)
     # Why this frame was included in the bundle (H.1 selection reason)

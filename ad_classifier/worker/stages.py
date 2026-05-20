@@ -27,6 +27,7 @@ from ad_classifier.models.classification import ClassificationRecord, OCRQuality
 from ad_classifier.pipeline.aggregation.policy import aggregate
 from ad_classifier.pipeline.evidence import build_evidence_bundle
 from ad_classifier.pipeline.ocr.engine import OCREngine, PaddleOCREngine
+from ad_classifier.pipeline.ocr.fine_print import split_fine_print
 from ad_classifier.pipeline.ocr.models import FrameRef, OCRItem
 from ad_classifier.pipeline.paddlevl.gating import should_run_paddlevl
 from ad_classifier.pipeline.paddlevl.models import PaddleVLGatingConfig, PaddleVLOutput
@@ -165,8 +166,12 @@ def run_pipeline_for_job(
     raw_ocr_items = list(ocr_items)
     corrected_ocr_items: list[OCRItem] = []
     rule_ocr_items = [*raw_ocr_items, *glm_ocr_items]
+    reasoning_ocr_items = _main_ocr_items(
+        rule_ocr_items,
+        preprocess_result.kept_frames,
+    )
     vlm_complexity = assess_vlm_complexity(
-        ocr_items=raw_ocr_items,
+        ocr_items=reasoning_ocr_items,
         transcript=ingest.transcript,
         kept_frames=preprocess_result.kept_frames,
         config=config.vlm.complexity,
@@ -201,7 +206,10 @@ def run_pipeline_for_job(
             conn.commit()
 
     emit("rules", 0.55, "running rules")
-    rules = RulesEngine(load_rules(config.rules.rules_path)).run(rule_ocr_items, ingest.transcript)
+    rules = RulesEngine(load_rules(config.rules.rules_path)).run(
+        reasoning_ocr_items,
+        ingest.transcript,
+    )
     _replace_rule_triggers(conn, ad_id, rules)
     conn.commit()
 
@@ -245,14 +253,14 @@ def run_pipeline_for_job(
     vlm_result = vlm.verify(bundle)
 
     if config.vlm.enable_post_validation:
-        evidence_texts = _collect_evidence_texts(rule_ocr_items, ingest.transcript)
+        evidence_texts = _collect_evidence_texts(reasoning_ocr_items, ingest.transcript)
         vlm_result = validate_vlm_output(
             vlm_result, evidence_texts, primary_category=vlm_result.primary_category
         )
 
     if config.vlm.enable_self_correction:
         emit("vlm:correct", 0.72, "self-correction check")
-        evidence_texts = _collect_evidence_texts(rule_ocr_items, ingest.transcript)
+        evidence_texts = _collect_evidence_texts(reasoning_ocr_items, ingest.transcript)
         vlm_result = _run_self_correction(config, vlm_result, evidence_texts, vlm_complexity)
 
     if getattr(config.vlm, "enable_visual_verify", False):
@@ -264,6 +272,10 @@ def run_pipeline_for_job(
         [*raw_ocr_items, *corrected_ocr_items],
         glm_ocr_items,
         config,
+    )
+    search_main_ocr_for_index = _main_ocr_items(
+        search_ocr_for_index,
+        preprocess_result.kept_frames,
     )
     text_embedder = components.text_embedder or SentenceTransformerEmbedder(
         config.text_embedder.model,
@@ -280,7 +292,7 @@ def run_pipeline_for_job(
         config,
         ad_id,
         ingest,
-        search_ocr_for_index,
+        search_main_ocr_for_index,
         preprocess_result.kept_frames,
         text_embedder,
         image_embedder,
@@ -393,7 +405,7 @@ def run_pipeline_for_job(
         products=final.marketing_entities.products_text or "",
         primary_category=final.primary_category,
         transcript_text=ingest.transcript.text,
-        ocr_text=" ".join(item.text for item in search_ocr_for_index),
+        ocr_text=" ".join(item.text for item in search_main_ocr_for_index),
         marketing_entities_text=json.dumps(
             {
                 "marketing_entities": final.marketing_entities.model_dump(),
@@ -591,6 +603,21 @@ def _ocr_by_frame(items: list[OCRItem]) -> dict[int, list[OCRItem]]:
     for item in items:
         out.setdefault(item.frame_index, []).append(item)
     return out
+
+
+def _main_ocr_items(
+    items: list[OCRItem],
+    kept_frames: list[FrameAnalysis],
+) -> list[OCRItem]:
+    frame_paths = {frame.frame_index: frame.path for frame in kept_frames}
+    main: list[OCRItem] = []
+    for frame_index, frame_items in _ocr_by_frame(items).items():
+        frame_main, _fine_print = split_fine_print(
+            frame_items,
+            frame_path=frame_paths.get(frame_index),
+        )
+        main.extend(frame_main)
+    return main
 
 
 def _corrected_ocr_items(items: list[OCRItem]) -> list[OCRItem]:

@@ -25,8 +25,14 @@ def _fa(frame_index: int, time_ms: int, path: Path | None = None) -> FrameAnalys
     )
 
 
-def _ocr(frame_index: int, text: str) -> OCRItem:
-    return OCRItem(frame_index=frame_index, time_ms=frame_index * 500, text=text, engine="mock")
+def _ocr(frame_index: int, text: str, bbox: list[float] | None = None) -> OCRItem:
+    return OCRItem(
+        frame_index=frame_index,
+        time_ms=frame_index * 500,
+        text=text,
+        bbox=bbox,
+        engine="mock",
+    )
 
 
 def _transcript(*segments: tuple[int, int, str]) -> WhisperTranscript:
@@ -86,6 +92,58 @@ def test_build_attaches_ocr_to_frame():
     )
     assert bundle.frame_summaries[0].ocr_items[0].text == "SALE 50% OFF"
     assert bundle.frame_summaries[1].ocr_items[0].text == "Shop now"
+
+
+def test_build_splits_fine_print_from_main_ocr():
+    frames = [_fa(0, 0)]
+    fine_bbox = [10, 430, 610, 430, 610, 442, 10, 442]
+    ocr = {
+        0: [
+            _ocr(0, "0% APR FINANCING", bbox=[180, 250, 460, 250, 460, 290, 180, 290]),
+            _ocr(
+                0,
+                "Offer excludes leases and not all buyers will qualify. See dealer for details.",
+                bbox=fine_bbox,
+            ),
+        ]
+    }
+
+    bundle = build_evidence_bundle(
+        ad_id="ad_001",
+        kept_frames=frames,
+        transcript=_transcript(),
+        rules_triggered=[],
+        ocr_by_frame=ocr,
+        max_frames=12,
+    )
+
+    assert [item.text for item in bundle.frame_summaries[0].ocr_items] == ["0% APR FINANCING"]
+    assert bundle.frame_summaries[0].fine_print_ocr_items[0].text.startswith("Offer excludes")
+
+
+def test_build_keeps_small_nonlegal_dealer_text_as_main_ocr():
+    frames = [_fa(0, 0)]
+    ocr = {
+        0: [
+            _ocr(
+                0,
+                "Kelly GMC Jeep",
+                bbox=[220, 432, 420, 432, 420, 444, 220, 444],
+            )
+        ]
+    }
+
+    bundle = build_evidence_bundle(
+        ad_id="ad_001",
+        kept_frames=frames,
+        transcript=_transcript(),
+        rules_triggered=[],
+        ocr_by_frame=ocr,
+        max_frames=12,
+    )
+
+    assert [item.text for item in bundle.frame_summaries[0].ocr_items] == ["Kelly GMC Jeep"]
+    assert bundle.frame_summaries[0].fine_print_ocr_items == []
 
 
 def test_build_attaches_nearby_transcript():

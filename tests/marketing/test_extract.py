@@ -355,6 +355,34 @@ def test_extract_disclaimer_starts_at_disclaimer_phrase():
     assert extracted.disclaimers[0].text == "See dealer for details. Offer ends 4/30/26."
 
 
+def test_fine_print_is_tucked_away_from_promotional_extraction():
+    extracted = extract_tracking_entities(
+        ocr_items=[
+            OCRItem(
+                frame_index=34,
+                time_ms=17000,
+                text=(
+                    "Offers exclude leases. 0% APR financing for 60 months for "
+                    "well-qualified buyers. 2026 Phantom Model $9,999. "
+                    "Visit legal.example.com or call today. See dealer for details."
+                ),
+                bbox=[8, 430, 632, 430, 632, 442, 8, 442],
+                confidence=0.96,
+                engine="test",
+            )
+        ],
+        transcript=WhisperTranscript(),
+    )
+
+    assert extracted.disclaimers[0].is_small_print is True
+    assert extracted.offer_terms.financing.duration_months == 60
+    assert extracted.offers == []
+    assert extracted.prices == []
+    assert extracted.products == []
+    assert extracted.ctas == []
+    assert extracted.contact_points.websites == []
+
+
 def test_extract_disclaimer_drops_obvious_ocr_fragments():
     extracted = extract_tracking_entities(
         ocr_items=[
