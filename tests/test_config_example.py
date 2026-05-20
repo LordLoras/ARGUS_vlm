@@ -92,3 +92,63 @@ def test_agent_inherits_vlm_mode_endpoint():
     assert config.agent.endpoint.max_retries == 3
     assert config.agent.endpoint.retry_delay_s == 5
     assert config.agent.endpoint.stream is False
+
+
+def test_creative_panel_inherits_vlm_mode_endpoint():
+    from ad_classifier.config import AppConfig
+
+    data = {
+        "vlm": {
+            "mode": "frontier",
+            "frontier": {
+                "endpoint": "https://openrouter.ai/api/v1",
+                "model": "anthropic/claude-sonnet-4.5",
+                "api_key_env": "OPENROUTER_KEY",
+                "timeout_s": 180,
+                "max_retries": 4,
+                "retry_delay_s": 3,
+                "stream": False,
+            },
+        },
+        "creative_panel": {"inherit_vlm": True},
+    }
+    config = AppConfig.model_validate(data)
+    assert config.creative_panel.inherit_vlm is True
+    assert config.creative_panel.endpoint.endpoint == "https://openrouter.ai/api/v1"
+    assert config.creative_panel.endpoint.model == "anthropic/claude-sonnet-4.5"
+    assert config.creative_panel.endpoint.api_key_env == "OPENROUTER_KEY"
+    assert config.creative_panel.endpoint.timeout_s == 180
+    assert config.creative_panel.endpoint.max_retries == 4
+    assert config.creative_panel.endpoint.retry_delay_s == 3
+    assert config.creative_panel.endpoint.stream is False
+
+
+def test_creative_panel_can_use_independent_endpoint():
+    from ad_classifier.config import AppConfig
+
+    data = {
+        "vlm": {
+            "mode": "frontier",
+            "frontier": {
+                "endpoint": "https://openrouter.ai/api/v1",
+                "model": "openrouter/auto",
+                "api_key_env": "OPENROUTER_KEY",
+            },
+        },
+        "creative_panel": {
+            "inherit_vlm": False,
+            "endpoint": {
+                "endpoint": "http://127.0.0.1:1234/v1",
+                "model": "local-creative",
+            },
+            "temperature": 0.2,
+            "max_tokens": 4096,
+        },
+    }
+    config = AppConfig.model_validate(data)
+    assert config.creative_panel.inherit_vlm is False
+    assert config.creative_panel.endpoint.endpoint == "http://127.0.0.1:1234/v1"
+    assert config.creative_panel.endpoint.model == "local-creative"
+    assert config.creative_panel.endpoint.api_key_env is None
+    assert config.creative_panel.max_tokens == 4096
+    assert config.creative_panel.temperature == 0.2

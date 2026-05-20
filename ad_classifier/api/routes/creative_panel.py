@@ -47,7 +47,7 @@ def create_creative_panel(
                 body.persona_ids,
                 use_vlm=body.use_vlm,
                 llm_client=llm_client,
-                source_model=config.vlm.endpoint.model,
+                source_model=config.creative_panel.endpoint.model,
                 thinking=body.enable_reasoning,
             )
         except ValueError as exc:
@@ -80,7 +80,7 @@ def create_creative_debate(
                 topic=body.topic,
                 use_vlm=body.use_vlm,
                 llm_client=llm_client,
-                source_model=config.vlm.endpoint.model,
+                source_model=config.creative_panel.endpoint.model,
                 thinking=body.enable_reasoning,
             )
         except ValueError as exc:
@@ -100,7 +100,7 @@ def _panel_client_factory(request: Request) -> PanelClientFactory:
 
 
 def _default_panel_client_factory(config: AppConfig) -> AgentClient:
-    endpoint = config.vlm.endpoint
+    endpoint = config.creative_panel.endpoint
     return HTTPAgentClient(
         endpoint=endpoint.endpoint,
         model=endpoint.model,
@@ -108,7 +108,7 @@ def _default_panel_client_factory(config: AppConfig) -> AgentClient:
         timeout_s=endpoint.timeout_s,
         max_retries=endpoint.max_retries,
         retry_delay_s=endpoint.retry_delay_s,
-        temperature=endpoint.temperature,
-        max_tokens=endpoint.max_tokens,
+        temperature=config.creative_panel.temperature,
+        max_tokens=config.creative_panel.max_tokens,
         stream=endpoint.stream,
     )

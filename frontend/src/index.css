@@ -314,6 +314,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .badge-violet { color: var(--accent-2); border-color: var(--accent-border); background: var(--accent-bg); }
 .badge-sky { color: var(--sky); border-color: #0ea5e940; background: var(--sky-bg); }
 .badge-emerald { color: var(--emerald); border-color: #10b98140; background: var(--emerald-bg); }
+.badge-amber { color: var(--amber); border-color: #f59e0b40; background: var(--amber-bg); }
 .badge-rose { color: var(--rose); border-color: #f43f5e40; background: var(--rose-bg); }
 .badge-mono { font-family: var(--mono); font-size: 10.5px; }
 
@@ -4299,6 +4300,21 @@ button.ts-link:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.settings-note {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding: 9px 10px;
+}
+.settings-note strong {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
 }
 .settings-toggle {
   min-height: 58px;

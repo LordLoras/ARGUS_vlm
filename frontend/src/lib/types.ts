@@ -140,6 +140,12 @@ export type SettingsConfig = {
     temperature: number;
     max_tokens: number;
   };
+  creative_panel: {
+    inherit_vlm: boolean;
+    endpoint: Partial<EndpointSettings>;
+    temperature: number;
+    max_tokens: number;
+  };
   search: Record<string, unknown>;
   brand_profiles: {
     enabled: boolean;

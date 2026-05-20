@@ -87,3 +87,42 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     assert saved["worker"]["poll_interval_ms"] == 250
     assert "endpoint" not in saved["vlm"]
     assert saved["agent"]["endpoint"] == {}
+    assert saved["creative_panel"]["endpoint"] == {}
+
+
+def test_settings_api_persists_independent_ai_tool_routes(tmp_path: Path):
+    config_path = _settings_config(tmp_path)
+    client = TestClient(create_app(config_path=config_path))
+    snapshot = client.get("/api/settings").json()
+    config = snapshot["config"]
+    config["agent"]["inherit_vlm"] = False
+    config["agent"]["endpoint"] = {
+        "endpoint": "http://127.0.0.1:1234/v1",
+        "model": "local-agent",
+        "api_key_env": None,
+        "timeout_s": 45,
+        "max_retries": 1,
+        "retry_delay_s": 1,
+        "stream": True,
+    }
+    config["creative_panel"]["inherit_vlm"] = False
+    config["creative_panel"]["endpoint"] = {
+        "endpoint": "http://127.0.0.1:1234/v1",
+        "model": "local-debate",
+        "api_key_env": None,
+        "timeout_s": 90,
+        "max_retries": 1,
+        "retry_delay_s": 1,
+        "stream": True,
+    }
+    config["creative_panel"]["max_tokens"] = 4096
+
+    updated = client.put("/api/settings", json={"config": config})
+
+    assert updated.status_code == 200, updated.text
+    saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert saved["agent"]["inherit_vlm"] is False
+    assert saved["agent"]["endpoint"]["model"] == "local-agent"
+    assert saved["creative_panel"]["inherit_vlm"] is False
+    assert saved["creative_panel"]["endpoint"]["model"] == "local-debate"
+    assert saved["creative_panel"]["max_tokens"] == 4096

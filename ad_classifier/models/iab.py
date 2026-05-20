@@ -23,7 +23,7 @@ class IABAlternativeCategory(_IABBase):
 def _normalize_confidence_value(value: object) -> str:
     if value is None:
         return "unknown"
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         if value >= 0.75:
             return "high"
         if value >= 0.45:

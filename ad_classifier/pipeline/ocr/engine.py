@@ -82,19 +82,19 @@ class PaddleOCREngine(OCREngine):
             if not page:
                 continue
             for detection in page:
-                if not isinstance(detection, (list, tuple)) or len(detection) < 2:
+                if not isinstance(detection, list | tuple) or len(detection) < 2:
                     continue
                 bbox_raw, text_conf = detection[0], detection[1]
-                if not isinstance(text_conf, (list, tuple)) or len(text_conf) < 2:
+                if not isinstance(text_conf, list | tuple) or len(text_conf) < 2:
                     continue
                 text = str(text_conf[0] or "")
                 conf_raw = text_conf[1]
                 conf = float(conf_raw) if conf_raw is not None else None
                 bbox: list[float] | None = None
-                if isinstance(bbox_raw, (list, tuple)):
+                if isinstance(bbox_raw, list | tuple):
                     flat: list[float] = []
                     for pt in bbox_raw:
-                        if isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                        if isinstance(pt, list | tuple) and len(pt) >= 2:
                             flat.extend([float(pt[0]), float(pt[1])])
                     bbox = flat if flat else None
                 items.append(

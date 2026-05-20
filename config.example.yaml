@@ -319,7 +319,8 @@ agent:
   # inherit_vlm: true (default) — agent automatically follows vlm.mode.
   # When vlm.mode is "remote" the agent uses the remote endpoint; when
   # "local" it uses the local one.  Override agent.endpoint fields below
-  # to pin the agent to a specific backend regardless of vlm.mode.
+  # to pin the analyst agent and campaign deep research to a specific
+  # backend regardless of vlm.mode.
   inherit_vlm: true
   # endpoint: leave {} to inherit from vlm when inherit_vlm is true. Fill
   # endpoint/model/api_key_env here only to pin the agent to a different model.
@@ -331,6 +332,15 @@ agent:
   sql_statement_timeout_s: 5
   temperature: 0.1
   max_tokens: 1024
+
+creative_panel:
+  # Creative Panel and Debate are user-triggered synthetic analysis calls.
+  # Keep inherit_vlm: true for old behavior. Set false and fill endpoint to
+  # keep these calls local/remote while ingest uses a Frontier model.
+  inherit_vlm: true
+  endpoint: {}
+  temperature: 0.1
+  max_tokens: 8192
 
 search:
   # Minimum cosine-similarity threshold for vector search results.

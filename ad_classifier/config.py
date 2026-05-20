@@ -388,6 +388,19 @@ class AgentConfig(BaseModel):
         return "inherited" if self.inherit_vlm else "independent"
 
 
+class CreativePanelConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    inherit_vlm: bool = True
+    endpoint: AgentEndpointConfig = Field(default_factory=AgentEndpointConfig)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=8192, ge=64)
+
+    @property
+    def effective_mode(self) -> str:
+        return "inherited" if self.inherit_vlm else "independent"
+
+
 class SearchConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -429,42 +442,57 @@ class AppConfig(BaseModel):
     api: APIConfig = Field(default_factory=APIConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    creative_panel: CreativePanelConfig = Field(default_factory=CreativePanelConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     brand_profiles: BrandProfilesConfig = Field(default_factory=BrandProfilesConfig)
 
     @model_validator(mode="after")
-    def _resolve_agent_endpoint(self) -> AppConfig:
+    def _resolve_ai_feature_endpoints(self) -> AppConfig:
         v = self.vlm.endpoint
-        a = self.agent.endpoint
-        if self.agent.inherit_vlm:
-            if a.endpoint is None:
-                a.endpoint = v.endpoint
-            if a.model is None:
-                a.model = v.model
-            if a.api_key_env is None:
-                a.api_key_env = v.api_key_env
-            if a.timeout_s is None:
-                a.timeout_s = v.timeout_s
-            if a.max_retries is None:
-                a.max_retries = v.max_retries
-            if a.retry_delay_s is None:
-                a.retry_delay_s = v.retry_delay_s
-            if a.stream is None:
-                a.stream = v.stream
-        else:
-            if a.endpoint is None:
-                a.endpoint = "http://127.0.0.1:1234/v1"
-            if a.model is None:
-                a.model = "argus/vlm"
-            if a.timeout_s is None:
-                a.timeout_s = 120.0
-            if a.max_retries is None:
-                a.max_retries = 2
-            if a.retry_delay_s is None:
-                a.retry_delay_s = 2.0
-            if a.stream is None:
-                a.stream = True
+        _resolve_agent_like_endpoint(self.agent.endpoint, v, inherit_vlm=self.agent.inherit_vlm)
+        _resolve_agent_like_endpoint(
+            self.creative_panel.endpoint,
+            v,
+            inherit_vlm=self.creative_panel.inherit_vlm,
+        )
         return self
+
+
+def _resolve_agent_like_endpoint(
+    endpoint: AgentEndpointConfig,
+    vlm_endpoint: VLMEndpointConfig,
+    *,
+    inherit_vlm: bool,
+) -> None:
+    if inherit_vlm:
+        if endpoint.endpoint is None:
+            endpoint.endpoint = vlm_endpoint.endpoint
+        if endpoint.model is None:
+            endpoint.model = vlm_endpoint.model
+        if endpoint.api_key_env is None:
+            endpoint.api_key_env = vlm_endpoint.api_key_env
+        if endpoint.timeout_s is None:
+            endpoint.timeout_s = vlm_endpoint.timeout_s
+        if endpoint.max_retries is None:
+            endpoint.max_retries = vlm_endpoint.max_retries
+        if endpoint.retry_delay_s is None:
+            endpoint.retry_delay_s = vlm_endpoint.retry_delay_s
+        if endpoint.stream is None:
+            endpoint.stream = vlm_endpoint.stream
+        return
+
+    if endpoint.endpoint is None:
+        endpoint.endpoint = "http://127.0.0.1:1234/v1"
+    if endpoint.model is None:
+        endpoint.model = "argus/vlm"
+    if endpoint.timeout_s is None:
+        endpoint.timeout_s = 120.0
+    if endpoint.max_retries is None:
+        endpoint.max_retries = 2
+    if endpoint.retry_delay_s is None:
+        endpoint.retry_delay_s = 2.0
+    if endpoint.stream is None:
+        endpoint.stream = True
 
 
 def default_config_path(cwd: Path | None = None) -> Path:
@@ -505,6 +533,8 @@ def config_file_payload(config: AppConfig) -> dict[str, Any]:
     )
     if payload.get("agent", {}).get("inherit_vlm") is True:
         payload["agent"]["endpoint"] = {}
+    if payload.get("creative_panel", {}).get("inherit_vlm") is True:
+        payload["creative_panel"]["endpoint"] = {}
     return payload
 
 
