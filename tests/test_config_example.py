@@ -45,6 +45,26 @@ def test_vlm_remote_mode():
     assert config.vlm.endpoint.api_key_env == "API_KEY"
 
 
+def test_vlm_frontier_mode():
+    from ad_classifier.config import AppConfig
+
+    data = {
+        "vlm": {
+            "mode": "frontier",
+            "frontier": {
+                "endpoint": "https://openrouter.ai/api/v1",
+                "model": "openrouter/auto",
+                "api_key_env": "OPENROUTER_API_KEY",
+            },
+        }
+    }
+    config = AppConfig.model_validate(data)
+    assert config.vlm.mode == "frontier"
+    assert config.vlm.endpoint.model == "openrouter/auto"
+    assert config.vlm.endpoint.endpoint == "https://openrouter.ai/api/v1"
+    assert config.vlm.endpoint.api_key_env == "OPENROUTER_API_KEY"
+
+
 def test_agent_inherits_vlm_mode_endpoint():
     from ad_classifier.config import AppConfig
 

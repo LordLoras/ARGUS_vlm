@@ -9,6 +9,7 @@ import { DebatePanel } from "./pages/DebatePanel";
 import { Jobs } from "./pages/Jobs";
 import { Library } from "./pages/Library";
 import { SearchPage } from "./pages/SearchPage";
+import { Settings } from "./pages/Settings";
 import { Taxonomy } from "./pages/Taxonomy";
 import { Upload } from "./pages/Upload";
 
@@ -48,7 +49,7 @@ export default function App() {
         <Route path="/taxonomy" element={<Taxonomy />} />
         <Route path="/pipelines" element={<Jobs />} />
         <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />
-        <Route path="/settings" element={<Placeholder title="Settings" />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>
   );

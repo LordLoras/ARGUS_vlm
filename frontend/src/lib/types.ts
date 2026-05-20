@@ -35,6 +35,145 @@ export type AdRecord = {
   duplicate_score?: number | null;
 };
 
+export type EndpointSettings = {
+  endpoint: string;
+  model: string;
+  api_key_env?: string | null;
+  timeout_s: number;
+  max_retries: number;
+  retry_delay_s: number;
+  temperature: number;
+  max_tokens: number;
+  enable_thinking?: boolean;
+  response_format?: "json_object" | "json_schema" | string;
+  stream: boolean;
+};
+
+export type SettingsConfig = {
+  paths: Record<string, string>;
+  ingest: {
+    ffmpeg_path: string;
+    ffprobe_path: string;
+    frame_interval_ms: number;
+    audio_sample_rate: number;
+  };
+  whisper?: Record<string, unknown>;
+  dedup?: Record<string, unknown>;
+  ocr: {
+    enabled: boolean;
+    backend: string;
+    device: string;
+    lang: string;
+  };
+  paddlevl?: Record<string, unknown>;
+  glm_ocr: {
+    enabled: boolean;
+    mode: "local" | "remote" | string;
+    prompt: string;
+    image_max_dim: number;
+    include_in_search: boolean;
+    include_in_vlm_bundle: boolean;
+    run_on_text_frames: boolean;
+    min_ocr_chars: number;
+    run_when_ocr_disabled: boolean;
+    max_frames_per_ad: number;
+    local: Omit<EndpointSettings, "enable_thinking" | "response_format">;
+    remote: Omit<EndpointSettings, "enable_thinking" | "response_format">;
+    gating?: Record<string, unknown>;
+  };
+  rules: {
+    rules_path?: string | null;
+    alignment_window_ms: number;
+  };
+  vlm: {
+    mode: "local" | "remote" | "frontier" | string;
+    max_frames_in_bundle: number;
+    image_max_dim: number;
+    enable_ocr_cleanup_pass: boolean;
+    enable_self_correction: boolean;
+    enable_post_validation: boolean;
+    enable_visual_verify: boolean;
+    complexity?: Record<string, unknown>;
+    local: EndpointSettings;
+    remote: EndpointSettings;
+    frontier: EndpointSettings;
+  };
+  text_embedder: {
+    model: string;
+    device: string;
+    batch_size: number;
+    dim: number;
+  };
+  image_embedder: {
+    enabled: boolean;
+    model: string;
+    device: string;
+    batch_size: number;
+    dim: number;
+  };
+  vector_store: {
+    backend: string;
+    text_dim: number;
+    visual_dim: number;
+  };
+  campaigns?: Record<string, unknown>;
+  api: {
+    host: string;
+    port: number;
+    cors_origins: string[];
+    upload: {
+      max_bytes: number;
+      allowed_mime: string[];
+    };
+  };
+  worker: {
+    poll_interval_ms: number;
+    concurrency: number;
+  };
+  agent: {
+    inherit_vlm: boolean;
+    endpoint: Partial<EndpointSettings>;
+    max_iterations: number;
+    list_max_rows: number;
+    sql_readonly_max_rows: number;
+    sql_statement_timeout_s: number;
+    temperature: number;
+    max_tokens: number;
+  };
+  search: Record<string, unknown>;
+  brand_profiles: {
+    enabled: boolean;
+    user_agent: string;
+    timeout_s: number;
+    cache_days: number;
+    max_candidates: number;
+    max_parent_depth: number;
+  };
+};
+
+export type ApiKeyRecord = {
+  name: string;
+  available: boolean;
+  managed: boolean;
+  sources: string[];
+  used_by: string[];
+  value: null;
+  redacted: true;
+};
+
+export type SettingsSnapshot = {
+  config_path: string;
+  dotenv_path: string;
+  config: SettingsConfig;
+  api_keys: ApiKeyRecord[];
+  options: {
+    vlm_modes: Array<{ value: "local" | "remote" | "frontier" | string; label: string; description: string }>;
+    response_formats: string[];
+    glm_ocr_modes: string[];
+    devices: string[];
+  };
+};
+
 export type IABCategory = {
   iab_unique_id: string;
   iab_parent_id?: string | null;

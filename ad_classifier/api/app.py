@@ -17,6 +17,7 @@ from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.knowledge import router as knowledge_router
 from ad_classifier.api.routes.search import router as search_router
+from ad_classifier.api.routes.settings import router as settings_router
 from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
@@ -112,6 +113,7 @@ def create_app(
     app.include_router(campaigns_router, prefix="/api")
     app.include_router(agent_router, prefix="/api")
     app.include_router(knowledge_router, prefix="/api")
+    app.include_router(settings_router, prefix="/api")
 
     data_root = resolve_config_path(config.paths.data_root, config_file)
     data_root.mkdir(parents=True, exist_ok=True)

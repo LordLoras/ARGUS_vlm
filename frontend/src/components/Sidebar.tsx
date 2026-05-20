@@ -40,13 +40,10 @@ const disabledIntelligence: { label: string; icon: IconComponent }[] = [
   { label: "Embeddings", icon: LayersIcon }
 ];
 
-const disabledSystem: { label: string; icon: IconComponent }[] = [
-  { label: "Settings", icon: SettingsIcon }
-];
-
 const system: NavEntry[] = [
   { to: "/pipelines", label: "Jobs", icon: FlowIcon },
-  { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon }
+  { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon }
 ];
 
 export function Sidebar() {
@@ -74,9 +71,6 @@ export function Sidebar() {
         <div className="nav-section">System</div>
         {system.map((entry) => (
           <NavItem key={entry.to} entry={entry} />
-        ))}
-        {disabledSystem.map((entry) => (
-          <DisabledItem key={entry.label} label={entry.label} Icon={entry.icon} />
         ))}
       </nav>
       <div className="sidebar-footer">

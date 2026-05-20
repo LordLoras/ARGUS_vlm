@@ -299,6 +299,19 @@ class VLMEndpointDefaults:
         response_format="json_schema",
         stream=True,
     )
+    FRONTIER = VLMEndpointConfig(
+        endpoint="https://openrouter.ai/api/v1",
+        model="openrouter/auto",
+        api_key_env="OPENROUTER_API_KEY",
+        timeout_s=180.0,
+        max_retries=2,
+        retry_delay_s=2.0,
+        temperature=0.2,
+        max_tokens=8192,
+        enable_thinking=False,
+        response_format="json_schema",
+        stream=True,
+    )
 
 
 class VLMComplexityConfig(BaseModel):
@@ -318,7 +331,7 @@ class VLMComplexityConfig(BaseModel):
 class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    mode: Literal["local", "remote"] = "local"
+    mode: Literal["local", "remote", "frontier"] = "local"
     max_frames_in_bundle: int = Field(default=12, ge=1)
     image_max_dim: int = Field(default=512, ge=128, le=2048)
     enable_ocr_cleanup_pass: bool = True
@@ -330,14 +343,19 @@ class VLMConfig(BaseModel):
     remote: VLMEndpointConfig = Field(
         default_factory=lambda: VLMEndpointDefaults.REMOTE.model_copy()
     )
+    frontier: VLMEndpointConfig = Field(
+        default_factory=lambda: VLMEndpointDefaults.FRONTIER.model_copy()
+    )
     endpoint: VLMEndpointConfig = Field(default_factory=VLMEndpointConfig)
 
     @model_validator(mode="after")
     def _resolve_mode_endpoint(self) -> VLMConfig:
         if self.mode == "local":
             self.endpoint = self.local.model_copy()
-        else:
+        elif self.mode == "remote":
             self.endpoint = self.remote.model_copy()
+        else:
+            self.endpoint = self.frontier.model_copy()
         return self
 
 
@@ -464,7 +482,40 @@ def load_config(path: Path | None = None) -> tuple[AppConfig, Path]:
         raise FileNotFoundError(f"Config file not found: {source}")
 
     data: dict[str, Any] = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    from ad_classifier._env import configure_dotenv_path
+
+    configure_dotenv_path(source.parent / ".env.local")
     return AppConfig.model_validate(data), source
+
+
+def config_file_payload(config: AppConfig) -> dict[str, Any]:
+    """Return config data suitable for writing to config.yaml.
+
+    The active ``endpoint`` fields are derived from mode-specific presets at
+    load time, so they are omitted from disk to keep the file editable and avoid
+    duplicated stale endpoint copies.
+    """
+
+    payload = config.model_dump(
+        mode="json",
+        exclude={
+            "vlm": {"endpoint"},
+            "glm_ocr": {"endpoint"},
+        },
+    )
+    if payload.get("agent", {}).get("inherit_vlm") is True:
+        payload["agent"]["endpoint"] = {}
+    return payload
+
+
+def save_config(config: AppConfig, path: Path) -> None:
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = config_file_payload(config)
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=False),
+        encoding="utf-8",
+    )
 
 
 def resolve_config_path(value: Path, config_file: Path) -> Path:

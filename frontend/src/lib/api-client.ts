@@ -20,6 +20,8 @@ import type {
   OcrItemDetail,
   RelatedAds,
   SearchHit,
+  SettingsConfig,
+  SettingsSnapshot,
   StatsResponse,
   TranscriptSegment
 } from "./types";
@@ -63,6 +65,25 @@ function params(values: Record<string, string | number | boolean | undefined | n
 
 export const api = {
   health: () => apiFetch<{ status: string; service: string }>("/api/health"),
+
+  getSettings: () => apiFetch<SettingsSnapshot>("/api/settings"),
+
+  updateSettings: (config: SettingsConfig) =>
+    apiFetch<SettingsSnapshot>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({ config })
+    }),
+
+  addApiKey: (body: { name: string; value: string }) =>
+    apiFetch<SettingsSnapshot>("/api/settings/api-keys", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  deleteApiKey: (name: string) =>
+    apiFetch<SettingsSnapshot>(`/api/settings/api-keys/${encodeURIComponent(name)}`, {
+      method: "DELETE"
+    }),
 
   listAds: (query: { brand?: string; category?: string; risk_label?: string; iab_unique_id?: string; iab_tier_1?: string; iab_content_id?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),

@@ -161,9 +161,10 @@ rules:
   alignment_window_ms: 1500
 
 vlm:
-  # mode: local | remote — selects which endpoint preset is active.
+  # mode: local | remote | frontier — selects which endpoint preset is active.
   #   "local"  → vlm.local is used (OpenAI-compatible engine on this machine)
   #   "remote" → vlm.remote is used (cloud / hosted endpoint)
+  #   "frontier" → vlm.frontier is used (OpenRouter/frontier-model route)
   # The agent inherits the active preset when agent.inherit_vlm is true.
   # Flip the flag to switch all VLM calls + agent between local and remote.
   mode: local
@@ -219,6 +220,20 @@ vlm:
     enable_thinking: false
     # json_schema forces the model to emit output that validates against
     # the Pydantic schema — more accurate for capable remote/VL models.
+    response_format: json_schema
+    stream: true
+  frontier:
+    # OpenRouter-compatible frontier model route. Put the actual key in
+    # .env.local as OPENROUTER_API_KEY or add it through the Settings UI.
+    endpoint: "https://openrouter.ai/api/v1"
+    model: "openrouter/auto"
+    api_key_env: "OPENROUTER_API_KEY"
+    timeout_s: 180
+    max_retries: 2
+    retry_delay_s: 2
+    temperature: 0.2
+    max_tokens: 8192
+    enable_thinking: false
     response_format: json_schema
     stream: true
 
