@@ -12,6 +12,7 @@ from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
 
 logger = logging.getLogger(__name__)
 _log = structlog.get_logger(__name__)
+_MAX_SELF_CORRECTION_TOKENS = 1024
 
 _CORRECTION_PROMPT = """\
 You are an ad-analysis quality checker. You receive an analysis of a TV ad and the raw evidence it was based on.
@@ -81,7 +82,8 @@ class SelfCorrectionPass:
                 {"role": "user", "content": user_text},
             ],
             "temperature": 0.0,
-            "max_tokens": self._max_tokens,
+            "max_tokens": min(self._max_tokens, _MAX_SELF_CORRECTION_TOKENS),
+            "response_format": {"type": "json_object"},
         }
         if self._enable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": True}
@@ -107,6 +109,7 @@ class SelfCorrectionPass:
                     finish_reason=finish_reason,
                     raw_length=len(raw),
                 )
+                return result
             elif finish_reason not in ("stop", "stop_sequence", "eos", ""):
                 _log.warning(
                     "self_correction_unexpected_finish",

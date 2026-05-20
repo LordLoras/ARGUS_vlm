@@ -11,6 +11,7 @@ import { useApiHealth } from "../hooks/useApiHealth";
 import { useJobEvents } from "../hooks/useJobEvents";
 import { api } from "../lib/api-client";
 import { CloseIcon, UploadIcon } from "../lib/icons";
+import type { JobRecord } from "../lib/types";
 
 const STAGE_LABELS: Record<string, string> = {
   upload: "Uploading file",
@@ -24,13 +25,33 @@ const STAGE_LABELS: Record<string, string> = {
   finalize: "Persisting results",
 };
 
+const UPLOAD_SESSION_KEY = "argus:last-upload-job";
+
+type UploadSession = {
+  adId: string;
+  jobId: string | null;
+  fileName: string | null;
+  startedAt: number;
+  finishedAt?: number | null;
+};
+
 export function Upload() {
+  const restoredSession = useMemo(readUploadSession, []);
   const [file, setFile] = useState<File | null>(null);
-  const [adId, setAdId] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [logLines, setLogLines] = useState<LogLine[]>([]);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [finishedAt, setFinishedAt] = useState<number | null>(null);
+  const [restoredFileName, setRestoredFileName] = useState<string | null>(
+    restoredSession?.fileName ?? null
+  );
+  const [adId, setAdId] = useState<string | null>(restoredSession?.adId ?? null);
+  const [jobId, setJobId] = useState<string | null>(restoredSession?.jobId ?? null);
+  const [logLines, setLogLines] = useState<LogLine[]>(() =>
+    restoredSession
+      ? [timestampedLog("info", `restored upload — ${restoredSession.adId}`)]
+      : []
+  );
+  const [startedAt, setStartedAt] = useState<number | null>(restoredSession?.startedAt ?? null);
+  const [finishedAt, setFinishedAt] = useState<number | null>(
+    restoredSession?.finishedAt ?? null
+  );
   const [now, setNow] = useState(Date.now());
   const job = useJobEvents(jobId);
   const health = useApiHealth();
@@ -39,11 +60,20 @@ export function Upload() {
 
   const uploadMutation = useMutation({
     mutationFn: (selected: File) => api.uploadAd(selected),
-    onSuccess: (result) => {
+    onSuccess: (result, selected) => {
+      const started = Date.now();
       setAdId(result.ad_id);
       setJobId(result.job_id ?? null);
-      setStartedAt(Date.now());
+      setStartedAt(started);
       setFinishedAt(null);
+      setRestoredFileName(selected.name);
+      writeUploadSession({
+        adId: result.ad_id,
+        jobId: result.job_id ?? null,
+        fileName: selected.name,
+        startedAt: started,
+        finishedAt: null
+      });
       const lines: LogLine[] = [
         timestampedLog("ok", `accepted — ${result.ad_id}`),
       ];
@@ -55,6 +85,13 @@ export function Upload() {
     onError: (err) => {
       setLogLines((prev) => [...prev, timestampedLog("warn", `upload failed: ${(err as Error).message}`)]);
     },
+  });
+
+  const recentJobsQuery = useQuery({
+    queryKey: ["upload-recent-jobs"],
+    queryFn: () => api.listJobs({ limit: 5 }),
+    enabled: !adId && !uploadMutation.isPending,
+    refetchInterval: 3000
   });
 
   useEffect(() => {
@@ -90,8 +127,19 @@ export function Upload() {
   const isTerminal = isDone || job?.state === "failed" || job?.state === "cancelled";
 
   useEffect(() => {
-    if (isTerminal && startedAt && !finishedAt) setFinishedAt(Date.now());
-  }, [finishedAt, isTerminal, startedAt]);
+    if (!isTerminal || !startedAt || finishedAt) return;
+    const finished = Date.now();
+    setFinishedAt(finished);
+    if (adId) {
+      writeUploadSession({
+        adId,
+        jobId,
+        fileName: file?.name ?? restoredFileName,
+        startedAt,
+        finishedAt: finished
+      });
+    }
+  }, [adId, file, finishedAt, isTerminal, jobId, restoredFileName, startedAt]);
 
   const detailQuery = useQuery({
     queryKey: ["upload-detail", adId],
@@ -114,7 +162,32 @@ export function Upload() {
     setFinishedAt(null);
     setNow(Date.now());
     lastStage.current = "";
+    setRestoredFileName(null);
+    clearUploadSession();
     uploadMutation.reset();
+  };
+
+  const restoreJob = (candidate: JobRecord) => {
+    if (!candidate.ad_id) return;
+    const started = timestampFrom(candidate.started_at || candidate.ingested_at) ?? Date.now();
+    const finished = timestampFrom(candidate.finished_at);
+    const fileName = filenameFromPath(candidate.source_path) ?? candidate.ad_id;
+    setFile(null);
+    setAdId(candidate.ad_id);
+    setJobId(candidate.id);
+    setStartedAt(started);
+    setFinishedAt(finished);
+    setRestoredFileName(fileName);
+    setLogLines([timestampedLog("info", `restored job — ${candidate.id}`)]);
+    lastSig.current = "";
+    lastStage.current = "";
+    writeUploadSession({
+      adId: candidate.ad_id,
+      jobId: candidate.id,
+      fileName,
+      startedAt: started,
+      finishedAt: finished
+    });
   };
 
   const cancel = () => {
@@ -123,6 +196,7 @@ export function Upload() {
 
   const uploading = uploadMutation.isPending;
   const processing = adId && !isDone;
+  const displayFileName = file?.name ?? restoredFileName ?? "clip";
 
   return (
     <>
@@ -182,6 +256,28 @@ export function Upload() {
                     {(uploadMutation.error as Error).message}
                   </div>
                 )}
+
+                {recentJobsQuery.data?.items.length ? (
+                  <div className="upload-confirm" style={{ gap: 8 }}>
+                    <div className="section-title" style={{ marginBottom: 0 }}>
+                      Recent jobs
+                    </div>
+                    {recentJobsQuery.data.items.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        className="btn"
+                        style={{ justifyContent: "space-between", height: "auto", padding: 8 }}
+                        disabled={!candidate.ad_id}
+                        onClick={() => restoreJob(candidate)}
+                      >
+                        <span className="mono">{candidate.ad_id || candidate.id}</span>
+                        <span className={`badge ${stateBadge(candidate.state)}`}>
+                          {candidate.state}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -194,7 +290,7 @@ export function Upload() {
 
             {processing && adId && (
               <PipelineProgress
-                filename={file?.name ?? "clip"}
+                filename={displayFileName}
                 adId={adId}
                 jobId={jobId}
                 job={job}
@@ -216,6 +312,51 @@ export function Upload() {
       </div>
     </>
   );
+}
+
+function readUploadSession(): UploadSession | null {
+  try {
+    const raw = window.localStorage.getItem(UPLOAD_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<UploadSession>;
+    if (!parsed.adId || typeof parsed.adId !== "string") return null;
+    return {
+      adId: parsed.adId,
+      jobId: typeof parsed.jobId === "string" ? parsed.jobId : null,
+      fileName: typeof parsed.fileName === "string" ? parsed.fileName : null,
+      startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : Date.now(),
+      finishedAt: typeof parsed.finishedAt === "number" ? parsed.finishedAt : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeUploadSession(session: UploadSession) {
+  window.localStorage.setItem(UPLOAD_SESSION_KEY, JSON.stringify(session));
+}
+
+function clearUploadSession() {
+  window.localStorage.removeItem(UPLOAD_SESSION_KEY);
+}
+
+function timestampFrom(value?: string | null) {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function filenameFromPath(value?: string | null) {
+  if (!value) return null;
+  return value.split(/[\\/]/).filter(Boolean).at(-1) ?? null;
+}
+
+function stateBadge(state: string) {
+  if (state === "running") return "badge-sky";
+  if (state === "queued") return "badge-violet";
+  if (state === "completed") return "badge-emerald";
+  if (state === "failed") return "badge-rose";
+  return "badge-mono";
 }
 
 function timestampedLog(level: LogLine["level"], message: string): LogLine {
