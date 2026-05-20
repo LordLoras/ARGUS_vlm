@@ -43,6 +43,8 @@ def test_settings_api_redacts_and_manages_api_keys(tmp_path: Path):
     assert initial.status_code == 200
     payload = initial.json()
     assert payload["config"]["vlm"]["frontier"]["api_key_env"] == "OPENROUTER_API_KEY"
+    assert payload["config"]["vlm"]["prompt_profile"] == "auto"
+    assert any(item["value"] == "frontier_strict" for item in payload["options"]["prompt_profiles"])
     assert any(item["name"] == "REMOTE_TEST_KEY" for item in payload["api_keys"])
 
     created = client.post(
@@ -72,6 +74,7 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     snapshot = client.get("/api/settings").json()
     config = snapshot["config"]
     config["vlm"]["mode"] = "frontier"
+    config["vlm"]["prompt_profile"] = "frontier_strict"
     config["vlm"]["frontier"]["model"] = "anthropic/claude-sonnet-4.5"
     config["vlm"]["frontier"]["api_key_env"] = "OPENROUTER_TEST_KEY"
     config["worker"]["poll_interval_ms"] = 250
@@ -82,6 +85,7 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     assert updated.json()["config"]["vlm"]["mode"] == "frontier"
     saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert saved["vlm"]["mode"] == "frontier"
+    assert saved["vlm"]["prompt_profile"] == "frontier_strict"
     assert saved["vlm"]["frontier"]["model"] == "anthropic/claude-sonnet-4.5"
     assert saved["vlm"]["frontier"]["api_key_env"] == "OPENROUTER_TEST_KEY"
     assert saved["worker"]["poll_interval_ms"] == 250

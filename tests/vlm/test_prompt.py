@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ad_classifier.vlm.prompt import render_verifier_prompt
+from ad_classifier.vlm.prompt import get_prompt_version, render_verifier_prompt, resolve_prompt_profile
 
 
 def test_renders_without_error():
@@ -92,3 +92,18 @@ def test_prompt_falls_back_when_knowledge_taxonomy_is_empty():
 
     assert "1554 | parent=1553 | depth=3 | Vehicles > Automotive Ownership" in prompt
     assert "6 | parent=2 | depth=3 | Automotive > Auto Body Styles > SUV" in prompt
+
+
+def test_frontier_strict_prompt_renders_compact_rules():
+    prompt = render_verifier_prompt(prompt_profile="frontier_strict")
+
+    assert "frontier-strict mode" in prompt
+    assert "Do not promote fine-print-only fees" in prompt
+    assert "{IAB_PRODUCT_TAXONOMY}" not in prompt
+    assert "1554 | parent=1553 | depth=3 | Vehicles > Automotive Ownership" in prompt
+
+
+def test_prompt_profile_auto_resolution():
+    assert resolve_prompt_profile("auto", mode="frontier") == "frontier_strict"
+    assert resolve_prompt_profile("auto", mode="local") == "standard"
+    assert get_prompt_version("frontier_strict").startswith("verifier-frontier-strict-")

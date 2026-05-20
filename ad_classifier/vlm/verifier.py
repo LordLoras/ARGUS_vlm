@@ -487,6 +487,7 @@ class HTTPVLMVerifier(VLMVerifier):
         temperature: float,
         max_tokens: int,
         prompt_override: str | None = None,
+        prompt_profile: str = "standard",
         enable_thinking: bool = False,
         response_format: str = "json_object",
         image_max_dim: int = 512,
@@ -504,11 +505,13 @@ class HTTPVLMVerifier(VLMVerifier):
         self._retry_delay_s = retry_delay_s
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._prompt_profile = prompt_profile
         self._enable_thinking = enable_thinking
         self._response_format = response_format
         self._image_max_dim = image_max_dim
         self._stream = stream
         self._system_prompt = prompt_override or render_verifier_prompt(
+            prompt_profile=prompt_profile,
             knowledge_manager=knowledge_manager,
         )
 

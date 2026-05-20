@@ -332,6 +332,7 @@ class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     mode: Literal["local", "remote", "frontier"] = "local"
+    prompt_profile: Literal["auto", "standard", "frontier_strict"] = "auto"
     max_frames_in_bundle: int = Field(default=12, ge=1)
     image_max_dim: int = Field(default=512, ge=128, le=2048)
     enable_ocr_cleanup_pass: bool = True
@@ -357,6 +358,11 @@ class VLMConfig(BaseModel):
         else:
             self.endpoint = self.frontier.model_copy()
         return self
+
+    def resolved_prompt_profile(self) -> str:
+        if self.prompt_profile == "auto":
+            return "frontier_strict" if self.mode == "frontier" else "standard"
+        return self.prompt_profile
 
 
 class AgentEndpointConfig(BaseModel):

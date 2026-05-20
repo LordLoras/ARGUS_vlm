@@ -1,4 +1,4 @@
-import { EndpointEditor, NumberField, ToggleField, endpointTitle } from "./Fields";
+import { EndpointEditor, NumberField, SelectField, ToggleField, endpointTitle } from "./Fields";
 import { VLM_ENDPOINTS, type UpdateSettingsDraft, type VlmEndpointKey } from "./types";
 import type { ApiKeyRecord, EndpointSettings, SettingsConfig } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -7,21 +7,27 @@ export function ModelSettings({
   config,
   apiKeys,
   modeOptions,
+  promptProfiles = DEFAULT_PROMPT_PROFILES,
   responseFormats,
   updateDraft
 }: {
   config: SettingsConfig;
   apiKeys: ApiKeyRecord[];
   modeOptions: Array<{ value: string; label: string; description: string }>;
+  promptProfiles?: Array<{ value: string; label: string; description: string }>;
   responseFormats: string[];
   updateDraft: UpdateSettingsDraft;
 }) {
   const active = config.vlm[config.vlm.mode as VlmEndpointKey] ?? config.vlm.local;
   const activeKey = apiKeys.find((item) => item.name === active.api_key_env);
+  const promptProfile = config.vlm.prompt_profile ?? "auto";
+  const promptProfileLabels = Object.fromEntries(promptProfiles.map((item) => [item.value, item.label]));
+  const selectedPromptProfile = promptProfiles.find((item) => item.value === promptProfile);
+  const agent = normalizeAgent(config.agent);
   const creativePanel = normalizeCreativePanel(config.creative_panel);
-  const agentEndpoint = toolEndpointForEditor(config.agent.endpoint, {
-    temperature: config.agent.temperature,
-    max_tokens: config.agent.max_tokens
+  const agentEndpoint = toolEndpointForEditor(agent.endpoint, {
+    temperature: agent.temperature,
+    max_tokens: agent.max_tokens
   });
   const creativeEndpoint = toolEndpointForEditor(creativePanel.endpoint, {
     temperature: creativePanel.temperature,
@@ -60,6 +66,22 @@ export function ModelSettings({
         </div>
 
         <div className="settings-grid">
+          <SelectField
+            label="Prompt profile"
+            description={
+              selectedPromptProfile?.description ??
+              "Verifier prompt used for the selected ingest route."
+            }
+            value={promptProfile}
+            options={promptProfiles.map((item) => item.value)}
+            optionLabels={promptProfileLabels}
+            onChange={(value) =>
+              updateDraft((current) => ({
+                ...current,
+                vlm: { ...current.vlm, prompt_profile: value }
+              }))
+            }
+          />
           <NumberField
             label="Max frames"
             description="Selected frames sent to the VLM evidence bundle."
@@ -149,7 +171,7 @@ export function ModelSettings({
             <h2>Agent Research</h2>
             <p>Controls the chat agent and campaign deep research. Pin this locally to avoid Frontier tool loops.</p>
           </div>
-          {config.agent.inherit_vlm && config.vlm.mode === "frontier" ? (
+          {agent.inherit_vlm && config.vlm.mode === "frontier" ? (
             <span className="badge badge-amber">inherits frontier</span>
           ) : null}
         </div>
@@ -157,59 +179,62 @@ export function ModelSettings({
           <ToggleField
             label="Inherit VLM"
             description="Agent endpoint follows the selected VLM preset."
-            checked={config.agent.inherit_vlm}
+            checked={agent.inherit_vlm}
             onChange={(checked) =>
-              updateDraft((current) => ({
-                ...current,
-                agent: {
-                  ...current.agent,
-                  inherit_vlm: checked,
-                  endpoint: checked ? {} : endpointDraft(current.agent.endpoint)
-                }
-              }))
+              updateDraft((current) => {
+                const existing = normalizeAgent(current.agent);
+                return {
+                  ...current,
+                  agent: {
+                    ...existing,
+                    inherit_vlm: checked,
+                    endpoint: checked ? {} : endpointDraft(existing.endpoint)
+                  }
+                };
+              })
             }
           />
           <NumberField
             label="Max iterations"
             description="Maximum tool-call turns for one agent answer."
-            value={config.agent.max_iterations}
+            value={agent.max_iterations}
             min={1}
             max={32}
             onChange={(value) =>
               updateDraft((current) => ({
                 ...current,
-                agent: { ...current.agent, max_iterations: value }
+                agent: { ...normalizeAgent(current.agent), max_iterations: value }
               }))
             }
           />
           <NumberField
             label="Agent max tokens"
             description="Generation budget for one agent response."
-            value={config.agent.max_tokens}
+            value={agent.max_tokens}
             min={64}
             onChange={(value) =>
               updateDraft((current) => ({
                 ...current,
-                agent: { ...current.agent, max_tokens: value }
+                agent: { ...normalizeAgent(current.agent), max_tokens: value }
               }))
             }
           />
           <NumberField
             label="Agent temperature"
             description="Lower is more deterministic."
-            value={config.agent.temperature}
+            value={agent.temperature}
             min={0}
             max={2}
             step={0.1}
             onChange={(value) =>
               updateDraft((current) => ({
                 ...current,
-                agent: { ...current.agent, temperature: value }
+                agent: { ...normalizeAgent(current.agent), temperature: value }
               }))
             }
           />
         </div>
-        {config.agent.inherit_vlm ? (
+        {agent.inherit_vlm ? (
           <div className="settings-note">
             Agent calls currently use the active VLM route: <strong>{active.model}</strong>.
           </div>
@@ -225,12 +250,13 @@ export function ModelSettings({
               onChange={(patch) =>
                 updateDraft((current) => {
                   const { generation, endpoint } = splitToolEndpointPatch(patch);
+                  const existing = normalizeAgent(current.agent);
                   return {
                     ...current,
                     agent: {
-                      ...current.agent,
+                      ...existing,
                       ...generation,
-                      endpoint: { ...current.agent.endpoint, ...endpoint }
+                      endpoint: { ...existing.endpoint, ...endpoint }
                     }
                   };
                 })
@@ -384,12 +410,49 @@ const TOOL_ENDPOINT_DEFAULTS: EndpointSettings = {
   stream: true
 };
 
+const DEFAULT_PROMPT_PROFILES = [
+  {
+    value: "auto",
+    label: "Auto by route",
+    description: "Use Frontier strict for Frontier routing and Standard elsewhere."
+  },
+  {
+    value: "standard",
+    label: "Standard",
+    description: "Full guided verifier prompt for local and smaller models."
+  },
+  {
+    value: "frontier_strict",
+    label: "Frontier strict",
+    description: "Compact evidence-only extractor prompt for strong models."
+  }
+];
+
+const DEFAULT_AGENT_SETTINGS: SettingsConfig["agent"] = {
+  inherit_vlm: true,
+  endpoint: {},
+  max_iterations: 8,
+  list_max_rows: 50,
+  sql_readonly_max_rows: 50,
+  sql_statement_timeout_s: 5,
+  temperature: 0.1,
+  max_tokens: 1024
+};
+
 const DEFAULT_CREATIVE_PANEL_SETTINGS: SettingsConfig["creative_panel"] = {
   inherit_vlm: true,
   endpoint: {},
   temperature: 0.1,
   max_tokens: 8192
 };
+
+function normalizeAgent(value: Partial<SettingsConfig["agent"]> | undefined): SettingsConfig["agent"] {
+  return {
+    ...DEFAULT_AGENT_SETTINGS,
+    ...(value ?? {}),
+    endpoint: value?.endpoint ?? {}
+  };
+}
 
 function normalizeCreativePanel(
   value: Partial<SettingsConfig["creative_panel"]> | undefined

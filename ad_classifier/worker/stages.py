@@ -45,7 +45,8 @@ from ad_classifier.vlm.complexity import VLMComplexity, assess_vlm_complexity, t
 from ad_classifier.vlm.correction import SelfCorrectionPass
 from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.validation import validate_vlm_output
-from ad_classifier.vlm.verifier import PROMPT_VERSION, HTTPVLMVerifier, VLMVerifier
+from ad_classifier.vlm.prompt import get_prompt_version
+from ad_classifier.vlm.verifier import HTTPVLMVerifier, VLMVerifier
 from ad_classifier.vlm.visual_verify import VisualVerificationPass
 from ad_classifier.worker.document_ocr import (
     bundle_document_outputs,
@@ -236,6 +237,7 @@ def run_pipeline_for_job(
         metadata=ingest.metadata.model_dump() if ingest.metadata else {},
     )
     knowledge_manager = _knowledge_manager_for_pipeline(config, config_file)
+    prompt_profile = config.vlm.resolved_prompt_profile()
     vlm = components.vlm_verifier or HTTPVLMVerifier(
         endpoint=config.vlm.endpoint.endpoint,
         model=config.vlm.endpoint.model,
@@ -245,6 +247,7 @@ def run_pipeline_for_job(
         retry_delay_s=config.vlm.endpoint.retry_delay_s,
         temperature=config.vlm.endpoint.temperature,
         max_tokens=vlm_max_tokens,
+        prompt_profile=prompt_profile,
         enable_thinking=config.vlm.endpoint.enable_thinking,
         response_format=config.vlm.endpoint.response_format,
         image_max_dim=config.vlm.image_max_dim,
@@ -339,7 +342,7 @@ def run_pipeline_for_job(
         rules,
         related_ads=related,
         vlm_model=config.vlm.endpoint.model,
-        vlm_prompt_version=PROMPT_VERSION,
+        vlm_prompt_version=get_prompt_version(prompt_profile),
         pipeline_version="0.1.0",
         selected_frames=selected_debug,
         dropped_frames=dropped_debug,

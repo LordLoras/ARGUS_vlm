@@ -14,12 +14,47 @@ from ad_classifier.iab_taxonomy import (
     render_iab_taxonomy_for_prompt,
 )
 
-_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "argus_ad_verifier.txt"
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+_PROMPT_PATH = _PROMPTS_DIR / "argus_ad_verifier.txt"
+_FRONTIER_PROMPT_PATH = _PROMPTS_DIR / "argus_ad_verifier_frontier_strict.txt"
 _TAXONOMY_PATH = Path(__file__).parent.parent.parent / "taxonomy.yaml"
 
+PROMPT_PROFILE_OPTIONS: dict[str, dict[str, str]] = {
+    "auto": {
+        "label": "Auto by route",
+        "description": "Use the strict Frontier prompt for Frontier routing and the standard prompt elsewhere.",
+    },
+    "standard": {
+        "label": "Standard",
+        "description": "Full guided verifier prompt for local and smaller OpenAI-compatible models.",
+    },
+    "frontier_strict": {
+        "label": "Frontier strict",
+        "description": "Compact evidence-only extractor prompt for Kimi, Gemini, Qwen-VL, and other strong models.",
+    },
+}
 
-def get_prompt_version() -> str:
-    first_line = _PROMPT_PATH.read_text(encoding="utf-8").split("\n")[0]
+_PROMPT_PATHS = {
+    "standard": _PROMPT_PATH,
+    "frontier_strict": _FRONTIER_PROMPT_PATH,
+}
+
+
+def resolve_prompt_profile(profile: str = "auto", *, mode: str | None = None) -> str:
+    if profile == "auto":
+        return "frontier_strict" if mode == "frontier" else "standard"
+    if profile in _PROMPT_PATHS:
+        return profile
+    return "standard"
+
+
+def _prompt_path_for_profile(profile: str) -> Path:
+    return _PROMPT_PATHS[resolve_prompt_profile(profile)]
+
+
+def get_prompt_version(profile: str = "standard", *, prompt_path: Path | None = None) -> str:
+    path = prompt_path or _prompt_path_for_profile(profile)
+    first_line = path.read_text(encoding="utf-8").split("\n")[0]
     for part in first_line.split(":"):
         part = part.strip()
         if part.startswith("verifier-"):
@@ -33,13 +68,15 @@ def _load_taxonomy(path: Path = _TAXONOMY_PATH) -> dict[str, Any]:
 
 def render_verifier_prompt(
     *,
-    prompt_path: Path = _PROMPT_PATH,
+    prompt_profile: str = "standard",
+    prompt_path: Path | None = None,
     taxonomy_path: Path = _TAXONOMY_PATH,
     iab_taxonomy_path: Path = DEFAULT_IAB_TAXONOMY_PATH,
     iab_content_taxonomy_path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
     knowledge_manager: Any | None = None,
 ) -> str:
-    template = prompt_path.read_text(encoding="utf-8")
+    template_path = prompt_path or _prompt_path_for_profile(prompt_profile)
+    template = template_path.read_text(encoding="utf-8")
     taxonomy = _load_taxonomy(taxonomy_path)
 
     categories: list[dict] = taxonomy.get("categories", [])
