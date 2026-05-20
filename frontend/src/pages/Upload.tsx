@@ -10,7 +10,7 @@ import { ResultPanel } from "../components/Upload/ResultPanel";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { useJobEvents } from "../hooks/useJobEvents";
-import { api } from "../lib/api-client";
+import { ApiError, api } from "../lib/api-client";
 import { CloseIcon, UploadIcon } from "../lib/icons";
 import type { JobRecord } from "../lib/types";
 
@@ -236,6 +236,20 @@ export function Upload() {
   );
   const elapsed = startedAt ? (finishedAt ?? now) - startedAt : 0;
 
+  useEffect(() => {
+    if (!restoredSession?.jobId) return;
+    let ignore = false;
+    void api.getJob(restoredSession.jobId).catch((err) => {
+      if (ignore) return;
+      if (err instanceof ApiError && err.status === 404) {
+        clearRestoredUpload(`cleared stale upload state — ${restoredSession.jobId} no longer exists`);
+      }
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [restoredSession?.jobId]);
+
   const handleFiles = (selected: File[]) => {
     const files = selected.filter(Boolean);
     if (!files.length) return;
@@ -281,6 +295,11 @@ export function Upload() {
     batchUploadMutation.reset();
   };
 
+  const clearRestoredUpload = (message: string) => {
+    reset();
+    setLogLines([timestampedLog("warn", message)]);
+  };
+
   const restoreJob = (candidate: JobRecord) => {
     if (!candidate.ad_id) return;
     const started = timestampFrom(candidate.started_at || candidate.ingested_at) ?? Date.now();
@@ -313,12 +332,25 @@ export function Upload() {
       return;
     }
     if (jobId) {
-      void api.cancelJob(jobId).then(({ job: cancelled }) => {
-        setLogLines((prev) => [
-          ...prev,
-          timestampedLog("warn", `cancel requested: ${cancelled.state}`)
-        ]);
-      });
+      void api.cancelJob(jobId).then(
+        ({ job: cancelled }) => {
+          if (cancelled.state === "cancelled") {
+            clearRestoredUpload(`cancelled ${cancelled.id}`);
+            return;
+          }
+          setLogLines((prev) => [
+            ...prev,
+            timestampedLog("warn", `cancel requested: ${cancelled.state}`)
+          ]);
+        },
+        (err) => {
+          if (err instanceof ApiError && err.status === 404) {
+            clearRestoredUpload(`cleared stale upload state — ${jobId} no longer exists`);
+            return;
+          }
+          setLogLines((prev) => [...prev, timestampedLog("warn", uploadErrorMessage(err))]);
+        }
+      );
     }
   };
 
