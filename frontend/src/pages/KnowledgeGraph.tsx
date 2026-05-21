@@ -289,6 +289,10 @@ export function KnowledgeGraph() {
                                 key={n.id}
                                 className="cg-face-chip"
                                 style={{ background: `${groupColor}15`, borderColor: `${groupColor}35`, color: groupColor }}
+                                onMouseEnter={() => setHoveredNode(n)}
+                                onMouseLeave={() => setHoveredNode(null)}
+                                onFocus={() => setHoveredNode(n)}
+                                onBlur={() => setHoveredNode(null)}
                                 onClick={() => handleNavigate(n)}
                               >
                                 {n.label}
