@@ -1,7 +1,7 @@
 import { getInitialGraph, expandNode } from "./graphData";
 import type { GraphResponse, ExpandResponse } from "./types";
 
-const USE_MOCK = true;
+const USE_MOCK = import.meta.env.VITE_GRAPH_USE_MOCK !== "false";
 
 export interface GraphServiceAdapter {
   getInitialGraph: () => Promise<GraphResponse>;
@@ -16,10 +16,12 @@ const mockService: GraphServiceAdapter = {
 const apiService: GraphServiceAdapter = {
   getInitialGraph: async () => {
     const res = await fetch("/api/graph");
+    if (!res.ok) throw new Error(`Graph API returned ${res.status}`);
     return res.json();
   },
   expandNode: async (nodeId: string) => {
     const res = await fetch(`/api/graph/expand?node_id=${encodeURIComponent(nodeId)}`);
+    if (!res.ok) throw new Error(`Graph expand API returned ${res.status}`);
     return res.json();
   },
 };
