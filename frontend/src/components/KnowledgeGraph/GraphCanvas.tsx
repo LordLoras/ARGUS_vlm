@@ -13,6 +13,11 @@ interface Props {
   onNodeHover: (node: GraphNode | null) => void;
 }
 
+const NODE_MAP = () => {
+  const m = new Map<string, GraphNode>();
+  return m;
+};
+
 export function GraphCanvas({
   graphData,
   selectedNodeId,
@@ -42,10 +47,10 @@ export function GraphCanvas({
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("charge")?.strength(-320);
+    fg.d3Force("charge")?.strength(-300);
     fg.d3Force("link")?.distance((link: any) => {
       const strength = link.strength ?? 0.5;
-      return 55 + (1 - strength) * 70;
+      return 80 + (1 - strength) * 60;
     });
   }, [graphData]);
 
@@ -53,7 +58,7 @@ export function GraphCanvas({
     (node: GraphNode) => {
       const fg = fgRef.current;
       if (!fg) return;
-      const distance = 90;
+      const distance = 100;
       const distRatio =
         1 + distance / Math.hypot(node.x ?? 0, node.y ?? 0, node.z ?? 0);
       fg.cameraPosition(
@@ -63,14 +68,20 @@ export function GraphCanvas({
           z: (node.z ?? 0) * distRatio,
         },
         node,
-        1600
+        1400
       );
       onNodeClick(node);
     },
     [onNodeClick]
   );
 
-const customNodeRenderer = useCallback(
+  const nodeMap = useCallback(() => {
+    const m = new Map<string, GraphNode>();
+    for (const n of graphData.nodes) m.set(n.id, n);
+    return m;
+  }, [graphData.nodes]);
+
+  const customNodeRenderer = useCallback(
     (node: GraphNode) => {
       const color = NODE_TYPE_COLORS[node.type];
       const isSelected = node.id === selectedNodeId;
@@ -84,11 +95,11 @@ const customNodeRenderer = useCallback(
       const material = new THREE.MeshStandardMaterial({
         color,
         emissive: new THREE.Color(color),
-        emissiveIntensity: isSelected ? 1.0 : isHovered ? 0.6 : 0.3,
+        emissiveIntensity: isSelected ? 0.8 : isHovered ? 0.5 : 0.25,
         transparent: true,
         opacity: isSelected ? 1.0 : isHovered ? 0.95 : 0.85,
-        roughness: 0.3,
-        metalness: 0.65,
+        roughness: 0.35,
+        metalness: 0.6,
       });
       const sphere = new THREE.Mesh(geometry, material);
       group.add(sphere);
@@ -98,7 +109,7 @@ const customNodeRenderer = useCallback(
         const glowMat = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity: isSelected ? 0.12 : 0.06,
+          opacity: isSelected ? 0.15 : 0.08,
           side: THREE.BackSide,
         });
         group.add(new THREE.Mesh(glowGeo, glowMat));
@@ -123,15 +134,15 @@ const customNodeRenderer = useCallback(
       sprite.position.y = radius + 3.8;
       sprite.textHeight = labelTextSize;
       sprite.backgroundColor = isSelected
-        ? "rgba(10,12,16,0.92)"
+        ? "rgba(8,9,11,0.94)"
         : isHovered
-        ? "rgba(10,12,16,0.88)"
-        : "rgba(10,12,16,0.78)";
+        ? "rgba(8,9,11,0.90)"
+        : "rgba(8,9,11,0.82)";
       sprite.padding = 1.6;
       sprite.borderRadius = 2.0;
       sprite.borderColor = isSelected
         ? color
-        : "rgba(255,255,255,0.08)";
+        : "rgba(255,255,255,0.10)";
       sprite.borderWidth = isSelected ? 1.0 : 0.4;
       group.add(sprite);
 
@@ -140,53 +151,60 @@ const customNodeRenderer = useCallback(
     [selectedNodeId, hoveredNodeId]
   );
 
-  const getLinkColor = useCallback(
+  const isLinkHighlighted = useCallback(
     (link: GraphLink) => {
       const src =
         typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
       const tgt =
         typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-      const isLinked =
+      return (
         src === selectedNodeId ||
         tgt === selectedNodeId ||
         src === hoveredNodeId ||
-        tgt === hoveredNodeId;
-      return isLinked ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.04)";
+        tgt === hoveredNodeId
+      );
     },
     [selectedNodeId, hoveredNodeId]
+  );
+
+  const getLinkColor = useCallback(
+    (link: GraphLink) => {
+      const highlighted = isLinkHighlighted(link);
+      if (highlighted) {
+        const srcId =
+          typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
+        const tgtId =
+          typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
+        const srcNode = nodeMap().get(srcId);
+        const activeId = srcId === selectedNodeId || srcId === hoveredNodeId ? srcId : tgtId;
+        const activeNode = nodeMap().get(activeId);
+        if (activeNode) {
+          const c = new THREE.Color(NODE_TYPE_COLORS[activeNode.type]);
+          return `#${c.getHexString()}`;
+        }
+        return "rgba(255,255,255,0.55)";
+      }
+      return "rgba(255,255,255,0.22)";
+    },
+    [isLinkHighlighted, nodeMap, selectedNodeId, hoveredNodeId]
   );
 
   const getLinkWidth = useCallback(
     (link: GraphLink) => {
-      const src =
-        typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
-      const tgt =
-        typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-      const isLinked =
-        src === selectedNodeId ||
-        tgt === selectedNodeId ||
-        src === hoveredNodeId ||
-        tgt === hoveredNodeId;
-      const base = 0.35 + (link.strength ?? 0.5) * 0.7;
-      return isLinked ? base * 2.2 : base;
+      const highlighted = isLinkHighlighted(link);
+      const strength = link.strength ?? 0.5;
+      const base = 0.6 + strength * 1.2;
+      return highlighted ? base * 2.0 : base;
     },
-    [selectedNodeId, hoveredNodeId]
+    [isLinkHighlighted]
   );
 
   const getLinkParticleWidth = useCallback(
     (link: GraphLink) => {
-      const src =
-        typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
-      const tgt =
-        typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-      const isLinked =
-        src === selectedNodeId ||
-        tgt === selectedNodeId ||
-        src === hoveredNodeId ||
-        tgt === hoveredNodeId;
-      return isLinked ? 2.5 : 1.2;
+      const highlighted = isLinkHighlighted(link);
+      return highlighted ? 3.5 : 1.8;
     },
-    [selectedNodeId, hoveredNodeId]
+    [isLinkHighlighted]
   );
 
   return (
@@ -212,9 +230,9 @@ const customNodeRenderer = useCallback(
         linkWidth={getLinkWidth}
         linkDirectionalParticles={1}
         linkDirectionalParticleWidth={getLinkParticleWidth as any}
-        linkDirectionalParticleSpeed={0.006}
+        linkDirectionalParticleSpeed={0.008}
         linkDirectionalArrowLength={0}
-        linkCurvature={0.08}
+        linkCurvature={0}
         linkVisibility={true}
         backgroundColor="#08090b"
         warmupTicks={80}

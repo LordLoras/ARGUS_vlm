@@ -56,11 +56,11 @@ export interface ExpandResponse {
 }
 
 export const NODE_TYPE_COLORS: Record<NodeType, string> = {
-  brand: "#7c3aed",
-  company: "#0ea5e9",
-  category: "#10b981",
-  product: "#f59e0b",
-  subsidiary: "#f43f5e",
+  brand: "#6366f1",
+  company: "#38bdf8",
+  category: "#34d399",
+  product: "#fbbf24",
+  subsidiary: "#fb7185",
 };
 
 export const NODE_TYPE_SIZES: Record<NodeType, number> = {
