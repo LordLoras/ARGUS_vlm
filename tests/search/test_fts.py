@@ -44,6 +44,20 @@ def test_fts_search_expanded_matches_multi_token_prefixes(tmp_path):
     assert [ad_id for ad_id, _score in results] == ["ad_car"]
 
 
+def test_fts_search_expanded_matches_promotion_name(tmp_path):
+    conn = open_database(tmp_path / "fts.db")
+    apply_migrations(conn)
+    conn.execute(
+        "INSERT INTO ads (id, source_path, ingested_at, promotion_name) VALUES (?, ?, ?, ?)",
+        ("ad_promo", "/tmp/promo.mp4", "2026-01-01T00:00:00", "America 250"),
+    )
+    fts_update(conn, "ad_promo", promotion_name="America 250")
+
+    results = fts_search_expanded(conn, "America 250", limit=10)
+
+    assert [ad_id for ad_id, _score in results] == ["ad_promo"]
+
+
 def test_fts_search_expanded_does_not_match_car_inside_healthcare(tmp_path):
     conn = open_database(tmp_path / "fts.db")
     apply_migrations(conn)

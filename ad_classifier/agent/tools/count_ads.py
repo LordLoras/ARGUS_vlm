@@ -14,9 +14,9 @@ from ad_classifier.search.query_expansion import (
 class CountAdsTool(AgentTool):
     name = "count_ads"
     description = (
-        "Count ads matching brand / advertiser / primary_category / subcategory / "
+        "Count ads matching brand / advertiser / promotion_name / primary_category / subcategory / "
         "IAB product/content taxonomy / status filters or a loose free-text q substring over id, "
-        "brand, advertiser, products, category, IAB taxonomy, website, phone, and landing page domain. Use q for "
+        "brand, advertiser, promotion, products, category, IAB taxonomy, website, phone, and landing page domain. Use q for "
         "topic words and business shorthand such as HVAC or services. Use this for "
         "'how many' questions instead of list_ads."
     )
@@ -27,6 +27,10 @@ class CountAdsTool(AgentTool):
             "properties": {
                 "brand": {"type": "string", "description": "Exact brand_name match."},
                 "advertiser": {"type": "string", "description": "Exact advertiser_name match."},
+                "promotion": {
+                    "type": "string",
+                    "description": "Exact promotion_name match for named sale/event/deal platforms.",
+                },
                 "category": {"type": "string", "description": "Primary industry category."},
                 "subcategory": {"type": "string", "description": "Product type or niche."},
                 "iab_unique_id": {
@@ -52,6 +56,9 @@ class CountAdsTool(AgentTool):
         if args.get("advertiser"):
             clauses.append("LOWER(advertiser_name) = LOWER(?)")
             params.append(args["advertiser"])
+        if args.get("promotion"):
+            clauses.append("LOWER(promotion_name) = LOWER(?)")
+            params.append(args["promotion"])
         if args.get("category"):
             if has_alias_expansion(args["category"]):
                 loose_clause, loose_params = build_loose_like_clause(args["category"])

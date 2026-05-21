@@ -83,6 +83,7 @@ def filter_hits(
     hits: list[dict[str, Any]],
     *,
     brand: str | None,
+    promotion: str | None = None,
     category: str | None,
     status: str | None,
     k: int,
@@ -90,7 +91,7 @@ def filter_hits(
 ) -> list[dict[str, Any]]:
     if not hits:
         return []
-    if not any((brand, category, risk_label, status)):
+    if not any((brand, promotion, category, risk_label, status)):
         return hits[:k]
 
     ad_ids = [hit["ad_id"] for hit in hits]
@@ -100,6 +101,9 @@ def filter_hits(
     if brand:
         clauses.append("(brand_name LIKE ? OR advertiser_name LIKE ?)")
         params.extend([f"%{brand}%", f"%{brand}%"])
+    if promotion:
+        clauses.append("promotion_name LIKE ?")
+        params.append(f"%{promotion}%")
     if category:
         clauses.append("primary_category = ?")
         params.append(category)
@@ -208,6 +212,7 @@ def _ad_text_by_id(conn, ad_ids: list[str]) -> dict[str, str]:
           a.id,
           a.brand_name,
           a.advertiser_name,
+          a.promotion_name,
           a.products_text,
           a.primary_category,
           a.subcategory,
@@ -248,6 +253,7 @@ def _ad_text_by_id(conn, ad_ids: list[str]) -> dict[str, str]:
             for key in (
                 "brand_name",
                 "advertiser_name",
+                "promotion_name",
                 "products_text",
                 "primary_category",
                 "subcategory",

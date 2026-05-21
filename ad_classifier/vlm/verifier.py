@@ -152,6 +152,7 @@ def _salvage_vlm_result(raw: str, error: str) -> VLMVerificationResult:
         marketing: dict[str, object] = {}
         for key in (
             "brand",
+            "promotion_name",
             "products",
             "prices",
             "offers",

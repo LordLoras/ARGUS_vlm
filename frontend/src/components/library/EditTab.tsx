@@ -8,6 +8,7 @@ import { knowledgeApi, type IABEntry } from "../../lib/knowledge-api";
 export type EditPatch = {
   brand_name?: string | null;
   advertiser_name?: string | null;
+  promotion_name?: string | null;
   products_text?: string | null;
   primary_category?: string | null;
   subcategory?: string | null;
@@ -31,6 +32,7 @@ export function EditTab({
 
   const [brand, setBrand] = useState(detail.ad.brand_name ?? "");
   const [advertiser, setAdvertiser] = useState(detail.ad.advertiser_name ?? "");
+  const [promotion, setPromotion] = useState(detail.ad.promotion_name ?? ent?.promotion_name ?? "");
   const [products, setProducts] = useState(detail.ad.products_text ?? "");
   const [category, setCategory] = useState(
     detail.ad.primary_category ?? detail.classification?.primary_category ?? "other"
@@ -60,6 +62,7 @@ export function EditTab({
   useEffect(() => {
     setBrand(detail.ad.brand_name ?? "");
     setAdvertiser(detail.ad.advertiser_name ?? "");
+    setPromotion(detail.ad.promotion_name ?? ent?.promotion_name ?? "");
     setProducts(detail.ad.products_text ?? "");
     setCategory(detail.ad.primary_category ?? detail.classification?.primary_category ?? "other");
     setSubcategory(detail.ad.subcategory ?? ent?.subcategory ?? "");
@@ -79,6 +82,7 @@ export function EditTab({
     detail.ad.id,
     detail.ad.brand_name,
     detail.ad.advertiser_name,
+    detail.ad.promotion_name,
     detail.ad.products_text,
     detail.ad.primary_category,
     detail.ad.subcategory,
@@ -129,6 +133,14 @@ export function EditTab({
             value={tagline}
             onChange={(e) => setTagline(e.target.value)}
             placeholder="tagline"
+          />
+        </Field>
+        <Field label="Promotion / event">
+          <input
+            className="input"
+            value={promotion}
+            onChange={(e) => setPromotion(e.target.value)}
+            placeholder="e.g. America 250, Jeep Declaration of Deals"
           />
         </Field>
         <Field label="Products">
@@ -378,6 +390,7 @@ export function EditTab({
               onSave({
                 brand_name: brand || null,
                 advertiser_name: advertiser || null,
+                promotion_name: promotion || null,
                 products_text: products || null,
                 primary_category: category,
                 subcategory: subcategory || null,

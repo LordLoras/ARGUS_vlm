@@ -34,6 +34,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "008_brand_profiles",
         "009_brand_profiles_alter",
         "010_iab_content_taxonomy",
+        "011_promotion_name",
     ]
 
     conn = open_database(db_path)
@@ -61,6 +62,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         ad_columns = {row["name"] for row in conn.execute("PRAGMA table_info(ads)").fetchall()}
         assert {
             "advertiser_name",
+            "promotion_name",
             "website_domain",
             "phone_number",
             "landing_page_domain",
@@ -91,6 +93,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
             "creative_attributes_json",
             "campaign_suggestions_json",
             "subcategory_json",
+            "promotion_name_json",
         }.issubset(marketing_columns)
         profile_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(brand_profiles)").fetchall()

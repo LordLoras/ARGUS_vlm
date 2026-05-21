@@ -85,7 +85,7 @@ export const api = {
       method: "DELETE"
     }),
 
-  listAds: (query: { brand?: string; category?: string; risk_label?: string; iab_unique_id?: string; iab_tier_1?: string; iab_content_id?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
+  listAds: (query: { brand?: string; promotion?: string; category?: string; risk_label?: string; iab_unique_id?: string; iab_tier_1?: string; iab_content_id?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
     apiFetch<{ items: AdRecord[]; limit: number; offset: number }>(`/api/ads${params(query)}`),
 
   getAd: (adId: string) => apiFetch<AdDetail>(`/api/ads/${adId}`),
@@ -186,6 +186,11 @@ export const api = {
     patch: {
       brand_name?: string | null;
       brand_confidence?: number | null;
+      advertiser_name?: string | null;
+      promotion_name?: string | null;
+      website_domain?: string | null;
+      phone_number?: string | null;
+      landing_page_domain?: string | null;
       products_text?: string | null;
       primary_category?: string | null;
       subcategory?: string | null;
@@ -237,6 +242,7 @@ export const api = {
     mode?: string;
     ad_id?: string;
     brand?: string;
+    promotion?: string;
     category?: string;
     risk_label?: string;
     status?: string;

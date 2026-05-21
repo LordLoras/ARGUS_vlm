@@ -10,9 +10,9 @@ from ad_classifier.db.repositories import AdRepository
 class ListAdsTool(AgentTool):
     name = "list_ads"
     description = (
-        "List ads filtered by brand, advertiser, primary_category, subcategory, "
+        "List ads filtered by brand, advertiser, promotion_name, primary_category, subcategory, "
         "status, or a free-text substring (matches id, brand, advertiser, products, "
-        "category, IAB product/content taxonomy, website, phone, landing page domain; expands common shorthand "
+        "promotion, category, IAB product/content taxonomy, website, phone, landing page domain; expands common shorthand "
         "such as HVAC or services). Returns products_text so product/model questions "
         "can usually be answered without get_ad. For counts, prefer count_ads."
     )
@@ -25,6 +25,10 @@ class ListAdsTool(AgentTool):
                 "advertiser": {
                     "type": "string",
                     "description": "Exact advertiser_name match (e.g. dealer, store, or business placing the ad).",
+                },
+                "promotion": {
+                    "type": "string",
+                    "description": "Exact promotion_name match for named sale/event/deal platforms.",
                 },
                 "category": {"type": "string", "description": "Primary industry category."},
                 "subcategory": {
@@ -63,6 +67,7 @@ class ListAdsTool(AgentTool):
         ads = AdRepository(ctx.conn).list(
             brand=args.get("brand"),
             advertiser=args.get("advertiser"),
+            promotion=args.get("promotion"),
             category=args.get("category"),
             subcategory=args.get("subcategory"),
             iab_unique_id=args.get("iab_unique_id"),
@@ -83,6 +88,7 @@ class ListAdsTool(AgentTool):
                     "ad_id": ad.id,
                     "brand": ad.brand_name,
                     "advertiser": ad.advertiser_name,
+                    "promotion_name": ad.promotion_name,
                     "primary_category": ad.primary_category,
                     "subcategory": ad.subcategory,
                     "iab_unique_id": ad.iab_unique_id,

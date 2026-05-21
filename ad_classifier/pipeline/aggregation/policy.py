@@ -405,9 +405,13 @@ def _map_marketing_entities(vlm: VLMVerificationResult) -> MarketingEntities:
         for s in me.campaign_suggestions
         if s.name
     ]
+    promotion_name = _normalize_promotion_name(me.promotion_name)
+    if promotion_name is None and campaign_suggestions:
+        promotion_name = campaign_suggestions[0].name
 
     return MarketingEntities(
         brand=brand,
+        promotion_name=promotion_name,
         subcategory=me.subcategory or None,
         products=list(me.products),
         prices=prices,
@@ -447,6 +451,15 @@ def _parse_rating_count(value: str | None) -> int | None:
     if count > 10_000_000:
         return None
     return count
+
+
+def _normalize_promotion_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if not normalized or normalized.casefold() in {"none", "null", "n/a", "string"}:
+        return None
+    return normalized
 
 
 def _risk_labels(vlm_result: VLMVerificationResult, rules: list[RuleTrigger]) -> list[str]:

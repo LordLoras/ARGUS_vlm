@@ -7,6 +7,7 @@ DEFAULT_AD_SEARCH_COLUMNS = (
     "id",
     "brand_name",
     "advertiser_name",
+    "promotion_name",
     "products_text",
     "primary_category",
     "iab_unique_id",

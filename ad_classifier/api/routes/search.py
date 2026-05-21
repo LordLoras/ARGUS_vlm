@@ -44,6 +44,7 @@ def search_ads(
     mode: Literal["keyword", "text", "visual", "hybrid", "visual_hybrid"] = "hybrid",
     ad_id: str | None = None,
     brand: str | None = None,
+    promotion: str | None = None,
     category: str | None = None,
     risk_label: str | None = None,
     status: str | None = None,
@@ -73,6 +74,7 @@ def search_ads(
                 conn,
                 hits,
                 brand=brand,
+                promotion=promotion,
                 category=category,
                 risk_label=risk_label,
                 status=status,
@@ -93,6 +95,7 @@ def search_ads(
                     conn,
                     keyword_hits,
                     brand=brand,
+                    promotion=promotion,
                     category=category,
                     risk_label=risk_label,
                     status=status,
@@ -149,6 +152,7 @@ def search_ads(
                 conn,
                 hits,
                 brand=brand,
+                promotion=promotion,
                 category=category,
                 risk_label=risk_label,
                 status=status,
@@ -197,6 +201,7 @@ def search_ads(
                 conn,
                 hits,
                 brand=brand,
+                promotion=promotion,
                 category=category,
                 risk_label=risk_label,
                 status=status,
@@ -226,9 +231,7 @@ def search_ads(
             fts_results = fts_search_expanded(conn, q, limit=k * 8)
             fts_ids = {ad_id for ad_id, _score in fts_results}
             fts_rank = {ad_id: i + 1 for i, (ad_id, _score) in enumerate(fts_results)}
-            visual_hits = _visual_hits_for_vectors(
-                store, vectors, k=visual_k, source="visual_text"
-            )
+            visual_hits = _visual_hits_for_vectors(store, vectors, k=visual_k, source="visual_text")
             if not visual_hits:
                 visual_hits = _ad_visual_hits_for_vectors(
                     store, vectors, k=visual_k, source="visual_text"
@@ -269,6 +272,7 @@ def search_ads(
                 conn,
                 hits,
                 brand=brand,
+                promotion=promotion,
                 category=category,
                 risk_label=risk_label,
                 status=status,
@@ -324,6 +328,7 @@ def search_ads(
             conn,
             items,
             brand=brand,
+            promotion=promotion,
             category=category,
             risk_label=risk_label,
             status=status,

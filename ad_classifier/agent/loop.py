@@ -302,10 +302,12 @@ def _fallback_answer_from_tool_results(results: list[ToolResult]) -> str:
         marketing = latest.data.get("marketing_entities") or {}
         if ad:
             brand = ad.get("brand_name") or marketing.get("brand", {}).get("name", "unknown brand")
+            promotion = ad.get("promotion_name") or marketing.get("promotion_name")
             products = marketing.get("products") or ad.get("products_text") or "products not stored"
             if isinstance(products, list):
                 products = ", ".join(products) if products else "products not stored"
-            return f"`{ad.get('id', 'ad')}`: {brand} — {products}"
+            descriptor = f"{promotion} — {products}" if promotion else products
+            return f"`{ad.get('id', 'ad')}`: {brand} — {descriptor}"
         keys = list(latest.data.keys())
         summary = f"The `{latest.name}` tool returned a result with fields: {', '.join(keys[:5])}"
         if len(keys) > 5:
@@ -321,11 +323,13 @@ def _fallback_answer_from_tool_results(results: list[ToolResult]) -> str:
             if isinstance(item, dict):
                 ad_id = item.get("ad_id") or item.get("id") or "unknown"
                 brand = item.get("brand") or item.get("brand_name") or "unknown brand"
+                promotion = item.get("promotion_name")
                 products = item.get("products") or item.get("products_text") or ""
                 if isinstance(products, list):
                     products = ", ".join(products) if products else ""
-                if products:
-                    lines.append(f"- `{ad_id}` ({brand}): {products}")
+                if products or promotion:
+                    descriptor = " / ".join(str(v) for v in (promotion, products) if v)
+                    lines.append(f"- `{ad_id}` ({brand}): {descriptor}")
                 else:
                     parts = [f"{k}={v}" for k, v in list(item.items())[:3]]
                     lines.append(f"- `{ad_id}` | {' | '.join(parts)}")

@@ -982,7 +982,9 @@ def test_brand_profile_manual_search_select_and_reset(config_path: Path):
         assert detail.json()["brand_profile"] is None
 
 
-def test_patch_ad_updates_manual_iab_projection_and_classification(client: TestClient, config_path: Path):
+def test_patch_ad_updates_manual_iab_projection_and_classification(
+    client: TestClient, config_path: Path
+):
     load = client.post("/api/knowledge/load-taxonomies", json={})
     assert load.status_code == 200, load.text
 
@@ -1059,6 +1061,45 @@ def test_patch_ad_updates_manual_iab_projection_and_classification(client: TestC
     assert classification["primary_category"] == "entertainment_media"
     assert classification["iab_category"]["iab_unique_id"] == "1429"
     assert classification["iab_content_categories"][0]["iab_unique_id"] == "483"
+
+
+def test_patch_ad_updates_promotion_and_keyword_search(client: TestClient, config_path: Path):
+    conn = _db(config_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO ads (id, source_path, ingested_at, status, brand_name)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_promo_edit",
+                "/tmp/promo.mp4",
+                datetime.now(UTC).isoformat(),
+                "completed",
+                "Jeep",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.patch(
+        "/api/ads/ad_promo_edit",
+        json={"promotion_name": "Jeep Declaration of Deals"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["promotion_name"] == "Jeep Declaration of Deals"
+
+    detail = client.get("/api/ads/ad_promo_edit")
+    assert detail.status_code == 200
+    assert detail.json()["marketing_entities"]["promotion_name"] == "Jeep Declaration of Deals"
+
+    listed = client.get("/api/ads", params={"q": "Declaration of Deals"})
+    assert [item["id"] for item in listed.json()["items"]] == ["ad_promo_edit"]
+
+    searched = client.get("/api/search", params={"mode": "keyword", "q": "Declaration of Deals"})
+    assert [item["ad_id"] for item in searched.json()["items"]] == ["ad_promo_edit"]
 
 
 def test_search_keyword_returns_preview(client: TestClient, config_path: Path):

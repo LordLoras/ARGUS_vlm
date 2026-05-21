@@ -35,6 +35,7 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
 def _entities() -> MarketingEntities:
     return MarketingEntities(
         brand=BrandEntity(name="TestBrand", logo_present=True),
+        promotion_name="America 250",
         products=["Widget Pro", "Widget Lite"],
         ctas=[CTAEntity(text="Buy Now")],
         creative_format=CreativeFormat(aspect_ratio="16:9", has_voiceover=True),
@@ -59,6 +60,7 @@ def test_upsert_and_get(conn):
     assert result is not None
     assert result.brand.name == "TestBrand"
     assert result.brand.logo_present is True
+    assert result.promotion_name == "America 250"
     assert result.products == ["Widget Pro", "Widget Lite"]
     assert len(result.ctas) == 1
     assert result.ctas[0].text == "Buy Now"

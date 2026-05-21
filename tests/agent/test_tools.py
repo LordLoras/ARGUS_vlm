@@ -59,6 +59,15 @@ def test_list_ads_brand_filter(readonly_conn, agent_config):
     result = ListAdsTool().call({"brand": "Jeep"}, _ctx(readonly_conn, agent_config))
     assert {item["ad_id"] for item in result.data} == {"ad_jeep_a", "ad_jeep_b"}
     assert {item["products"] for item in result.data} == {"Wrangler", "Grand Cherokee"}
+    assert {item["promotion_name"] for item in result.data} == {"Jeep Declaration of Deals"}
+
+
+def test_list_ads_promotion_filter(readonly_conn, agent_config):
+    result = ListAdsTool().call(
+        {"promotion": "Jeep Declaration of Deals"}, _ctx(readonly_conn, agent_config)
+    )
+    assert result.ok
+    assert {item["ad_id"] for item in result.data} == {"ad_jeep_a", "ad_jeep_b"}
 
 
 def test_list_ads_truncation_flag(readonly_conn, agent_config):
@@ -71,6 +80,14 @@ def test_count_ads(readonly_conn, agent_config):
     result = CountAdsTool().call({"brand": "Jeep"}, _ctx(readonly_conn, agent_config))
     assert result.ok
     assert result.data["count"] == 2
+
+
+def test_count_ads_promotion_filter(readonly_conn, agent_config):
+    result = CountAdsTool().call(
+        {"promotion": "Mix & Match Deal"}, _ctx(readonly_conn, agent_config)
+    )
+    assert result.ok
+    assert result.data["count"] == 1
 
 
 def test_count_ads_q_filter(readonly_conn, agent_config):
@@ -187,6 +204,13 @@ def test_aggregate_by_brand(readonly_conn, agent_config):
     buckets = {row["bucket"]: row["count"] for row in result.data}
     assert buckets["Jeep"] == 2
     assert buckets["Domino's"] == 1
+
+
+def test_aggregate_by_promotion(readonly_conn, agent_config):
+    result = AggregateTool().call({"group_by": "promotion_name"}, _ctx(readonly_conn, agent_config))
+    assert result.ok
+    buckets = {row["bucket"]: row["count"] for row in result.data}
+    assert buckets["Jeep Declaration of Deals"] == 2
 
 
 def test_aggregate_rejects_unknown_group_by(readonly_conn, agent_config):

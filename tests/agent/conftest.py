@@ -62,6 +62,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         brand_name="Jeep",
         brand_confidence=0.95,
         advertiser_name="Stellantis",
+        promotion_name="Jeep Declaration of Deals",
         website_domain=None,
         phone_number=None,
         landing_page_domain=None,
@@ -73,6 +74,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         "ad_jeep_a",
         MarketingEntities(
             brand=BrandEntity(name="Jeep"),
+            promotion_name="Jeep Declaration of Deals",
             products=["Wrangler"],
             prices=[PriceEntity(text="$30,000")],
             offers=[OfferEntity(text="0% APR for 60 months")],
@@ -93,6 +95,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         brand_name="Jeep",
         brand_confidence=0.92,
         advertiser_name="Stellantis",
+        promotion_name="Jeep Declaration of Deals",
         website_domain=None,
         phone_number=None,
         landing_page_domain=None,
@@ -104,6 +107,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         "ad_jeep_b",
         MarketingEntities(
             brand=BrandEntity(name="Jeep"),
+            promotion_name="Jeep Declaration of Deals",
             products=["Grand Cherokee"],
             prices=[PriceEntity(text="$40,000")],
             offers=[OfferEntity(text="0% APR for 60 months")],
@@ -124,6 +128,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         brand_name="Domino's",
         brand_confidence=0.99,
         advertiser_name="Domino's Pizza Inc",
+        promotion_name="Mix & Match Deal",
         website_domain=None,
         phone_number=None,
         landing_page_domain=None,
@@ -135,6 +140,7 @@ def _seed_ads(conn: sqlite3.Connection) -> None:
         "ad_pizza_a",
         MarketingEntities(
             brand=BrandEntity(name="Domino's"),
+            promotion_name="Mix & Match Deal",
             products=["Large Pepperoni"],
             prices=[PriceEntity(text="$9.99")],
             offers=[OfferEntity(text="2 for $19.99")],

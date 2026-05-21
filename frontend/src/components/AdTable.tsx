@@ -65,7 +65,9 @@ export function AdTable({
                 <td>
                   <div className="brand-cell">
                     <span className="name">{ad.advertiser_name || ad.brand_name || "Unknown brand"}</span>
-                    <span className="sub">{ad.brand_name || ad.id}</span>
+                    <span className="sub">
+                      {[ad.brand_name, ad.promotion_name].filter(Boolean).join(" / ") || ad.id}
+                    </span>
                   </div>
                 </td>
                 <td>

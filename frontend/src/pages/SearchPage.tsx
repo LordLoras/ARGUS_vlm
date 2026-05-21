@@ -34,6 +34,7 @@ export function SearchPage() {
   const [q, setQ] = useState("");
   const [adId, setAdId] = useState("");
   const [brand, setBrand] = useState("");
+  const [promotion, setPromotion] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
   const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("hybrid");
@@ -41,6 +42,7 @@ export function SearchPage() {
     q: string;
     ad_id: string;
     brand: string;
+    promotion: string;
     category: string;
     status: string;
     mode: string;
@@ -108,6 +110,7 @@ export function SearchPage() {
                   q,
                   ad_id: adId,
                   brand,
+                  promotion,
                   category,
                   status,
                   mode,
@@ -151,6 +154,15 @@ export function SearchPage() {
                   placeholder="Any category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
+                />
+              </label>
+              <label className="search-field">
+                <span className="search-label">Promotion</span>
+                <input
+                  className="input search-filter"
+                  placeholder="Any event or deal"
+                  value={promotion}
+                  onChange={(e) => setPromotion(e.target.value)}
                 />
               </label>
               <label className="search-field">
@@ -233,6 +245,7 @@ function SearchResultRow({
   const ad = hit.ad;
   const title = ad?.brand_name || ad?.advertiser_name || hit.ad_id;
   const products = ad?.products_text || "No products extracted";
+  const promotion = ad?.promotion_name;
   const category = ad?.primary_category ?? "uncategorized";
   const metric = formatMetric(hit);
 
@@ -263,7 +276,9 @@ function SearchResultRow({
           <CategoryBadge category={category} />
           {hit.source ? <span className="badge">{hit.source}</span> : null}
         </div>
-        <div className="search-result-products">{products}</div>
+        <div className="search-result-products">
+          {promotion ? `${promotion} / ${products}` : products}
+        </div>
         <div className="search-result-meta">
           <span>{hit.ad_id}</span>
           <span>{formatDuration(ad?.duration_ms)}</span>

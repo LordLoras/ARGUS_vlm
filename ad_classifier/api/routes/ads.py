@@ -26,7 +26,9 @@ from ad_classifier.knowledge.runtime import content_categories_from_ids, product
 from ad_classifier.models.ads import AdRecord
 from ad_classifier.models.iab import IABCategory, IABContentCategory
 from ad_classifier.models.jobs import JobRecord
+from ad_classifier.models.marketing import MarketingEntities
 from ad_classifier.search.fts import fts_delete
+from ad_classifier.search.fts import fts_update
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
 router = APIRouter(tags=["ads"])
@@ -37,6 +39,7 @@ class AdPatch(BaseModel):
     brand_name: str | None = None
     brand_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     advertiser_name: str | None = None
+    promotion_name: str | None = None
     website_domain: str | None = None
     phone_number: str | None = None
     landing_page_domain: str | None = None
@@ -132,6 +135,7 @@ async def upload_ad(
 def list_ads(
     request: Request,
     brand: str | None = None,
+    promotion: str | None = None,
     category: str | None = None,
     risk_label: str | None = None,
     iab_unique_id: str | None = None,
@@ -146,6 +150,7 @@ def list_ads(
     try:
         ads = AdRepository(conn).list(
             brand=brand,
+            promotion=promotion,
             category=category,
             risk_label=risk_label,
             iab_unique_id=iab_unique_id,
@@ -286,39 +291,32 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
         )
         repo.update_projection(
             ad_id,
-            brand_name=patch.brand_name if patch.brand_name is not None else current.brand_name,
-            brand_confidence=(
-                patch.brand_confidence
-                if patch.brand_confidence is not None
-                else current.brand_confidence
+            brand_name=_patch_value(patch, "brand_name", current.brand_name),
+            brand_confidence=_patch_value(
+                patch,
+                "brand_confidence",
+                current.brand_confidence,
             ),
-            advertiser_name=(
-                patch.advertiser_name
-                if patch.advertiser_name is not None
-                else current.advertiser_name
+            advertiser_name=_patch_value(
+                patch,
+                "advertiser_name",
+                current.advertiser_name,
             ),
-            website_domain=(
-                patch.website_domain if patch.website_domain is not None else current.website_domain
+            promotion_name=_patch_value(
+                patch,
+                "promotion_name",
+                current.promotion_name,
             ),
-            phone_number=(
-                patch.phone_number if patch.phone_number is not None else current.phone_number
+            website_domain=_patch_value(patch, "website_domain", current.website_domain),
+            phone_number=_patch_value(patch, "phone_number", current.phone_number),
+            landing_page_domain=_patch_value(
+                patch,
+                "landing_page_domain",
+                current.landing_page_domain,
             ),
-            landing_page_domain=(
-                patch.landing_page_domain
-                if patch.landing_page_domain is not None
-                else current.landing_page_domain
-            ),
-            products_text=(
-                patch.products_text if patch.products_text is not None else current.products_text
-            ),
-            primary_category=(
-                patch.primary_category
-                if patch.primary_category is not None
-                else current.primary_category
-            ),
-            subcategory=(
-                patch.subcategory if patch.subcategory is not None else current.subcategory
-            ),
+            products_text=_patch_value(patch, "products_text", current.products_text),
+            primary_category=_patch_value(patch, "primary_category", current.primary_category),
+            subcategory=_patch_value(patch, "subcategory", current.subcategory),
             iab_unique_id=iab_category.iab_unique_id if iab_category else None,
             iab_parent_id=iab_category.iab_parent_id if iab_category else None,
             iab_tier_1=iab_category.tier_1 if iab_category else None,
@@ -328,10 +326,8 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             iab_selected_category=iab_category.selected_category if iab_category else None,
             iab_full_path=iab_category.full_path if iab_category else None,
             iab_confidence=iab_category.confidence if iab_category else None,
-            iab_content_ids=",".join(item.iab_unique_id for item in iab_content_categories)
-            or None,
-            iab_content_paths=" | ".join(item.full_path for item in iab_content_categories)
-            or None,
+            iab_content_ids=",".join(item.iab_unique_id for item in iab_content_categories) or None,
+            iab_content_paths=" | ".join(item.full_path for item in iab_content_categories) or None,
             iab_content_categories_json=(
                 json.dumps([item.model_dump() for item in iab_content_categories])
                 if iab_content_categories
@@ -350,16 +346,21 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
 
         marketing_repo = MarketingEntityRepository(conn)
         marketing = marketing_repo.get(ad_id)
-        if marketing is not None:
+        marketing_fields = {"promotion_name", "tagline", "offers", "ctas"}
+        if marketing is not None or (marketing_fields & patch.model_fields_set):
+            marketing = marketing or MarketingEntities()
             dirty = False
-            if patch.tagline is not None:
+            if "promotion_name" in patch.model_fields_set:
+                marketing.promotion_name = patch.promotion_name or None
+                dirty = True
+            if "tagline" in patch.model_fields_set:
                 marketing.brand.tagline = patch.tagline or None
                 dirty = True
-            if patch.offers is not None:
+            if "offers" in patch.model_fields_set:
                 from ad_classifier.models.marketing import OfferEntity
 
                 marketing.offers = []
-                for o in patch.offers:
+                for o in patch.offers or []:
                     if o.get("text"):
                         existing = next(
                             (e for e in (marketing.offers or []) if e.text == o["text"]),
@@ -368,11 +369,11 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
                         evidence = existing.evidence if existing else []
                         marketing.offers.append(OfferEntity(text=o["text"], evidence=evidence))
                 dirty = True
-            if patch.ctas is not None:
+            if "ctas" in patch.model_fields_set:
                 from ad_classifier.models.marketing import CTAEntity
 
                 marketing.ctas = []
-                for c in patch.ctas:
+                for c in patch.ctas or []:
                     if c.get("text"):
                         existing = next(
                             (e for e in (marketing.ctas or []) if e.text == c["text"]),
@@ -384,6 +385,7 @@ def patch_ad(ad_id: str, patch: AdPatch, request: Request) -> dict[str, Any]:
             if dirty:
                 marketing_repo.upsert(ad_id, marketing)
 
+        _refresh_fts_row(conn, ad_id)
         conn.commit()
         updated = repo.get(ad_id)
 
@@ -438,6 +440,57 @@ def delete_ad(
 def _safe_suffix(filename: str | None) -> str:
     suffix = Path(filename or "upload.mp4").suffix.lower()
     return suffix if suffix in {".mp4", ".mov", ".webm"} else ".mp4"
+
+
+def _patch_value(patch: AdPatch, field: str, current: Any) -> Any:
+    return getattr(patch, field) if field in patch.model_fields_set else current
+
+
+def _refresh_fts_row(conn, ad_id: str) -> None:
+    ad = AdRepository(conn).get(ad_id)
+    if ad is None:
+        return
+    marketing = MarketingEntityRepository(conn).get(ad_id)
+    existing = conn.execute(
+        "SELECT transcript_text, ocr_text FROM ads_fts WHERE ad_id = ?",
+        (ad_id,),
+    ).fetchone()
+    transcript_text = existing["transcript_text"] if existing else None
+    ocr_text = existing["ocr_text"] if existing else None
+    if transcript_text is None:
+        transcript_row = conn.execute(
+            "SELECT group_concat(text, ' ') AS text FROM transcript_segments WHERE ad_id = ?",
+            (ad_id,),
+        ).fetchone()
+        transcript_text = transcript_row["text"] if transcript_row else ""
+    if ocr_text is None:
+        ocr_row = conn.execute(
+            """
+            SELECT group_concat(o.text, ' ') AS text
+            FROM frames f
+            JOIN ocr_items o ON o.frame_id = f.id
+            WHERE f.ad_id = ?
+            """,
+            (ad_id,),
+        ).fetchone()
+        ocr_text = ocr_row["text"] if ocr_row else ""
+
+    fts_update(
+        conn,
+        ad_id,
+        brand=ad.brand_name or "",
+        promotion_name=ad.promotion_name or "",
+        products=ad.products_text or "",
+        primary_category=ad.primary_category or "",
+        transcript_text=transcript_text or "",
+        ocr_text=ocr_text or "",
+        marketing_entities_text=json.dumps(
+            {
+                "promotion_name": ad.promotion_name,
+                "marketing_entities": marketing.model_dump(mode="json") if marketing else None,
+            }
+        ),
+    )
 
 
 def _dump(value):
@@ -517,7 +570,11 @@ def _resolve_iab_content_patch(
 
 
 def _iab_category_from_ad(ad: AdRecord) -> IABCategory | None:
-    if ad.iab_unique_id and (category := iab_category_from_id(ad.iab_unique_id, confidence=ad.iab_confidence or "unknown")):
+    if ad.iab_unique_id and (
+        category := iab_category_from_id(
+            ad.iab_unique_id, confidence=ad.iab_confidence or "unknown"
+        )
+    ):
         return category
     if not ad.iab_unique_id or not ad.iab_selected_category or not ad.iab_full_path:
         return None
@@ -542,9 +599,7 @@ def _iab_content_categories_from_ad(ad: AdRecord) -> list[IABContentCategory]:
             raw = []
         if isinstance(raw, list):
             parsed = [
-                IABContentCategory.model_validate(item)
-                for item in raw
-                if isinstance(item, dict)
+                IABContentCategory.model_validate(item) for item in raw if isinstance(item, dict)
             ]
             if parsed:
                 return parsed
@@ -610,6 +665,12 @@ def _record_corrections(
 
     if patch.brand_name is not None and patch.brand_name != current.brand_name:
         corrections.append(("brand_name", current.brand_name, patch.brand_name))
+
+    if (
+        "promotion_name" in patch.model_fields_set
+        and patch.promotion_name != current.promotion_name
+    ):
+        corrections.append(("promotion_name", current.promotion_name, patch.promotion_name))
 
     if iab_product_set and patch.iab_product_id != current.iab_unique_id:
         corrections.append(("iab_product_id", current.iab_unique_id, patch.iab_product_id))

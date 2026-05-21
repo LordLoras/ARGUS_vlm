@@ -63,6 +63,7 @@ class AdRepository:
         *,
         brand: str | None = None,
         advertiser: str | None = None,
+        promotion: str | None = None,
         category: str | None = None,
         subcategory: str | None = None,
         status: str | None = None,
@@ -82,6 +83,9 @@ class AdRepository:
         if advertiser:
             clauses.append("LOWER(advertiser_name) = LOWER(?)")
             params.append(advertiser)
+        if promotion:
+            clauses.append("LOWER(promotion_name) = LOWER(?)")
+            params.append(promotion)
         if category:
             if has_alias_expansion(category):
                 loose_clause, loose_params = build_loose_like_clause(category)
@@ -225,6 +229,7 @@ class AdRepository:
         brand_name: str | None,
         brand_confidence: float | None,
         advertiser_name: str | None = None,
+        promotion_name: str | None = None,
         website_domain: str | None = None,
         phone_number: str | None = None,
         landing_page_domain: str | None = None,
@@ -250,6 +255,7 @@ class AdRepository:
             SET brand_name = ?,
                 brand_confidence = ?,
                 advertiser_name = ?,
+                promotion_name = ?,
                 website_domain = ?,
                 phone_number = ?,
                 landing_page_domain = ?,
@@ -274,6 +280,7 @@ class AdRepository:
                 brand_name,
                 brand_confidence,
                 advertiser_name,
+                promotion_name,
                 website_domain,
                 phone_number,
                 landing_page_domain,

@@ -11,6 +11,7 @@ export class SearchService {
      * @param q
      * @param mode
      * @param adId
+     * @param promotion
      * @param k
      * @returns any Successful Response
      * @throws ApiError
@@ -19,6 +20,7 @@ export class SearchService {
         q?: (string | null),
         mode: 'keyword' | 'text' | 'visual' | 'hybrid' = 'hybrid',
         adId?: (string | null),
+        promotion?: (string | null),
         k: number = 10,
     ): CancelablePromise<Record<string, any>> {
         return __request(OpenAPI, {
@@ -28,6 +30,7 @@ export class SearchService {
                 'q': q,
                 'mode': mode,
                 'ad_id': adId,
+                'promotion': promotion,
                 'k': k,
             },
             errors: {

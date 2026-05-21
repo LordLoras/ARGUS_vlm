@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS ads (
   status TEXT,
   brand_name TEXT,
   brand_confidence REAL,
+  promotion_name TEXT,
   products_text TEXT,
   primary_category TEXT,
   decision TEXT,
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS ads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ads_brand ON ads(brand_name);
+CREATE INDEX IF NOT EXISTS idx_ads_promotion_name ON ads(promotion_name);
 CREATE INDEX IF NOT EXISTS idx_ads_category ON ads(primary_category);
 CREATE INDEX IF NOT EXISTS idx_ads_decision ON ads(decision);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ads_source_hash ON ads(source_hash) WHERE source_hash IS NOT NULL;
@@ -91,6 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_classifications_pipeline_version ON classificatio
 CREATE TABLE IF NOT EXISTS marketing_entities (
   ad_id TEXT PRIMARY KEY REFERENCES ads(id) ON DELETE CASCADE,
   brand_json TEXT,
+  promotion_name_json TEXT,
   products_json TEXT,
   prices_json TEXT,
   offers_json TEXT,

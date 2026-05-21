@@ -48,6 +48,7 @@ export function OverviewTab({
   const subcategory = detail.ad.subcategory ?? ent?.subcategory ?? null;
   const brandName = detail.ad.brand_name || ent?.brand?.name || null;
   const advertiserName = detail.ad.advertiser_name || ent?.advertiser?.advertiser_name || null;
+  const promotionName = detail.ad.promotion_name || ent?.promotion_name || null;
   const iab = cls?.iab_category ?? (
     detail.ad.iab_unique_id && detail.ad.iab_full_path && detail.ad.iab_selected_category
       ? {
@@ -173,6 +174,8 @@ export function OverviewTab({
           <dd>{advertiserName || "—"}</dd>
           <dt>Tagline</dt>
           <dd>{ent?.brand?.tagline || "—"}</dd>
+          <dt>Promotion</dt>
+          <dd>{promotionName || "—"}</dd>
           <dt>Products</dt>
           <dd>{products.length ? products.join(", ") : "—"}</dd>
         </dl>

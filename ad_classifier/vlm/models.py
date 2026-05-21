@@ -196,6 +196,7 @@ class VLMCampaignSuggestion(_VLMBase):
 
 class VLMMarketingEntities(_VLMBase):
     brand: VLMBrand = Field(default_factory=VLMBrand)
+    promotion_name: str | None = None
     subcategory: str | None = None
     products: list[str] = Field(default_factory=list)
     prices: list[VLMPrice] = Field(default_factory=list)

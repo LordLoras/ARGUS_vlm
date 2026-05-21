@@ -29,6 +29,9 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
     brand_raw = data.get("brand_json")
     brand = BrandEntity.model_validate(json.loads(brand_raw)) if brand_raw else BrandEntity()
 
+    promotion_name_raw = data.get("promotion_name_json")
+    promotion_name = json.loads(promotion_name_raw) if promotion_name_raw else None
+
     subcategory_raw = data.get("subcategory_json")
     subcategory = json.loads(subcategory_raw) if subcategory_raw else None
 
@@ -95,6 +98,7 @@ def _to_record(row: sqlite3.Row) -> MarketingEntities:
 
     return MarketingEntities(
         brand=brand,
+        promotion_name=promotion_name,
         subcategory=subcategory,
         products=products,
         prices=prices,
@@ -120,13 +124,14 @@ class MarketingEntityRepository:
         self.conn.execute(
             """
             INSERT INTO marketing_entities (
-              ad_id, brand_json, subcategory_json, products_json, prices_json, offers_json,
+              ad_id, brand_json, promotion_name_json, subcategory_json, products_json, prices_json, offers_json,
               ctas_json, social_proof_json, disclaimers_json, creative_format_json,
               contact_points_json, advertiser_json, landing_page_json, offer_terms_json,
               creative_attributes_json, campaign_suggestions_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(ad_id) DO UPDATE SET
               brand_json = excluded.brand_json,
+              promotion_name_json = excluded.promotion_name_json,
               subcategory_json = excluded.subcategory_json,
               products_json = excluded.products_json,
               prices_json = excluded.prices_json,
@@ -145,6 +150,7 @@ class MarketingEntityRepository:
             (
                 ad_id,
                 json.dumps(entities.brand.model_dump()),
+                json.dumps(entities.promotion_name) if entities.promotion_name else None,
                 json.dumps(entities.subcategory) if entities.subcategory else None,
                 json.dumps(entities.products),
                 json.dumps([p.model_dump() for p in entities.prices]),

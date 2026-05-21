@@ -113,6 +113,7 @@ def fts_update(
     ad_id: str,
     *,
     brand: str = "",
+    promotion_name: str = "",
     products: str = "",
     primary_category: str = "",
     transcript_text: str = "",
@@ -120,6 +121,8 @@ def fts_update(
     marketing_entities_text: str = "",
 ) -> None:
     """Insert or replace a row in ads_fts."""
+    if promotion_name:
+        marketing_entities_text = f"{promotion_name}\n{marketing_entities_text}".strip()
     conn.execute("DELETE FROM ads_fts WHERE ad_id = ?", (ad_id,))
     conn.execute(
         """

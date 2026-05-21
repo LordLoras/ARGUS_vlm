@@ -17,10 +17,12 @@ from ad_classifier.models.marketing import (
 def test_marketing_entities_projection_text():
     entities = MarketingEntities(
         brand=BrandEntity(name="Example Brand", confidence=0.91),
+        promotion_name="Jeep Declaration of Deals",
         products=["Widget", "Widget Pro"],
     )
 
     assert entities.brand.name == "Example Brand"
+    assert entities.promotion_name == "Jeep Declaration of Deals"
     assert entities.products_text == "Widget, Widget Pro"
 
 

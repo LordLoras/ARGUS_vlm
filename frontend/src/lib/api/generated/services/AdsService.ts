@@ -30,6 +30,7 @@ export class AdsService {
     /**
      * List Ads
      * @param brand
+     * @param promotion
      * @param category
      * @param status
      * @param q
@@ -40,6 +41,7 @@ export class AdsService {
      */
     public static listAdsApiAdsGet(
         brand?: (string | null),
+        promotion?: (string | null),
         category?: (string | null),
         status?: (string | null),
         q?: (string | null),
@@ -51,6 +53,7 @@ export class AdsService {
             url: '/api/ads',
             query: {
                 'brand': brand,
+                'promotion': promotion,
                 'category': category,
                 'status': status,
                 'q': q,

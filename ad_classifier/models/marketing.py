@@ -193,6 +193,7 @@ class CampaignSuggestion(StrictModel):
 
 class MarketingEntities(StrictModel):
     brand: BrandEntity = Field(default_factory=BrandEntity)
+    promotion_name: str | None = None
     subcategory: str | None = None
     products: list[str] = Field(default_factory=list)
     prices: list[PriceEntity] = Field(default_factory=list)

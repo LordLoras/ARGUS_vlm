@@ -56,7 +56,7 @@ class CompareAdsTool(AgentTool):
     name = "compare_ads"
     description = (
         "Pairwise comparison of two ads by ad_id. Returns text + visual cosine "
-        "similarity plus a structured field diff (brand, products, prices, offers, "
+        "similarity plus a structured field diff (brand, promotion, products, prices, offers, "
         "CTAs, primary_category) and a verdict like 'same_campaign_different_sku'."
     )
 
@@ -125,6 +125,12 @@ class CompareAdsTool(AgentTool):
         r_ctas = _cta_strings(right_marketing)
         l_sub = left_marketing.subcategory if left_marketing else None
         r_sub = right_marketing.subcategory if right_marketing else None
+        l_promo = left_ad.promotion_name or (
+            left_marketing.promotion_name if left_marketing else None
+        )
+        r_promo = right_ad.promotion_name or (
+            right_marketing.promotion_name if right_marketing else None
+        )
 
         classifications = ClassificationRepository(ctx.conn)
         l_class = classifications.get(left_id)
@@ -136,6 +142,7 @@ class CompareAdsTool(AgentTool):
             d
             for d in (
                 _diff_field("brand", l_brand, r_brand),
+                _diff_field("promotion_name", l_promo, r_promo),
                 _diff_field("subcategory", l_sub, r_sub),
                 _diff_field("products", l_products, r_products),
                 _diff_field("prices", l_prices, r_prices),

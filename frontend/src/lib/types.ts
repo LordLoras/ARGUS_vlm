@@ -10,6 +10,7 @@ export type AdRecord = {
   brand_name?: string | null;
   brand_confidence?: number | null;
   advertiser_name?: string | null;
+  promotion_name?: string | null;
   website_domain?: string | null;
   phone_number?: string | null;
   landing_page_domain?: string | null;
@@ -260,6 +261,7 @@ export type MarketingEntities = {
     logo_evidence?: EvidenceItem[];
     tagline?: string | null;
   };
+  promotion_name?: string | null;
   subcategory?: string | null;
   products?: string[];
   prices?: Array<{
