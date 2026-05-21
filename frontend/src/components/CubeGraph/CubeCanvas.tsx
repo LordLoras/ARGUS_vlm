@@ -1,6 +1,5 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import ForceGraph3D from "react-force-graph-3d";
-import SpriteText from "three-spritetext";
 import * as THREE from "three";
 import type { GraphData, GraphNode, GraphLink, NodeType } from "./types";
 import { NODE_TYPE_COLORS, NODE_TYPE_SIZES, FACE_COLORS } from "./types";
@@ -12,8 +11,6 @@ interface Props {
   onBackgroundClick?: () => void;
   hoveredNodeId: string | null;
   onNodeHover: (node: GraphNode | null) => void;
-  newNodeIds?: Set<string>;
-  expandingFromId?: string | null;
 }
 
 interface ConnectionMap {
@@ -95,12 +92,6 @@ function graphLinkKey(link: GraphLink): string {
 function colorToRgba(hex: string, opacity: number): string {
   const c = new THREE.Color(hex);
   return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${opacity})`;
-}
-
-function formatRelationshipLabel(label?: string): string {
-  return (label ?? "related")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
@@ -440,21 +431,10 @@ export function CubeCanvas({
   onBackgroundClick,
   hoveredNodeId,
   onNodeHover,
-  newNodeIds,
-  expandingFromId,
 }: Props) {
   const fgRef = useRef<any>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const [hoverTip, setHoverTip] = useState<{
-    x: number;
-    y: number;
-    label: string;
-    typeLabel: string;
-    color: string;
-    connections: number;
-    relationship: string;
-  } | null>(null);
   const cubeGroupRefs = useRef(new Map<string, THREE.Group>());
   const animFrame = useRef<number>(0);
   const hadSelectionRef = useRef(false);
@@ -494,7 +474,6 @@ export function CubeCanvas({
       const strength = link.strength ?? 0.5;
       return 90 + (1 - strength) * 50;
     });
-    fg.d3ReheatSimulation?.();
   }, [graphData]);
 
   const flyToNode = useCallback((nodeId: string) => {
@@ -590,13 +569,10 @@ export function CubeCanvas({
     (node: GraphNode) => {
       const isSelected = node.id === selectedNodeId;
       const isHovered = node.id === hoveredNodeId;
-      const isFresh = newNodeIds?.has(node.id) ?? false;
-      const isExpansionSource = node.id === expandingFromId;
       const size = NODE_TYPE_SIZES[node.type] ?? 5;
-      const cubeSize = size * (isSelected ? 3.1 : isHovered ? 1.45 : isFresh ? 1.32 : 1.1);
+      const cubeSize = size * (isSelected ? 3.1 : isHovered ? 1.45 : 1.1);
 
       const group = new THREE.Group();
-      if (isFresh) group.scale.setScalar(1.08);
       const geometry = getBoxGeometry(cubeSize);
 
       const materials = buildCubeMaterials(node, graphData);
@@ -618,12 +594,6 @@ export function CubeCanvas({
         group.add(new THREE.Mesh(glowGeo, getGlowMaterial(node.type, isSelected ? 0.12 : 0.05)));
       }
 
-      if (isFresh || isExpansionSource) {
-        const pulseSize = cubeSize * (isFresh ? 1.68 : 1.42);
-        const pulseOpacity = isFresh ? 0.18 : 0.09;
-        group.add(new THREE.Mesh(getBoxGeometry(pulseSize), getGlowMaterial(node.type, pulseOpacity)));
-      }
-
       if (isSelected) {
         const focusedRotation = getFocusedFaceRotation(node, graphData);
         group.rotation.x = focusedRotation.x;
@@ -636,7 +606,7 @@ export function CubeCanvas({
       cubeGroupRefs.current.set(node.id, group);
       return group;
     },
-    [selectedNodeId, hoveredNodeId, graphData, graphSignature, newNodeIds, expandingFromId]
+    [selectedNodeId, hoveredNodeId, graphData, graphSignature]
   );
 
   useEffect(() => {
@@ -700,52 +670,6 @@ export function CubeCanvas({
     [getHorizonLinkType]
   );
 
-  const hoverConnectionSummary = useMemo(() => {
-    if (!hoveredNodeId) return null;
-    const hovered = nodeMap.get(hoveredNodeId);
-    if (!hovered) return null;
-    const adjacentLinks = graphData.links.filter((link) => {
-      const src = getEndpointId(link.source);
-      const tgt = getEndpointId(link.target);
-      return src === hoveredNodeId || tgt === hoveredNodeId;
-    });
-    const topRelationship = adjacentLinks[0]?.label;
-    return {
-      label: hovered.label,
-      typeLabel: NODE_TYPE_LABELS[hovered.type] ?? hovered.type,
-      color: NODE_TYPE_COLORS[hovered.type],
-      connections: adjacentLinks.length,
-      relationship: formatRelationshipLabel(topRelationship),
-    };
-  }, [hoveredNodeId, nodeMap, graphData.links]);
-
-  useEffect(() => {
-    if (!hoveredNodeId || !hoverConnectionSummary) {
-      setHoverTip(null);
-      return;
-    }
-
-    let frame = 0;
-    const updateTip = () => {
-      const fg = fgRef.current;
-      const liveGraph = typeof fg?.graphData === "function" ? fg.graphData() : null;
-      const liveNode = liveGraph?.nodes?.find((node: GraphNode) => node.id === hoveredNodeId);
-      if (fg && liveNode?.x != null && liveNode.y != null && liveNode.z != null) {
-        const coords = fg.graph2ScreenCoords(liveNode.x, liveNode.y, liveNode.z);
-        if (coords && Number.isFinite(coords.x) && Number.isFinite(coords.y)) {
-          setHoverTip({
-            x: Math.min(Math.max(coords.x + 16, 12), Math.max(12, dimensions.width - 244)),
-            y: Math.min(Math.max(coords.y - 58, 12), Math.max(12, dimensions.height - 112)),
-            ...hoverConnectionSummary,
-          });
-        }
-      }
-      frame = requestAnimationFrame(updateTip);
-    };
-    frame = requestAnimationFrame(updateTip);
-    return () => cancelAnimationFrame(frame);
-  }, [hoveredNodeId, hoverConnectionSummary, dimensions.width, dimensions.height]);
-
   const getLinkColor = useCallback(
     (link: GraphLink) => {
       if (isLinkHighlighted(link)) {
@@ -777,38 +701,6 @@ export function CubeCanvas({
     [isLinkHighlighted, isHorizonLink]
   );
 
-  const buildLinkLabel = useCallback(
-    (link: GraphLink) => {
-      const highlighted = isLinkHighlighted(link);
-      const horizonType = getHorizonLinkType(link);
-      if (!highlighted && !horizonType) return null;
-
-      const activeColor = horizonType
-        ? NODE_TYPE_COLORS[horizonType]
-        : (() => {
-            const srcId = getEndpointId(link.source);
-            const tgtId = getEndpointId(link.target);
-            const activeId = srcId === selectedNodeId || srcId === hoveredNodeId ? srcId : tgtId;
-            return NODE_TYPE_COLORS[nodeMap.get(activeId)?.type ?? "company"];
-          })();
-      const sprite = new SpriteText(formatRelationshipLabel(link.label), highlighted ? 2.5 : 2.05, "#f8fafc");
-      sprite.backgroundColor = colorToRgba(activeColor, highlighted ? 0.34 : 0.22);
-      sprite.borderColor = colorToRgba(activeColor, highlighted ? 0.9 : 0.6);
-      sprite.borderWidth = highlighted ? 0.7 : 0.45;
-      sprite.borderRadius = 2;
-      sprite.padding = highlighted ? 1.8 : 1.4;
-      return sprite;
-    },
-    [isLinkHighlighted, getHorizonLinkType, nodeMap, selectedNodeId, hoveredNodeId]
-  );
-
-  const updateLinkLabelPosition = useCallback((sprite: any, { start, end }: any) => {
-    if (!sprite || !start || !end) return;
-    sprite.position.x = start.x + (end.x - start.x) * 0.5;
-    sprite.position.y = start.y + (end.y - start.y) * 0.5 + 4;
-    sprite.position.z = start.z + (end.z - start.z) * 0.5;
-  }, []);
-
   return (
     <div className="kg-canvas-wrap" ref={wrapRef}>
       <ForceGraph3D
@@ -828,12 +720,8 @@ export function CubeCanvas({
         linkColor={getLinkColor as any}
         linkWidth={getLinkWidth}
         linkDirectionalParticles={(link: any) => (isLinkHighlighted(link) ? 3 : isHorizonLink(link) ? 2 : 0)}
-        linkDirectionalParticleWidth={(link: any) => (isLinkHighlighted(link) ? 2.2 : isHorizonLink(link) ? 1.45 : 0)}
+        linkDirectionalParticleWidth={1.4}
         linkDirectionalParticleSpeed={0.007}
-        linkLabel={(link: any) => formatRelationshipLabel(link.label)}
-        linkThreeObject={buildLinkLabel as any}
-        linkThreeObjectExtend={true}
-        linkPositionUpdate={updateLinkLabelPosition as any}
         linkDirectionalArrowLength={0}
         linkCurvature={0}
         linkVisibility={true}
@@ -846,19 +734,6 @@ export function CubeCanvas({
         controlType="orbit"
         showNavInfo={false}
       />
-      {hoverTip && (
-        <div className="cg-hover-card" style={{ left: hoverTip.x, top: hoverTip.y, borderColor: `${hoverTip.color}55` }}>
-          <div className="cg-hover-card-top">
-            <span className="cg-hover-card-dot" style={{ background: hoverTip.color, boxShadow: `0 0 14px ${hoverTip.color}80` }} />
-            <span className="cg-hover-card-type" style={{ color: hoverTip.color }}>{hoverTip.typeLabel}</span>
-          </div>
-          <div className="cg-hover-card-title">{hoverTip.label}</div>
-          <div className="cg-hover-card-meta">
-            <span>{hoverTip.connections} links</span>
-            <span>{hoverTip.relationship}</span>
-          </div>
-        </div>
-      )}
       <div className="cg-face-legend">
         <div className="cg-face-legend-title">Cube Faces</div>
         <div className="cg-face-item">
