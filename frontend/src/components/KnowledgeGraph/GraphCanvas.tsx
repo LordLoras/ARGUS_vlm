@@ -38,9 +38,12 @@ export function GraphCanvas({
   onNodeHover,
 }: Props) {
   const fgRef = useRef<any>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setDimensions({
@@ -49,8 +52,7 @@ export function GraphCanvas({
         });
       }
     });
-    const wrap = fgRef.current?.parentNode?.parentNode;
-    if (wrap) observer.observe(wrap);
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
@@ -236,7 +238,7 @@ export function GraphCanvas({
   );
 
   return (
-    <div className="kg-canvas-wrap">
+    <div className="kg-canvas-wrap" ref={wrapRef}>
       <ForceGraph3D
         ref={fgRef}
         width={dimensions.width}
