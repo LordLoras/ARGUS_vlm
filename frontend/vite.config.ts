@@ -566,6 +566,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [demoAuthPlugin(auth), react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "three-vendor": ["three", "react-force-graph-3d", "three-spritetext"]
+          }
+        }
+      }
+    },
     server: {
       host: env.VITE_DEV_HOST || "127.0.0.1",
       port: Number(env.VITE_DEV_PORT || 5173),

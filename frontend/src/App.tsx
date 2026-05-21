@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
@@ -13,6 +14,10 @@ import { SearchPage } from "./pages/SearchPage";
 import { Settings } from "./pages/Settings";
 import { Taxonomy } from "./pages/Taxonomy";
 import { Upload } from "./pages/Upload";
+
+const KnowledgeGraph = lazy(() =>
+  import("./pages/KnowledgeGraph").then((m) => ({ default: m.KnowledgeGraph }))
+);
 
 function Placeholder({ title, hint }: { title: string; hint?: string }) {
   return (
@@ -48,6 +53,7 @@ export default function App() {
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/agent" element={<Agent />} />
         <Route path="/debate" element={<DebatePanel />} />
+        <Route path="/graph" element={<Suspense fallback={null}><KnowledgeGraph /></Suspense>} />
         <Route path="/taxonomy" element={<Taxonomy />} />
         <Route path="/pipelines" element={<Jobs />} />
         <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />

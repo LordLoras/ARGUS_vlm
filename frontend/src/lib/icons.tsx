@@ -197,3 +197,14 @@ export const InfoIcon = ({ size = 11, ...props }: Props) => (
     <line x1="12" y1="8" x2="12.01" y2="8" />
   </svg>
 );
+
+export const GraphIcon = ({ size = 14, ...props }: Props) => (
+  <svg {...base(size, props)} strokeWidth={1.9}>
+    <circle cx="5" cy="6" r="2.5" />
+    <circle cx="19" cy="6" r="2.5" />
+    <circle cx="12" cy="19" r="2.5" />
+    <line x1="7" y1="7.5" x2="10" y2="17" />
+    <line x1="17" y1="7.5" x2="14" y2="17" />
+    <line x1="7.5" y1="6" x2="16.5" y2="6" />
+  </svg>
+);
