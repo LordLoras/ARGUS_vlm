@@ -13,23 +13,6 @@ interface Props {
   onNodeHover: (node: GraphNode | null) => void;
 }
 
-const LINK_LABELS: Record<string, string> = {
-  owns: "owns",
-  produces: "makes",
-  category: "in",
-  operates_in: "operates in",
-  includes: "includes",
-  merged_into: "merged into",
-  owned: "owned",
-  partnership: "partnership",
-  performance_line: "performance line",
-};
-
-function formatLinkLabel(label?: string): string {
-  if (!label) return "";
-  return LINK_LABELS[label] ?? label;
-}
-
 export function GraphCanvas({
   graphData,
   selectedNodeId,
@@ -87,31 +70,31 @@ export function GraphCanvas({
     [onNodeClick]
   );
 
-  const customNodeRenderer = useCallback(
+const customNodeRenderer = useCallback(
     (node: GraphNode) => {
       const color = NODE_TYPE_COLORS[node.type];
       const isSelected = node.id === selectedNodeId;
       const isHovered = node.id === hoveredNodeId;
       const size = NODE_TYPE_SIZES[node.type] ?? 5;
-      const radius = size * (isSelected ? 0.7 : isHovered ? 0.65 : 0.55);
+      const radius = size * (isSelected ? 0.6 : isHovered ? 0.55 : 0.45);
 
       const group = new THREE.Group();
 
-      const geometry = new THREE.SphereGeometry(radius, 28, 28);
+      const geometry = new THREE.SphereGeometry(radius, 24, 24);
       const material = new THREE.MeshStandardMaterial({
         color,
         emissive: new THREE.Color(color),
-        emissiveIntensity: isSelected ? 1.2 : isHovered ? 0.75 : 0.35,
+        emissiveIntensity: isSelected ? 1.0 : isHovered ? 0.6 : 0.3,
         transparent: true,
-        opacity: isSelected ? 1.0 : isHovered ? 0.96 : 0.88,
-        roughness: 0.25,
-        metalness: 0.7,
+        opacity: isSelected ? 1.0 : isHovered ? 0.95 : 0.85,
+        roughness: 0.3,
+        metalness: 0.65,
       });
       const sphere = new THREE.Mesh(geometry, material);
       group.add(sphere);
 
       if (isSelected || isHovered) {
-        const glowGeo = new THREE.SphereGeometry(radius * 1.55, 20, 20);
+        const glowGeo = new THREE.SphereGeometry(radius * 1.6, 16, 16);
         const glowMat = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
@@ -135,25 +118,21 @@ export function GraphCanvas({
       }
 
       const label = node.label;
-      const labelSize = isSelected
-        ? Math.max(3.2, size * 0.6)
-        : isHovered
-        ? Math.max(2.8, size * 0.55)
-        : Math.max(2.4, size * 0.5);
-      const sprite = new SpriteText(label, labelSize, "#d4d8e0");
-      sprite.position.y = radius + 2.5;
-      sprite.textHeight = labelSize;
+      const labelTextSize = isSelected ? 3.0 : isHovered ? 2.7 : 2.3;
+      const sprite = new SpriteText(label, labelTextSize, "#e8eaee");
+      sprite.position.y = radius + 3.8;
+      sprite.textHeight = labelTextSize;
       sprite.backgroundColor = isSelected
-        ? "rgba(12,13,17,0.85)"
+        ? "rgba(10,12,16,0.92)"
         : isHovered
-        ? "rgba(12,13,17,0.75)"
-        : "rgba(8,9,11,0.55)";
-      sprite.padding = 1.4;
-      sprite.borderRadius = 1.8;
+        ? "rgba(10,12,16,0.88)"
+        : "rgba(10,12,16,0.78)";
+      sprite.padding = 1.6;
+      sprite.borderRadius = 2.0;
       sprite.borderColor = isSelected
         ? color
-        : "rgba(255,255,255,0.06)";
-      sprite.borderWidth = isSelected ? 0.8 : 0.3;
+        : "rgba(255,255,255,0.08)";
+      sprite.borderWidth = isSelected ? 1.0 : 0.4;
       group.add(sprite);
 
       return group;
@@ -210,33 +189,6 @@ export function GraphCanvas({
     [selectedNodeId, hoveredNodeId]
   );
 
-  const linkThreeObject = useCallback(
-    (link: GraphLink) => {
-      const src =
-        typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
-      const tgt =
-        typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-      const isActive =
-        src === selectedNodeId ||
-        tgt === selectedNodeId ||
-        src === hoveredNodeId ||
-        tgt === hoveredNodeId;
-
-      const sprite = new SpriteText(
-        formatLinkLabel(link.label),
-        isActive ? 2.0 : 1.4,
-        isActive ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.2)"
-      );
-      sprite.backgroundColor = isActive
-        ? "rgba(14,10,30,0.7)"
-        : "rgba(8,9,11,0.35)";
-      sprite.padding = 0.6;
-      sprite.borderRadius = 1;
-      return sprite;
-    },
-    [selectedNodeId, hoveredNodeId]
-  );
-
   return (
     <div className="kg-canvas-wrap" ref={wrapRef}>
       <ForceGraph3D
@@ -248,7 +200,7 @@ export function GraphCanvas({
         nodeVal={(node: any) => NODE_TYPE_SIZES[node.type as NodeType] ?? 5}
         nodeColor={(node: any) => NODE_TYPE_COLORS[node.type as NodeType]}
         nodeThreeObject={customNodeRenderer}
-        nodeThreeObjectExtend={true}
+        nodeThreeObjectExtend={false}
         onNodeClick={handleNodeClick}
         onNodeHover={(node: any) => onNodeHover(node ?? null)}
         onNodeDragEnd={(node: any) => {
@@ -262,16 +214,8 @@ export function GraphCanvas({
         linkDirectionalParticleWidth={getLinkParticleWidth as any}
         linkDirectionalParticleSpeed={0.006}
         linkDirectionalArrowLength={0}
-        linkCurvature={0.1}
+        linkCurvature={0.08}
         linkVisibility={true}
-        linkThreeObject={linkThreeObject as any}
-        linkThreeObjectExtend={true}
-        linkPositionUpdate={(sprite: any, { start, end }: any) => {
-          const posX = (start.x + end.x) / 2;
-          const posY = (start.y + end.y) / 2;
-          const posZ = (start.z + end.z) / 2;
-          sprite.position.set(posX, posY, posZ);
-        }}
         backgroundColor="#08090b"
         warmupTicks={80}
         cooldownTicks={500}
