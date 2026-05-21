@@ -24,18 +24,29 @@ interface ScatterResponse {
   projection?: string;
 }
 
-const EMBEDDING_META: Record<EmbeddingType, { label: string; model: string; dims: string; source: string }> = {
+const EMBEDDING_META: Record<EmbeddingType, {
+  label: string;
+  model: string;
+  dims: string;
+  source: string;
+  territory: string;
+  explanation: string;
+}> = {
   text: {
     label: "MiniLM space",
     model: "MiniLM text vectors",
     dims: "384d",
-    source: "Transcript + OCR",
+    source: "Transcript + OCR language",
+    territory: "Message territory",
+    explanation: "Bubbles sit close together when ads use similar language, offers, claims, or calls to action.",
   },
   visual: {
     label: "SigLIP space",
     model: "SigLIP 2 visual vectors",
     dims: "768d",
-    source: "Keyframe mean pool",
+    source: "Keyframe visual style",
+    territory: "Creative territory",
+    explanation: "Bubbles sit close together when ads share similar scenes, objects, layouts, or visual treatment.",
   },
 };
 
@@ -358,8 +369,14 @@ export function Embeddings() {
 
               <div className="es-map-panel">
                 <div className="es-map-panel-head">
-                  <span className="es-map-kicker">Guided projection</span>
-                  <strong>{embeddingMeta.model}</strong>
+                  <span className="es-map-kicker">Ad similarity map</span>
+                  <strong>{embeddingMeta.territory}</strong>
+                  <p>{embeddingMeta.explanation}</p>
+                </div>
+                <div className="es-map-reading">
+                  <span><b>Bubble</b> one ad</span>
+                  <span><b>Near</b> similar</span>
+                  <span><b>Color</b> category</span>
                 </div>
                 <div className="es-map-grid">
                   <span><b>{stats.sampled}</b> sampled</span>
@@ -435,13 +452,13 @@ export function Embeddings() {
                     </div>
                     <div className="es-metric-card">
                       <span className="es-metric-value">{clusterAds.length}</span>
-                      <span className="es-metric-label">Cluster Size</span>
+                      <span className="es-metric-label">Similar Ads</span>
                     </div>
                     <div className="es-metric-card">
                       <span className="es-metric-value">
                         {data?.points.filter((p) => p.category === selectedPoint.category).length ?? 0}
                       </span>
-                      <span className="es-metric-label">In Category</span>
+                      <span className="es-metric-label">Category Total</span>
                     </div>
                     <div className="es-metric-card">
                       <span className="es-metric-value">{embedType === "text" ? "384" : "768"}</span>
@@ -452,7 +469,7 @@ export function Embeddings() {
                   <div className="es-vector-strip">
                     <div>
                       <span>Model</span>
-                      <strong>{embeddingMeta.model}</strong>
+                      <strong>{embeddingMeta.territory}</strong>
                     </div>
                     <div>
                       <span>P1</span>
@@ -497,7 +514,7 @@ export function Embeddings() {
                   <div className="es-cluster-section">
                     <div className="es-cluster-header">
                       <span className="es-cluster-dot" style={{ background: selectedColor, boxShadow: `0 0 8px ${selectedColor}40` }} />
-                      <span className="es-cluster-title" style={{ color: selectedColor }}>Nearest Cluster</span>
+                      <span className="es-cluster-title" style={{ color: selectedColor }}>Most Similar Ads</span>
                       <span className="es-cluster-count">{clusterAds.length}</span>
                     </div>
                     <div className="es-cluster-items">

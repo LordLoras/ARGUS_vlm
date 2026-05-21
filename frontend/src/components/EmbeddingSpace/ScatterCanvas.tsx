@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import * as THREE from "three";
+import SpriteText from "three-spritetext";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -27,12 +28,14 @@ interface Props {
   activeCategories: Set<string>;
 }
 
-const POINT_SIZE_BASE = 0.55;
-const POINT_SIZE_MAX = 1.3;
+const POINT_SIZE_BASE = 0.74;
+const POINT_SIZE_MAX = 1.62;
 const BG_COLOR = 0x06070a;
 const RAYCASTER_THRESHOLD = 2.0;
 
-const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
+const sphereGeo = new THREE.SphereGeometry(1, 28, 20);
+const shellGeo = new THREE.SphereGeometry(1.08, 28, 18);
+const haloGeo = new THREE.TorusGeometry(1.32, 0.025, 8, 72);
 
 const colorCache = new Map<string, THREE.Color>();
 function getColor(hex: string): THREE.Color {
@@ -42,6 +45,61 @@ function getColor(hex: string): THREE.Color {
     colorCache.set(hex, c);
   }
   return c;
+}
+
+const glowTextureCache = new Map<string, THREE.CanvasTexture>();
+function getGlowTexture(hex: string): THREE.CanvasTexture {
+  let texture = glowTextureCache.get(hex);
+  if (texture) return texture;
+
+  const color = getColor(hex);
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    texture = new THREE.CanvasTexture(canvas);
+    glowTextureCache.set(hex, texture);
+    return texture;
+  }
+
+  const r = Math.round(color.r * 255);
+  const g = Math.round(color.g * 255);
+  const b = Math.round(color.b * 255);
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, `rgba(255,255,255,0.78)`);
+  gradient.addColorStop(0.18, `rgba(${r},${g},${b},0.5)`);
+  gradient.addColorStop(0.48, `rgba(${r},${g},${b},0.18)`);
+  gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+
+  texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  glowTextureCache.set(hex, texture);
+  return texture;
+}
+
+function disposeMaterial(material: THREE.Material | THREE.Material[] | undefined) {
+  if (!material) return;
+  const materials = Array.isArray(material) ? material : [material];
+  materials.forEach((mat) => {
+    const mapped = mat as THREE.Material & { map?: THREE.Texture };
+    if (mapped.map && !Array.from(glowTextureCache.values()).includes(mapped.map as THREE.CanvasTexture)) {
+      mapped.map.dispose();
+    }
+    mat.dispose();
+  });
+}
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    disposeMaterial((child as THREE.Mesh | THREE.Sprite).material);
+  });
+}
+
+function formatCategoryLabel(category: string) {
+  return category.replace(/_/g, " ");
 }
 
 export function ScatterCanvas({
@@ -65,13 +123,14 @@ export function ScatterCanvas({
   const raycaster = useRef(new THREE.Raycaster());
   const mouse = useRef(new THREE.Vector2());
   const meshToId = useRef(new Map<number, string>());
-  const idToMesh = useRef(new Map<string, THREE.Mesh>());
+  const idToBubble = useRef(new Map<string, THREE.Group>());
   const animFrame = useRef(0);
   const hoverThrottle = useRef(0);
   const clockRef = useRef(new THREE.Clock());
   const cameraTweenRef = useRef(0);
   const connectionLinesRef = useRef<THREE.LineSegments | null>(null);
   const dustRef = useRef<THREE.Points | null>(null);
+  const labelGroupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -98,9 +157,9 @@ export function ScatterCanvas({
     composer.addPass(new RenderPass(scene, camera));
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(el.clientWidth, el.clientHeight),
-      0.35,
-      0.6,
-      0.82
+      0.48,
+      0.68,
+      0.78
     );
     composer.addPass(bloom);
     composerRef.current = composer;
@@ -115,10 +174,13 @@ export function ScatterCanvas({
     controlsRef.current = controls;
 
     // Ambient + directional
-    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-    const dirLight = new THREE.DirectionalLight(0x9ca3af, 0.3);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.48));
+    const dirLight = new THREE.DirectionalLight(0xe8f0ff, 0.55);
     dirLight.position.set(30, 60, 40);
     scene.add(dirLight);
+    const rimLight = new THREE.DirectionalLight(0x60a5fa, 0.32);
+    rimLight.position.set(-60, 42, -36);
+    scene.add(rimLight);
 
     // Ground plane with subtle gradient
     const groundGeo = new THREE.PlaneGeometry(300, 300);
@@ -187,6 +249,10 @@ export function ScatterCanvas({
     scene.add(group);
     groupRef.current = group;
 
+    const labelGroup = new THREE.Group();
+    scene.add(labelGroup);
+    labelGroupRef.current = labelGroup;
+
     const clock = clockRef.current;
 
     const animate = () => {
@@ -195,12 +261,15 @@ export function ScatterCanvas({
 
       controls.update();
 
-      // Breathing animation on points
+      // Breathing animation on premium data bubbles.
       group.children.forEach((child, i) => {
         if (child.userData.pointId) {
           const base = child.userData.baseScale || 1;
-          const breath = 1 + Math.sin(t * 0.8 + i * 0.1) * 0.025;
+          const breath = 1 + Math.sin(t * 0.78 + i * 0.24) * 0.03;
           child.scale.setScalar(base * breath);
+          child.rotation.y = Math.sin(t * 0.2 + i) * 0.08;
+          const halo = child.userData.halo as THREE.Mesh | undefined;
+          if (halo) halo.rotation.z = t * 0.35 + i * 0.2;
         }
       });
 
@@ -259,12 +328,10 @@ export function ScatterCanvas({
     while (group.children.length > 0) {
       const child = group.children[0];
       group.remove(child);
-      if (((child as THREE.Mesh).material as THREE.Material).dispose) {
-        ((child as THREE.Mesh).material as THREE.Material).dispose();
-      }
+      disposeObject(child);
     }
     meshToId.current.clear();
-    idToMesh.current.clear();
+    idToBubble.current.clear();
 
     for (const point of points) {
       if (!activeCategories.has(point.category)) continue;
@@ -273,26 +340,114 @@ export function ScatterCanvas({
       const size = POINT_SIZE_BASE + Math.min(point.confidence, 1) * (POINT_SIZE_MAX - POINT_SIZE_BASE);
       const threeColor = getColor(color);
 
-      // Core point
-      const mat = new THREE.MeshStandardMaterial({
-        color: threeColor,
-        emissive: threeColor,
-        emissiveIntensity: 0.3,
-        roughness: 0.4,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.88,
-      });
-      const mesh = new THREE.Mesh(sphereGeo, mat);
-      mesh.position.set(point.x, point.y, point.z);
-      mesh.scale.setScalar(size);
-      mesh.userData = { pointId: point.id, baseScale: size };
-      group.add(mesh);
+      const bubble = new THREE.Group();
+      bubble.position.set(point.x, point.y, point.z);
+      bubble.scale.setScalar(size);
 
-      meshToId.current.set(mesh.id, point.id);
-      idToMesh.current.set(point.id, mesh);
+      const coreMat = new THREE.MeshPhysicalMaterial({
+        color: threeColor.clone().lerp(new THREE.Color(0xffffff), 0.12),
+        emissive: threeColor,
+        emissiveIntensity: 0.28,
+        roughness: 0.24,
+        metalness: 0.08,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.18,
+        transparent: true,
+        opacity: 0.92,
+      });
+      const core = new THREE.Mesh(sphereGeo, coreMat);
+      bubble.add(core);
+
+      const shellMat = new THREE.MeshBasicMaterial({
+        color: threeColor,
+        transparent: true,
+        opacity: 0.14,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const shell = new THREE.Mesh(shellGeo, shellMat);
+      bubble.add(shell);
+
+      const glowMat = new THREE.SpriteMaterial({
+        map: getGlowTexture(color),
+        color: threeColor,
+        transparent: true,
+        opacity: 0.24,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const glow = new THREE.Sprite(glowMat);
+      glow.scale.setScalar(6.8);
+      glow.renderOrder = -1;
+      bubble.add(glow);
+
+      const haloMat = new THREE.MeshBasicMaterial({
+        color: threeColor,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const halo = new THREE.Mesh(haloGeo, haloMat);
+      halo.rotation.x = Math.PI / 2;
+      bubble.add(halo);
+
+      bubble.userData = { pointId: point.id, baseScale: size, core, shell, glow, halo };
+      group.add(bubble);
+
+      [core, shell, glow, halo].forEach((part) => {
+        part.userData.pointId = point.id;
+        meshToId.current.set(part.id, point.id);
+      });
+      idToBubble.current.set(point.id, bubble);
     }
   }, [points, categoryColors, activeCategories]);
+
+  // Presentation labels for category territories.
+  useEffect(() => {
+    const labelGroup = labelGroupRef.current;
+    if (!labelGroup) return;
+
+    while (labelGroup.children.length > 0) {
+      const child = labelGroup.children[0];
+      labelGroup.remove(child);
+      disposeObject(child);
+    }
+
+    const clusters = new Map<string, { count: number; x: number; y: number; z: number }>();
+    points.forEach((point) => {
+      if (!activeCategories.has(point.category)) return;
+      const current = clusters.get(point.category) || { count: 0, x: 0, y: 0, z: 0 };
+      current.count += 1;
+      current.x += point.x;
+      current.y += point.y;
+      current.z += point.z;
+      clusters.set(point.category, current);
+    });
+
+    clusters.forEach((cluster, category) => {
+      const color = categoryColors[category] || "#7c3aed";
+      const label = new SpriteText(
+        `${formatCategoryLabel(category)}\n${cluster.count} ${cluster.count === 1 ? "ad" : "ads"}`,
+        2.75,
+        "#f8fafc"
+      );
+      label.position.set(
+        cluster.x / cluster.count,
+        cluster.y / cluster.count + 8.5,
+        cluster.z / cluster.count
+      );
+      label.renderOrder = 10;
+      label.material.depthWrite = false;
+      label.material.opacity = 0.82;
+      label.backgroundColor = "rgba(6, 9, 14, 0.72)";
+      label.borderColor = `${color}88`;
+      label.borderWidth = 0.4;
+      label.borderRadius = 3;
+      label.padding = 3;
+      labelGroup.add(label);
+    });
+  }, [points, activeCategories, categoryColors]);
 
   // Highlight selected / hovered + draw connections
   useEffect(() => {
@@ -301,40 +456,56 @@ export function ScatterCanvas({
 
     const selectedPoint = selectedId ? points.find((p) => p.id === selectedId) : null;
 
-    idToMesh.current.forEach((mesh, id) => {
+    idToBubble.current.forEach((bubble, id) => {
       const point = points.find((p) => p.id === id);
       if (!point) return;
       const color = categoryColors[point.category] || "#7c3aed";
       const threeColor = getColor(color);
-      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const core = bubble.userData.core as THREE.Mesh;
+      const shell = bubble.userData.shell as THREE.Mesh;
+      const glow = bubble.userData.glow as THREE.Sprite;
+      const halo = bubble.userData.halo as THREE.Mesh;
+      const mat = core.material as THREE.MeshPhysicalMaterial;
+      const shellMat = shell.material as THREE.MeshBasicMaterial;
+      const glowMat = glow.material as THREE.SpriteMaterial;
+      const haloMat = halo.material as THREE.MeshBasicMaterial;
       const isSelected = id === selectedId;
       const isHovered = id === hoveredId;
 
       if (isSelected) {
         mat.color.set(threeColor);
         mat.emissive.set(threeColor);
-        mat.emissiveIntensity = 0.8;
+        mat.emissiveIntensity = 0.9;
         mat.opacity = 1.0;
-        const s = POINT_SIZE_MAX * 2.4;
-        mesh.scale.setScalar(s);
-        mesh.userData.baseScale = s;
+        shellMat.opacity = 0.36;
+        glowMat.opacity = 0.58;
+        haloMat.opacity = 0.78;
+        const s = POINT_SIZE_MAX * 2.25;
+        bubble.scale.setScalar(s);
+        bubble.userData.baseScale = s;
       } else if (isHovered) {
         mat.color.set(threeColor);
         mat.emissive.set(threeColor);
-        mat.emissiveIntensity = 0.6;
-        mat.opacity = 0.95;
-        const s = POINT_SIZE_MAX * 1.6;
-        mesh.scale.setScalar(s);
-        mesh.userData.baseScale = s;
+        mat.emissiveIntensity = 0.66;
+        mat.opacity = 0.98;
+        shellMat.opacity = 0.28;
+        glowMat.opacity = 0.44;
+        haloMat.opacity = 0.48;
+        const s = POINT_SIZE_MAX * 1.55;
+        bubble.scale.setScalar(s);
+        bubble.userData.baseScale = s;
       } else {
         const dimmed = selectedId && point.category !== selectedPoint?.category;
         mat.color.set(threeColor);
         mat.emissive.set(threeColor);
-        mat.emissiveIntensity = dimmed ? 0.08 : 0.3;
-        mat.opacity = dimmed ? 0.2 : 0.78;
+        mat.emissiveIntensity = dimmed ? 0.07 : 0.28;
+        mat.opacity = dimmed ? 0.22 : 0.86;
+        shellMat.opacity = dimmed ? 0.04 : 0.14;
+        glowMat.opacity = dimmed ? 0.04 : 0.22;
+        haloMat.opacity = 0;
         const size = POINT_SIZE_BASE + Math.min(point.confidence, 1) * (POINT_SIZE_MAX - POINT_SIZE_BASE);
-        mesh.scale.setScalar(size);
-        mesh.userData.baseScale = size;
+        bubble.scale.setScalar(size);
+        bubble.userData.baseScale = size;
       }
     });
 
@@ -361,7 +532,7 @@ export function ScatterCanvas({
           (p.y - selectedPoint.y) ** 2 +
           (p.z - selectedPoint.z) ** 2
         );
-        if (dist < 30) {
+        if (dist < 42) {
           linePositions.push(selectedPoint.x, selectedPoint.y, selectedPoint.z);
           linePositions.push(p.x, p.y, p.z);
         }
@@ -375,7 +546,7 @@ export function ScatterCanvas({
       const lineMat = lineSeg.material as THREE.LineBasicMaterial;
       const catColor = getColor(categoryColors[selectedPoint.category] || "#7c3aed");
       lineMat.color.set(catColor);
-      lineMat.opacity = 0.15;
+      lineMat.opacity = 0.24;
     } else {
       const geo = new THREE.BufferGeometry();
       lineSeg.geometry.dispose();
@@ -427,7 +598,7 @@ export function ScatterCanvas({
       raycaster.current.setFromCamera(mouse.current, camera);
       raycaster.current.params.Points = { threshold: RAYCASTER_THRESHOLD };
 
-      const intersects = raycaster.current.intersectObjects(group.children, false);
+      const intersects = raycaster.current.intersectObjects(group.children, true);
       if (intersects.length === 0) return null;
 
       const hit = intersects[0].object;
