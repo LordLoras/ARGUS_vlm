@@ -2,12 +2,21 @@ import { useState, useEffect, useCallback, Suspense, lazy, useMemo } from "react
 import { Topbar } from "../components/Topbar";
 import { graphService } from "../components/KnowledgeGraph/graphService";
 import type { GraphData, GraphNode, GraphMeta, NodeType } from "../components/CubeGraph/types";
-import { NODE_TYPE_COLORS, NODE_TYPE_LABELS } from "../components/CubeGraph/types";
+import { NODE_TYPE_COLORS, NODE_TYPE_LABELS, FACE_COLORS } from "../components/CubeGraph/types";
+import { ChevronRightIcon, CloseIcon } from "../lib/icons";
 
 const CubeCanvas = lazy(() =>
   import("../components/CubeGraph/CubeCanvas").then((m) => ({ default: m.CubeCanvas }))
 );
 import { SparkleIcon, SearchIcon } from "../lib/icons";
+
+const FACE_GROUPS: { key: NodeType; label: string; color: string }[] = [
+  { key: "brand", label: "Brands", color: FACE_COLORS.brand },
+  { key: "company", label: "Companies", color: FACE_COLORS.company },
+  { key: "category", label: "Categories", color: FACE_COLORS.category },
+  { key: "product", label: "Products", color: FACE_COLORS.product },
+  { key: "subsidiary", label: "Subsidiaries", color: FACE_COLORS.subsidiary },
+];
 
 function LoadingFallback() {
   return (
@@ -84,43 +93,28 @@ export function CubeGraph() {
     );
   }, [searchQuery, graphData.nodes]);
 
-  const connInfo = useMemo(() => {
+  const connByType = useMemo(() => {
     if (!selectedNode) return null;
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]));
-    const brands: string[] = [];
-    const companies: string[] = [];
-    const categories: string[] = [];
-    const products: string[] = [];
-    const subsidiaries: string[] = [];
-
+    const result: Record<string, GraphNode[]> = { brand: [], company: [], category: [], product: [], subsidiary: [] };
     for (const link of graphData.links) {
       const src = typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
       const tgt = typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-      if (src === selectedNode.id) {
-        const t = nodeMap.get(tgt);
-        if (t) {
-          if (t.type === "brand") brands.push(t.label);
-          else if (t.type === "company") companies.push(t.label);
-          else if (t.type === "category") categories.push(t.label);
-          else if (t.type === "product") products.push(t.label);
-          else if (t.type === "subsidiary") subsidiaries.push(t.label);
-        }
-      } else if (tgt === selectedNode.id) {
-        const s = nodeMap.get(src);
-        if (s) {
-          if (s.type === "brand") brands.push(s.label);
-          else if (s.type === "company") companies.push(s.label);
-          else if (s.type === "category") categories.push(s.label);
-          else if (s.type === "product") products.push(s.label);
-          else if (s.type === "subsidiary") subsidiaries.push(s.label);
-        }
-      }
+      const addNode = (n: GraphNode) => {
+        const t = n.type as NodeType;
+        if (result[t]) result[t].push(n);
+      };
+      if (src === selectedNode.id) { const t = nodeMap.get(tgt); if (t) addNode(t); }
+      else if (tgt === selectedNode.id) { const s = nodeMap.get(src); if (s) addNode(s); }
     }
-    return { brands, companies, categories, products, subsidiaries };
+    return result;
   }, [selectedNode, graphData]);
 
-  const color = selectedNode ? NODE_TYPE_COLORS[selectedNode.type] : "#7c3aed";
+  const totalConnections = connByType
+    ? Object.values(connByType).flat().length
+    : 0;
 
+  const color = selectedNode ? NODE_TYPE_COLORS[selectedNode.type] : "#7c3aed";
   const stats = { nodes: graphData.nodes.length, links: graphData.links.length, expansions: expandedNodeIds.size };
 
   return (
@@ -175,76 +169,103 @@ export function CubeGraph() {
               />
             </Suspense>
 
-            {selectedNode && connInfo && (
+            {selectedNode && connByType && (
               <div className="cg-detail">
-                <div className="cg-detail-head" style={{ borderBottom: `2px solid ${color}30` }}>
-                  <div className="cg-detail-title-row">
-                    <span className="kg-popup-dot" style={{ background: color, boxShadow: `0 0 10px ${color}50` }} />
-                    <h2 className="cg-detail-title">{selectedNode.label}</h2>
-                    <span className="kg-popup-badge" style={{ color, borderColor: `${color}40`, background: `${color}15` }}>
-                      {NODE_TYPE_LABELS[selectedNode.type]}
-                    </span>
+                <div className="cg-detail-head">
+                  <div className="cg-detail-title-area">
+                    <span className="cg-detail-dot" style={{ background: color, boxShadow: `0 0 12px ${color}60` }} />
+                    <div className="cg-detail-title-col">
+                      <h2 className="cg-detail-title">{selectedNode.label}</h2>
+                      <div className="cg-detail-subtitle">
+                        <span className="cg-detail-type-badge" style={{ color, borderColor: `${color}40`, background: `${color}15` }}>
+                          {NODE_TYPE_LABELS[selectedNode.type]}
+                        </span>
+                        <span className="cg-detail-conn-count">{totalConnections} connections</span>
+                      </div>
+                    </div>
                   </div>
-                  <button className="kg-popup-close" onClick={() => setSelectedNode(null)}>
-                    &times;
+                  <button className="cg-detail-close" onClick={() => setSelectedNode(null)}>
+                    <CloseIcon size={14} />
                   </button>
                 </div>
+
                 <div className="cg-detail-body">
                   {selectedNode.description && <p className="cg-detail-desc">{selectedNode.description}</p>}
-                  <div className="cg-face-grid">
-                    {connInfo.brands.length > 0 && (
-                      <div className="cg-face-card" style={{ borderColor: NODE_TYPE_COLORS.brand }}>
-                        <div className="cg-face-card-label" style={{ color: NODE_TYPE_COLORS.brand }}>Brands</div>
-                        <div className="cg-face-card-items">
-                          {connInfo.brands.map((b) => <span key={b} className="cg-face-chip" style={{ background: `${NODE_TYPE_COLORS.brand}20`, borderColor: `${NODE_TYPE_COLORS.brand}40`, color: NODE_TYPE_COLORS.brand }}>{b}</span>)}
+
+                  <div className="cg-detail-meta-grid">
+                    {selectedNode.headquarters && (
+                      <div className="cg-detail-meta-item">
+                        <span className="cg-detail-meta-icon" style={{ background: `${color}20`, color }}>H</span>
+                        <div>
+                          <span className="cg-detail-meta-label">Headquarters</span>
+                          <span className="cg-detail-meta-val">{selectedNode.headquarters}</span>
                         </div>
                       </div>
                     )}
-                    {connInfo.companies.length > 0 && (
-                      <div className="cg-face-card" style={{ borderColor: NODE_TYPE_COLORS.company }}>
-                        <div className="cg-face-card-label" style={{ color: NODE_TYPE_COLORS.company }}>Companies</div>
-                        <div className="cg-face-card-items">
-                          {connInfo.companies.map((b) => <span key={b} className="cg-face-chip" style={{ background: `${NODE_TYPE_COLORS.company}20`, borderColor: `${NODE_TYPE_COLORS.company}40`, color: NODE_TYPE_COLORS.company }}>{b}</span>)}
+                    {selectedNode.founded && (
+                      <div className="cg-detail-meta-item">
+                        <span className="cg-detail-meta-icon" style={{ background: `${color}20`, color }}>E</span>
+                        <div>
+                          <span className="cg-detail-meta-label">Founded</span>
+                          <span className="cg-detail-meta-val">{selectedNode.founded}</span>
                         </div>
                       </div>
                     )}
-                    {connInfo.categories.length > 0 && (
-                      <div className="cg-face-card" style={{ borderColor: NODE_TYPE_COLORS.category }}>
-                        <div className="cg-face-card-label" style={{ color: NODE_TYPE_COLORS.category }}>Categories</div>
-                        <div className="cg-face-card-items">
-                          {connInfo.categories.map((b) => <span key={b} className="cg-face-chip" style={{ background: `${NODE_TYPE_COLORS.category}20`, borderColor: `${NODE_TYPE_COLORS.category}40`, color: NODE_TYPE_COLORS.category }}>{b}</span>)}
-                        </div>
-                      </div>
-                    )}
-                    {connInfo.products.length > 0 && (
-                      <div className="cg-face-card" style={{ borderColor: NODE_TYPE_COLORS.product }}>
-                        <div className="cg-face-card-label" style={{ color: NODE_TYPE_COLORS.product }}>Products</div>
-                        <div className="cg-face-card-items">
-                          {connInfo.products.map((b) => <span key={b} className="cg-face-chip" style={{ background: `${NODE_TYPE_COLORS.product}20`, borderColor: `${NODE_TYPE_COLORS.product}40`, color: NODE_TYPE_COLORS.product }}>{b}</span>)}
-                        </div>
-                      </div>
-                    )}
-                    {connInfo.subsidiaries.length > 0 && (
-                      <div className="cg-face-card" style={{ borderColor: NODE_TYPE_COLORS.subsidiary }}>
-                        <div className="cg-face-card-label" style={{ color: NODE_TYPE_COLORS.subsidiary }}>Subsidiaries</div>
-                        <div className="cg-face-card-items">
-                          {connInfo.subsidiaries.map((b) => <span key={b} className="cg-face-chip" style={{ background: `${NODE_TYPE_COLORS.subsidiary}20`, borderColor: `${NODE_TYPE_COLORS.subsidiary}40`, color: NODE_TYPE_COLORS.subsidiary }}>{b}</span>)}
+                    {selectedNode.website && (
+                      <div className="cg-detail-meta-item">
+                        <span className="cg-detail-meta-icon" style={{ background: `${color}20`, color }}>W</span>
+                        <div>
+                          <span className="cg-detail-meta-label">Website</span>
+                          <span className="cg-detail-meta-val">{selectedNode.website}</span>
                         </div>
                       </div>
                     )}
                   </div>
-                  {selectedNode.headquarters && (
-                    <div className="cg-detail-meta-row">
-                      <span className="cg-detail-meta-label">HQ</span>
-                      <span className="cg-detail-meta-val">{selectedNode.headquarters}</span>
+
+                  {expandedNodeIds.has(selectedNode.id) && (
+                    <div className="cg-detail-explored">
+                      <span className="kg-expanded-pulse" />
+                      Connections explored
                     </div>
                   )}
-                  {selectedNode.founded && (
-                    <div className="cg-detail-meta-row">
-                      <span className="cg-detail-meta-label">Founded</span>
-                      <span className="cg-detail-meta-val">{selectedNode.founded}</span>
-                    </div>
-                  )}
+
+                  <div className="cg-face-grid">
+                    {FACE_GROUPS.map(({ key, label, color: groupColor }) => {
+                      const items = connByType[key] || [];
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={key} className="cg-face-card" style={{ borderColor: `${groupColor}50` }}>
+                          <div className="cg-face-card-header">
+                            <span className="cg-face-card-dot" style={{ background: groupColor }} />
+                            <span className="cg-face-card-label" style={{ color: groupColor }}>{label}</span>
+                            <span className="cg-face-card-count" style={{ color: groupColor }}>{items.length}</span>
+                          </div>
+                          <div className="cg-face-card-items">
+                            {items.slice(0, 6).map((n) => (
+                              <button
+                                key={n.id}
+                                className="cg-face-chip"
+                                style={{
+                                  background: `${groupColor}15`,
+                                  borderColor: `${groupColor}35`,
+                                  color: groupColor,
+                                }}
+                                onClick={() => handleNavigate(n)}
+                              >
+                                {n.label}
+                                <ChevronRightIcon size={7} className="cg-chip-chevron" />
+                              </button>
+                            ))}
+                            {items.length > 6 && (
+                              <span className="cg-face-more" style={{ color: groupColor }}>
+                                +{items.length - 6} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -268,9 +289,9 @@ export function CubeGraph() {
 
             <div className="kg-stats-bar">
               <div className="kg-stats-inner">
-                <div className="kg-stat"><span className="kg-stat-value">{stats.nodes}</span><span className="kg-stat-label">Nodes</span></div>
+                <div className="kg-stat"><span className="kg-stat-value">{stats.nodes}</span><span className="kg-stat-label">Cubes</span></div>
                 <div className="kg-stat-divider" />
-                <div className="kg-stat"><span className="kg-stat-value">{stats.links}</span><span className="kg-stat-label">Links</span></div>
+                <div className="kg-stat"><span className="kg-stat-value">{stats.links}</span><span className="kg-stat-label">Edges</span></div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat"><span className="kg-stat-value">{stats.expansions}</span><span className="kg-stat-label">Explored</span></div>
                 <div className="kg-stat-divider" />
