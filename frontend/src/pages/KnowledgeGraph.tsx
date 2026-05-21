@@ -11,7 +11,6 @@ import { ChevronRightIcon, CloseIcon } from "../lib/icons";
 import { SparkleIcon, SearchIcon } from "../lib/icons";
 import { FACE_COLORS } from "../components/CubeGraph/types";
 import type { NodeType as CubeNodeType } from "../components/CubeGraph/types";
-import type { CubeFace } from "../components/CubeGraph/CubeCanvas";
 
 const FACE_GROUPS: { key: CubeNodeType; label: string; color: string }[] = [
   { key: "brand", label: "Brands", color: FACE_COLORS.brand },
@@ -27,22 +26,6 @@ type DetailConnection = {
   labels: string[];
   strength: number;
   direction: "incoming" | "outgoing";
-};
-
-const FACE_FOR_GROUP: Partial<Record<CubeNodeType, CubeFace>> = {
-  brand: "brand",
-  company: "company",
-  category: "category",
-  product: "product",
-};
-
-const FACE_LABELS: Record<CubeFace, string> = {
-  brand: "+X brand face",
-  product: "-X product face",
-  top: "+Y identity face",
-  bottom: "-Y metadata face",
-  company: "+Z company face",
-  category: "-Z category face",
 };
 
 function LoadingFallback() {
@@ -69,7 +52,6 @@ export function KnowledgeGraph() {
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
-  const [focusedFace, setFocusedFace] = useState<{ nodeId: string; face: CubeFace } | null>(null);
   const expandingNodeIds = useRef(new Set<string>());
 
   useEffect(() => {
@@ -109,13 +91,8 @@ export function KnowledgeGraph() {
     setHoveredNode(node);
   }, []);
 
-  const handleFaceFocus = useCallback((node: GraphNode, face: CubeFace | null) => {
-    setFocusedFace(face ? { nodeId: node.id, face } : null);
-  }, []);
-
   const handleNavigate = useCallback(
     (node: GraphNode) => {
-      setFocusedFace(null);
       setSelectedNode(node);
       if (!expandedNodeIds.has(node.id)) handleNodeClick(node);
     },
@@ -123,7 +100,6 @@ export function KnowledgeGraph() {
   );
 
   const handleClose = useCallback(() => {
-    setFocusedFace(null);
     setSelectedNode(null);
   }, []);
 
@@ -167,7 +143,6 @@ export function KnowledgeGraph() {
   }, [selectedNode, graphData]);
 
   const totalConnections = connByType ? Object.values(connByType).flat().length : 0;
-  const focusedFaceForPanel = selectedNode && focusedFace?.nodeId === selectedNode.id ? focusedFace.face : null;
   const color = selectedNode ? NODE_TYPE_COLORS[selectedNode.type] : "#7c3aed";
   const stats = {
     nodes: graphData.nodes.length,
@@ -244,8 +219,6 @@ export function KnowledgeGraph() {
                 graphData={graphData}
                 selectedNodeId={selectedNode?.id ?? null}
                 onNodeClick={handleNodeClick}
-                focusedFace={focusedFaceForPanel}
-                onFaceFocus={handleFaceFocus}
                 onBackgroundClick={handleClose}
                 hoveredNodeId={hoveredNode?.id ?? null}
                 onNodeHover={handleNodeHover}
@@ -321,44 +294,19 @@ export function KnowledgeGraph() {
                     </div>
                   )}
 
-                  {focusedFaceForPanel && (
-                    <div className="cg-detail-explored" style={{ borderColor: `${color}45`, background: `${color}10`, color }}>
-                      <span className="kg-expanded-pulse" />
-                      Focused {FACE_LABELS[focusedFaceForPanel]}
-                    </div>
-                  )}
-
                   <div className="cg-face-grid">
                     {FACE_GROUPS.map(({ key, label, color: groupColor }) => {
                       const items = connByType[key] || [];
                       if (items.length === 0) return null;
-                      const groupFace = FACE_FOR_GROUP[key];
-                      const isFocusedGroup = !!groupFace && focusedFaceForPanel === groupFace;
                       return (
                         <div
                           key={key}
                           className="cg-face-card"
                           style={{
-                            borderColor: isFocusedGroup ? groupColor : `${groupColor}50`,
-                            background: isFocusedGroup ? `${groupColor}12` : undefined,
-                            boxShadow: isFocusedGroup ? `0 0 0 1px ${groupColor}35, 0 14px 36px ${groupColor}12` : undefined,
+                            borderColor: `${groupColor}50`,
                           }}
                         >
-                          <div
-                            className="cg-face-card-header"
-                            role={groupFace ? "button" : undefined}
-                            tabIndex={groupFace ? 0 : undefined}
-                            title={groupFace ? `Focus ${FACE_LABELS[groupFace]}` : undefined}
-                            onClick={() => groupFace && setFocusedFace({ nodeId: selectedNode.id, face: groupFace })}
-                            onKeyDown={(event) => {
-                              if (!groupFace) return;
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                setFocusedFace({ nodeId: selectedNode.id, face: groupFace });
-                              }
-                            }}
-                            style={{ cursor: groupFace ? "pointer" : undefined }}
-                          >
+                          <div className="cg-face-card-header">
                             <span className="cg-face-card-dot" style={{ background: groupColor }} />
                             <span className="cg-face-card-label" style={{ color: groupColor }}>{label}</span>
                             <span className="cg-face-card-count" style={{ color: groupColor }}>{items.length}</span>
