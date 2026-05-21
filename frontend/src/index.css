@@ -5610,33 +5610,46 @@ svg.spark { display: block; width: 100%; height: 100%; }
   color: var(--accent-2);
 }
 
-/* Node popup (floating in 3D space) */
+/* Node popup (floating in 3D space, draggable) */
 .kg-popup {
   position: absolute;
   z-index: 15;
   width: 340px;
-  max-height: calc(100vh - 120px);
+  max-height: min(520px, calc(100vh - 120px));
   overflow-y: auto;
-  background: rgba(8, 9, 11, 0.94);
-  border: 1px solid var(--border-strong);
+  overflow-x: hidden;
+  background: rgba(8, 9, 11, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.06);
-  animation: kg-popup-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: kg-popup-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto;
+  cursor: default;
+  user-select: none;
 }
 
-.kg-popup-pointer {
-  position: absolute;
-  left: -8px;
-  top: 18px;
-  width: 0;
-  height: 0;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-right: 8px solid var(--border-strong);
-  filter: drop-shadow(-2px 0 2px rgba(0, 0, 0, 0.3));
+.kg-popup--dragging {
+  cursor: grabbing;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.kg-popup::-webkit-scrollbar {
+  width: 5px;
+}
+
+.kg-popup::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kg-popup::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+.kg-popup::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-quiet);
 }
 
 @keyframes kg-popup-in {
@@ -5650,6 +5663,11 @@ svg.spark { display: block; width: 100%; height: 100%; }
   justify-content: space-between;
   padding: 12px 14px 10px;
   border-bottom: 1px solid var(--border);
+  cursor: grab;
+}
+
+.kg-popup-head:active {
+  cursor: grabbing;
 }
 
 .kg-popup-title-row {
@@ -5779,6 +5797,21 @@ svg.spark { display: block; width: 100%; height: 100%; }
   border-bottom: 1px solid var(--border);
 }
 
+.kg-popup-conn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.kg-popup-conn-group-label {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-quiet);
+  font-family: var(--mono);
+  padding: 4px 0 1px;
+}
+
 .kg-popup-conn-list {
   display: flex;
   flex-direction: column;
@@ -5839,6 +5872,22 @@ svg.spark { display: block; width: 100%; height: 100%; }
   color: var(--fg-dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.kg-popup-drag-hint {
+  padding: 5px 14px 8px;
+  font-size: 8px;
+  font-family: var(--mono);
+  color: var(--fg-quiet);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  opacity: 0.5;
+  transition: opacity 150ms ease;
+}
+
+.kg-popup:hover .kg-popup-drag-hint {
+  opacity: 0.8;
 }
 
 /* Expand animation overlay */

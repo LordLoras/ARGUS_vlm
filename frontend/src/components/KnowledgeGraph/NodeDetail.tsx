@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { CloseIcon, ChevronRightIcon } from "../../lib/icons";
 import type { GraphNode, GraphData } from "./types";
 import { NODE_TYPE_COLORS, NODE_TYPE_LABELS } from "./types";
@@ -15,9 +15,11 @@ interface Props {
 
 export function NodeDetail({ node, graphData, expanded, onClose, onNavigate, canvasHandle }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
-  const [anchored, setAnchored] = useState(false);
-  const [anchorPos, setAnchorPos] = useState({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
+  const posRef = useRef({ x: 0, y: 0 });
+  const [visible, setVisible] = useState(false);
 
   const connections = getConnections(node.id, graphData);
   const color = NODE_TYPE_COLORS[node.type];
@@ -27,6 +29,11 @@ export function NodeDetail({ node, graphData, expanded, onClose, onNavigate, can
   const totalConnections = incomingCount + outgoingCount;
 
   useEffect(() => {
+    setDragOffset({ x: 0, y: 0 });
+    setVisible(false);
+  }, [node.id]);
+
+  useEffect(() => {
     if (!canvasHandle || !node) return;
     let raf: number;
 
@@ -34,65 +41,80 @@ export function NodeDetail({ node, graphData, expanded, onClose, onNavigate, can
       const projected = canvasHandle.projectToScreen(node.x ?? 0, node.y ?? 0, node.z ?? 0);
       const rect = canvasHandle.getCanvasRect();
       if (!projected || !rect) {
-        setPos({ x: 0, y: 0, visible: false });
+        setVisible(false);
         raf = requestAnimationFrame(update);
         return;
       }
 
-      const screenX = projected.x;
-      const screenY = projected.y;
       const cardWidth = 340;
       const offsetX = 70;
-      const offsetY = -20;
+      const offsetY = -16;
+      let baseX = projected.x + offsetX;
+      const baseY = projected.y + offsetY;
 
-      let x = screenX + offsetX;
-      let y = screenY + offsetY;
-
-      if (x + cardWidth > rect.width - 16) {
-        x = screenX - cardWidth - offsetX;
+      if (baseX + cardWidth > rect.width - 12) {
+        baseX = projected.x - cardWidth - offsetX;
       }
-      y = Math.max(16, Math.min(y, rect.height - 200));
+      const clampedY = Math.max(12, Math.min(baseY, rect.height - 300));
 
-      if (!anchored) {
-        setAnchorPos({ x, y });
-        setAnchored(true);
+      posRef.current = { x: baseX, y: clampedY };
+      if (cardRef.current) {
+        cardRef.current.style.left = `${baseX + dragOffset.x}px`;
+        cardRef.current.style.top = `${clampedY + dragOffset.y}px`;
       }
-
-      setPos({ x: anchored ? anchorPos.x : x, y: anchored ? anchorPos.y : y, visible: true });
+      setVisible(true);
       raf = requestAnimationFrame(update);
     };
 
     raf = requestAnimationFrame(update);
     return () => cancelAnimationFrame(raf);
-  }, [canvasHandle, node, anchored, anchorPos]);
+  }, [canvasHandle, node, dragOffset]);
+
+  const onDragStart = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    setDragging(true);
+    dragStart.current = { mx: e.clientX, my: e.clientY, ox: dragOffset.x, oy: dragOffset.y };
+    e.preventDefault();
+  }, [dragOffset]);
 
   useEffect(() => {
-    setAnchored(false);
-  }, [node.id]);
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      const dx = e.clientX - dragStart.current.mx;
+      const dy = e.clientY - dragStart.current.my;
+      setDragOffset({ x: dragStart.current.ox + dx, y: dragStart.current.oy + dy });
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [dragging]);
 
-  if (!pos.visible) return null;
+  if (!visible) return null;
 
   return (
     <div
-      className="kg-popup"
-      style={{ left: pos.x, top: pos.y }}
       ref={cardRef}
+      className={`kg-popup${dragging ? " kg-popup--dragging" : ""}`}
+      style={{ left: posRef.current.x + dragOffset.x, top: posRef.current.y + dragOffset.y }}
+      onPointerDown={onDragStart}
     >
-      <div className="kg-popup-pointer" style={{ borderTopColor: color }} />
       <div className="kg-popup-head">
         <div className="kg-popup-title-row">
           <span className="kg-popup-dot" style={{ background: color, boxShadow: `0 0 8px ${color}50` }} />
           <h3 className="kg-popup-title">{node.label}</h3>
+          <span className="kg-popup-badge" style={{ color, borderColor: `${color}40`, background: `${color}15` }}>
+            {typeLabel}
+          </span>
         </div>
         <button className="kg-popup-close" onClick={onClose}>
           <CloseIcon size={11} />
         </button>
       </div>
       <div className="kg-popup-body">
-        <span className="kg-popup-badge" style={{ color, borderColor: `${color}40`, background: `${color}15` }}>
-          {typeLabel}
-        </span>
-
         {node.description && <p className="kg-popup-desc">{node.description}</p>}
 
         <div className="kg-popup-meta">
@@ -138,36 +160,46 @@ export function NodeDetail({ node, graphData, expanded, onClose, onNavigate, can
         {totalConnections > 0 && (
           <div className="kg-popup-connections">
             <div className="kg-popup-conn-header">Connections ({totalConnections})</div>
-            <div className="kg-popup-conn-list">
-              {connections.outgoing.slice(0, 4).map((conn) => {
-                const c = NODE_TYPE_COLORS[conn.node.type];
-                return (
-                  <button key={`o-${conn.node.id}`} className="kg-popup-conn-item" onClick={() => onNavigate(conn.node)}>
-                    <span className="kg-popup-conn-dot" style={{ background: c }} />
-                    <span className="kg-popup-conn-label">{conn.node.label}</span>
-                    {conn.linkLabel && <span className="kg-popup-conn-type">{conn.linkLabel}</span>}
-                    <ChevronRightIcon size={8} className="kg-popup-conn-chevron" />
-                  </button>
-                );
-              })}
-              {connections.incoming.slice(0, 4).map((conn) => {
-                const c = NODE_TYPE_COLORS[conn.node.type];
-                return (
-                  <button key={`i-${conn.node.id}`} className="kg-popup-conn-item" onClick={() => onNavigate(conn.node)}>
-                    <span className="kg-popup-conn-dot" style={{ background: c }} />
-                    <span className="kg-popup-conn-label">{conn.node.label}</span>
-                    {conn.linkLabel && <span className="kg-popup-conn-type">{conn.linkLabel}</span>}
-                    <ChevronRightIcon size={8} className="kg-popup-conn-chevron" />
-                  </button>
-                );
-              })}
-              {totalConnections > 8 && (
-                <div className="kg-popup-conn-more">+{totalConnections - 8} more</div>
-              )}
-            </div>
+            {outgoingCount > 0 && (
+              <div className="kg-popup-conn-group">
+                <div className="kg-popup-conn-group-label">Outgoing ({outgoingCount})</div>
+                <div className="kg-popup-conn-list">
+                  {connections.outgoing.map((conn) => {
+                    const c = NODE_TYPE_COLORS[conn.node.type];
+                    return (
+                      <button key={`o-${conn.node.id}`} className="kg-popup-conn-item" onClick={() => onNavigate(conn.node)}>
+                        <span className="kg-popup-conn-dot" style={{ background: c }} />
+                        <span className="kg-popup-conn-label">{conn.node.label}</span>
+                        {conn.linkLabel && <span className="kg-popup-conn-type">{conn.linkLabel}</span>}
+                        <ChevronRightIcon size={8} className="kg-popup-conn-chevron" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {incomingCount > 0 && (
+              <div className="kg-popup-conn-group">
+                <div className="kg-popup-conn-group-label">Incoming ({incomingCount})</div>
+                <div className="kg-popup-conn-list">
+                  {connections.incoming.map((conn) => {
+                    const c = NODE_TYPE_COLORS[conn.node.type];
+                    return (
+                      <button key={`i-${conn.node.id}`} className="kg-popup-conn-item" onClick={() => onNavigate(conn.node)}>
+                        <span className="kg-popup-conn-dot" style={{ background: c }} />
+                        <span className="kg-popup-conn-label">{conn.node.label}</span>
+                        {conn.linkLabel && <span className="kg-popup-conn-type">{conn.linkLabel}</span>}
+                        <ChevronRightIcon size={8} className="kg-popup-conn-chevron" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+      <div className="kg-popup-drag-hint">drag to reposition</div>
     </div>
   );
 }
