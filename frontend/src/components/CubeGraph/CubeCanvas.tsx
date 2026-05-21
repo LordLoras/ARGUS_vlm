@@ -19,6 +19,8 @@ interface ConnectionMap {
   category: string[];
   product: string[];
   subsidiary: string[];
+  future: string[];
+  research: string[];
 }
 
 const TEX_RES = 256;
@@ -36,7 +38,11 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   category: "Category",
   product: "Product",
   subsidiary: "Subsidiary",
+  future: "Future Signal",
+  research: "Research Brief",
 };
+
+const HORIZON_NODE_TYPES = new Set<NodeType>(["future", "research"]);
 
 const FACE_ROTATIONS: Record<string, { x: number; y: number }> = {
   brand: { x: 0, y: -Math.PI / 2 },
@@ -52,6 +58,8 @@ const FACE_PRIORITIES: Record<NodeType, Array<keyof ConnectionMap>> = {
   category: ["product", "brand", "company", "category"],
   product: ["category", "brand", "company", "product"],
   subsidiary: ["company", "brand", "product", "category"],
+  future: ["research", "company", "brand", "product", "category"],
+  research: ["future", "company", "brand", "category", "product"],
 };
 
 function easeOutElastic(t: number): number {
@@ -79,6 +87,11 @@ function getEndpointId(endpoint: string | GraphNode): string {
 
 function graphLinkKey(link: GraphLink): string {
   return `${getEndpointId(link.source)}:${link.label ?? ""}:${getEndpointId(link.target)}`;
+}
+
+function colorToRgba(hex: string, opacity: number): string {
+  const c = new THREE.Color(hex);
+  return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${opacity})`;
 }
 
 function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
@@ -329,7 +342,7 @@ function buildCubeMaterials(node: GraphNode, graphData: GraphData): THREE.Materi
 
 function buildConnectionMap(nodeId: string, graphData: GraphData): ConnectionMap {
   const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]));
-  const result: ConnectionMap = { brand: [], company: [], category: [], product: [], subsidiary: [] };
+  const result: ConnectionMap = { brand: [], company: [], category: [], product: [], subsidiary: [], future: [], research: [] };
   const addLabel = (node: GraphNode) => {
     const bucket = result[node.type as NodeType];
     if (bucket && !bucket.includes(node.label)) bucket.push(node.label);
@@ -351,7 +364,7 @@ function buildConnectionMap(nodeId: string, graphData: GraphData): ConnectionMap
 function getFocusedFaceRotation(node: GraphNode, graphData: GraphData): { x: number; y: number } {
   const connMap = buildConnectionMap(node.id, graphData);
   const priority = FACE_PRIORITIES[node.type] ?? ["brand", "product", "company", "category"];
-  const face = priority.find((type) => connMap[type].length > 0) ?? priority[0];
+  const face = priority.find((type) => connMap[type].length > 0 && FACE_ROTATIONS[type]) ?? "company";
   return FACE_ROTATIONS[face] ?? FACE_ROTATIONS._default;
 }
 
@@ -569,6 +582,12 @@ export function CubeCanvas({
       const edgesGeo = getEdgesGeometry(cubeSize);
       group.add(new THREE.LineSegments(edgesGeo, getLineMaterial(node.type, isSelected ? 0.95 : isHovered ? 0.56 : 0.24)));
 
+      if (HORIZON_NODE_TYPES.has(node.type)) {
+        const haloSize = cubeSize * (isSelected ? 1.58 : isHovered ? 1.34 : 1.22);
+        const haloOpacity = isSelected ? 0.16 : isHovered ? 0.1 : 0.055;
+        group.add(new THREE.Mesh(getBoxGeometry(haloSize), getGlowMaterial(node.type, haloOpacity)));
+      }
+
       if (isSelected || isHovered) {
         const glowSize = cubeSize * (isSelected ? 1.3 : 1.15);
         const glowGeo = getBoxGeometry(glowSize);
@@ -632,6 +651,25 @@ export function CubeCanvas({
     [selectedNodeId, hoveredNodeId]
   );
 
+  const getHorizonLinkType = useCallback(
+    (link: GraphLink): NodeType | null => {
+      const srcNode = nodeMap.get(getEndpointId(link.source));
+      const tgtNode = nodeMap.get(getEndpointId(link.target));
+      const linkedHorizonNode = [srcNode, tgtNode].find((node) => node && HORIZON_NODE_TYPES.has(node.type));
+      if (linkedHorizonNode) return linkedHorizonNode.type;
+      const label = (link.label ?? "").toLowerCase();
+      if (label.includes("research")) return "research";
+      if (label.includes("future")) return "future";
+      return null;
+    },
+    [nodeMap]
+  );
+
+  const isHorizonLink = useCallback(
+    (link: GraphLink) => getHorizonLinkType(link) !== null,
+    [getHorizonLinkType]
+  );
+
   const getLinkColor = useCallback(
     (link: GraphLink) => {
       if (isLinkHighlighted(link)) {
@@ -645,9 +683,11 @@ export function CubeCanvas({
         }
         return "rgba(255,255,255,0.5)";
       }
+      const horizonType = getHorizonLinkType(link);
+      if (horizonType) return colorToRgba(NODE_TYPE_COLORS[horizonType], 0.28);
       return "rgba(255,255,255,0.12)";
     },
-    [isLinkHighlighted, nodeMap, selectedNodeId, hoveredNodeId]
+    [isLinkHighlighted, getHorizonLinkType, nodeMap, selectedNodeId, hoveredNodeId]
   );
 
   const getLinkWidth = useCallback(
@@ -655,9 +695,10 @@ export function CubeCanvas({
       const highlighted = isLinkHighlighted(link);
       const strength = link.strength ?? 0.5;
       const base = 0.34 + strength * 0.64;
+      if (!highlighted && isHorizonLink(link)) return base * 1.45;
       return highlighted ? base * 2.4 : base;
     },
-    [isLinkHighlighted]
+    [isLinkHighlighted, isHorizonLink]
   );
 
   return (
@@ -678,7 +719,7 @@ export function CubeCanvas({
         onNodeDragEnd={(node: any) => { node.fx = node.x; node.fy = node.y; node.fz = node.z; }}
         linkColor={getLinkColor as any}
         linkWidth={getLinkWidth}
-        linkDirectionalParticles={(link: any) => (isLinkHighlighted(link) ? 2 : 0)}
+        linkDirectionalParticles={(link: any) => (isLinkHighlighted(link) ? 3 : isHorizonLink(link) ? 2 : 0)}
         linkDirectionalParticleWidth={1.4}
         linkDirectionalParticleSpeed={0.007}
         linkDirectionalArrowLength={0}
@@ -712,6 +753,15 @@ export function CubeCanvas({
           <span>Products</span>
         </div>
         <div className="cg-face-swatch-note">Click to rotate</div>
+        <div className="cg-face-legend-title cg-face-legend-subtitle">Horizon Edges</div>
+        <div className="cg-face-item">
+          <span className="cg-face-swatch cg-face-swatch-pulse" style={{ background: FACE_COLORS.future, color: FACE_COLORS.future }} />
+          <span>Future signals</span>
+        </div>
+        <div className="cg-face-item">
+          <span className="cg-face-swatch cg-face-swatch-pulse" style={{ background: FACE_COLORS.research, color: FACE_COLORS.research }} />
+          <span>Research briefs</span>
+        </div>
       </div>
       <div className="kg-controls-hint">
         <span>Drag to orbit</span>

@@ -18,6 +18,8 @@ const FACE_GROUPS: { key: CubeNodeType; label: string; color: string }[] = [
   { key: "category", label: "Categories", color: FACE_COLORS.category },
   { key: "product", label: "Products", color: FACE_COLORS.product },
   { key: "subsidiary", label: "Subsidiaries", color: FACE_COLORS.subsidiary },
+  { key: "future", label: "Future Signals", color: FACE_COLORS.future },
+  { key: "research", label: "Research Briefs", color: FACE_COLORS.research },
 ];
 
 function LoadingFallback() {
@@ -104,7 +106,7 @@ export function KnowledgeGraph() {
   const connByType = useMemo(() => {
     if (!selectedNode) return null;
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]));
-    const result: Record<string, GraphNode[]> = { brand: [], company: [], category: [], product: [], subsidiary: [] };
+    const result: Record<string, GraphNode[]> = { brand: [], company: [], category: [], product: [], subsidiary: [], future: [], research: [] };
     for (const link of graphData.links) {
       const src = endpointId(link.source);
       const tgt = endpointId(link.target);
@@ -120,7 +122,13 @@ export function KnowledgeGraph() {
 
   const totalConnections = connByType ? Object.values(connByType).flat().length : 0;
   const color = selectedNode ? NODE_TYPE_COLORS[selectedNode.type] : "#7c3aed";
-  const stats = { nodes: graphData.nodes.length, links: graphData.links.length, expansions: expandedNodeIds.size };
+  const stats = {
+    nodes: graphData.nodes.length,
+    links: graphData.links.length,
+    expansions: expandedNodeIds.size,
+    horizon: graphData.nodes.filter((n) => n.type === "future" || n.type === "research").length,
+  };
+  const isAgenticNode = selectedNode?.type === "future" || selectedNode?.type === "research";
 
   return (
     <>
@@ -217,6 +225,15 @@ export function KnowledgeGraph() {
 
                 <div className="cg-detail-body">
                   {selectedNode.description && <p className="cg-detail-desc">{selectedNode.description}</p>}
+
+                  {isAgenticNode && (
+                    <div className="cg-detail-agentic" style={{ borderColor: `${color}55`, background: `${color}12` }}>
+                      <span className="cg-detail-agentic-label" style={{ color }}>Agentic research edge</span>
+                      <span className="cg-detail-agentic-text">
+                        Deep research can follow this node to assemble competitor ads, launch timing, claim language, category movement, and evidence-backed next questions.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="cg-detail-meta-grid">
                     {selectedNode.headquarters && (
@@ -324,6 +341,11 @@ export function KnowledgeGraph() {
                 <div className="kg-stat">
                   <span className="kg-stat-value">{stats.expansions}</span>
                   <span className="kg-stat-label">Explored</span>
+                </div>
+                <div className="kg-stat-divider" />
+                <div className="kg-stat">
+                  <span className="kg-stat-value">{stats.horizon}</span>
+                  <span className="kg-stat-label">Horizon</span>
                 </div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat kg-stat-accent">

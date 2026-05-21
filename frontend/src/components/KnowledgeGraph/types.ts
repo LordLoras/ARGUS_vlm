@@ -1,4 +1,4 @@
-export type NodeType = "brand" | "company" | "category" | "product" | "subsidiary";
+export type NodeType = "brand" | "company" | "category" | "product" | "subsidiary" | "future" | "research";
 
 export interface GraphNode {
   id: string;
@@ -61,6 +61,8 @@ export const NODE_TYPE_COLORS: Record<NodeType, string> = {
   category: "#34d399",
   product: "#fbbf24",
   subsidiary: "#fb7185",
+  future: "#22d3ee",
+  research: "#f97316",
 };
 
 export const NODE_TYPE_SIZES: Record<NodeType, number> = {
@@ -69,6 +71,8 @@ export const NODE_TYPE_SIZES: Record<NodeType, number> = {
   subsidiary: 5,
   category: 5,
   product: 4,
+  future: 5.5,
+  research: 4.8,
 };
 
 export const NODE_TYPE_LABELS: Record<NodeType, string> = {
@@ -77,4 +81,6 @@ export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   category: "Category",
   product: "Product",
   subsidiary: "Subsidiary",
+  future: "Future Signal",
+  research: "Research Brief",
 };
