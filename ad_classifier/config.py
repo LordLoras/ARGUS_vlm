@@ -6,6 +6,9 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+VLMMode = Literal["local", "remote", "frontier"]
+AgentInheritMode = Literal["active", "local", "remote", "frontier"]
+
 
 class PathsConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -331,7 +334,7 @@ class VLMComplexityConfig(BaseModel):
 class VLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    mode: Literal["local", "remote", "frontier"] = "local"
+    mode: VLMMode = "local"
     prompt_profile: Literal["auto", "standard", "frontier_strict"] = "auto"
     max_frames_in_bundle: int = Field(default=12, ge=1)
     image_max_dim: int = Field(default=512, ge=128, le=2048)
@@ -381,6 +384,7 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     inherit_vlm: bool = True
+    inherit_vlm_mode: AgentInheritMode = "active"
     endpoint: AgentEndpointConfig = Field(default_factory=AgentEndpointConfig)
     max_iterations: int = Field(default=8, ge=1, le=32)
     list_max_rows: int = Field(default=50, ge=1, le=500)
@@ -391,7 +395,9 @@ class AgentConfig(BaseModel):
 
     @property
     def effective_mode(self) -> str:
-        return "inherited" if self.inherit_vlm else "independent"
+        if not self.inherit_vlm:
+            return "independent"
+        return f"inherited:{self.inherit_vlm_mode}"
 
 
 class CreativePanelConfig(BaseModel):
@@ -454,14 +460,23 @@ class AppConfig(BaseModel):
 
     @model_validator(mode="after")
     def _resolve_ai_feature_endpoints(self) -> AppConfig:
-        v = self.vlm.endpoint
-        _resolve_agent_like_endpoint(self.agent.endpoint, v, inherit_vlm=self.agent.inherit_vlm)
+        _resolve_agent_like_endpoint(
+            self.agent.endpoint,
+            _agent_inherit_endpoint(self.vlm, self.agent.inherit_vlm_mode),
+            inherit_vlm=self.agent.inherit_vlm,
+        )
         _resolve_agent_like_endpoint(
             self.creative_panel.endpoint,
-            v,
+            self.vlm.endpoint,
             inherit_vlm=self.creative_panel.inherit_vlm,
         )
         return self
+
+
+def _agent_inherit_endpoint(vlm: VLMConfig, inherit_mode: AgentInheritMode) -> VLMEndpointConfig:
+    if inherit_mode == "active":
+        return vlm.endpoint
+    return getattr(vlm, inherit_mode)
 
 
 def _resolve_agent_like_endpoint(

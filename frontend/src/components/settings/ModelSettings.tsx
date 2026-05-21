@@ -1,5 +1,11 @@
 import { EndpointEditor, NumberField, SelectField, ToggleField, endpointTitle } from "./Fields";
-import { VLM_ENDPOINTS, type UpdateSettingsDraft, type VlmEndpointKey } from "./types";
+import {
+  AGENT_INHERIT_ROUTES,
+  VLM_ENDPOINTS,
+  type AgentInheritRoute,
+  type UpdateSettingsDraft,
+  type VlmEndpointKey
+} from "./types";
 import type { ApiKeyRecord, EndpointSettings, SettingsConfig } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
@@ -25,6 +31,10 @@ export function ModelSettings({
   const selectedPromptProfile = promptProfiles.find((item) => item.value === promptProfile);
   const agent = normalizeAgent(config.agent);
   const creativePanel = normalizeCreativePanel(config.creative_panel);
+  const agentInheritRoute = normalizeAgentInheritRoute(agent.inherit_vlm_mode);
+  const agentInheritedKey = resolveAgentInheritedKey(config, agentInheritRoute);
+  const agentInheritedEndpoint = config.vlm[agentInheritedKey];
+  const agentInheritLabel = inheritRouteLabel(agentInheritRoute, agentInheritedKey);
   const agentEndpoint = toolEndpointForEditor(agent.endpoint, {
     temperature: agent.temperature,
     max_tokens: agent.max_tokens
@@ -171,14 +181,14 @@ export function ModelSettings({
             <h2>Agent Research</h2>
             <p>Controls the chat agent and campaign deep research. Pin this locally to avoid Frontier tool loops.</p>
           </div>
-          {agent.inherit_vlm && config.vlm.mode === "frontier" ? (
+          {agent.inherit_vlm && agentInheritedKey === "frontier" ? (
             <span className="badge badge-amber">inherits frontier</span>
           ) : null}
         </div>
         <div className="settings-grid">
           <ToggleField
             label="Inherit VLM"
-            description="Agent endpoint follows the selected VLM preset."
+            description="Agent endpoint reuses a configured VLM preset."
             checked={agent.inherit_vlm}
             onChange={(checked) =>
               updateDraft((current) => {
@@ -188,12 +198,33 @@ export function ModelSettings({
                   agent: {
                     ...existing,
                     inherit_vlm: checked,
+                    inherit_vlm_mode: existing.inherit_vlm_mode ?? "active",
                     endpoint: checked ? {} : endpointDraft(existing.endpoint)
                   }
                 };
               })
             }
           />
+          {agent.inherit_vlm ? (
+            <SelectField
+              label="Inherit route"
+              description="Use active VLM or pin the agent to a preset."
+              value={agentInheritRoute}
+              options={AGENT_INHERIT_ROUTES}
+              optionLabels={AGENT_INHERIT_ROUTE_LABELS}
+              onChange={(value) =>
+                updateDraft((current) => ({
+                  ...current,
+                  agent: {
+                    ...normalizeAgent(current.agent),
+                    inherit_vlm: true,
+                    inherit_vlm_mode: normalizeAgentInheritRoute(value),
+                    endpoint: {}
+                  }
+                }))
+              }
+            />
+          ) : null}
           <NumberField
             label="Max iterations"
             description="Maximum tool-call turns for one agent answer."
@@ -236,7 +267,8 @@ export function ModelSettings({
         </div>
         {agent.inherit_vlm ? (
           <div className="settings-note">
-            Agent calls currently use the active VLM route: <strong>{active.model}</strong>.
+            Agent calls currently inherit {agentInheritLabel}:{" "}
+            <strong>{agentInheritedEndpoint.model}</strong>.
           </div>
         ) : (
           <div className="settings-endpoints compact">
@@ -430,6 +462,7 @@ const DEFAULT_PROMPT_PROFILES = [
 
 const DEFAULT_AGENT_SETTINGS: SettingsConfig["agent"] = {
   inherit_vlm: true,
+  inherit_vlm_mode: "active",
   endpoint: {},
   max_iterations: 8,
   list_max_rows: 50,
@@ -437,6 +470,13 @@ const DEFAULT_AGENT_SETTINGS: SettingsConfig["agent"] = {
   sql_statement_timeout_s: 5,
   temperature: 0.1,
   max_tokens: 1024
+};
+
+const AGENT_INHERIT_ROUTE_LABELS: Record<AgentInheritRoute, string> = {
+  active: "Active VLM",
+  local: "Local",
+  remote: "Remote",
+  frontier: "Frontier"
 };
 
 const DEFAULT_CREATIVE_PANEL_SETTINGS: SettingsConfig["creative_panel"] = {
@@ -450,8 +490,30 @@ function normalizeAgent(value: Partial<SettingsConfig["agent"]> | undefined): Se
   return {
     ...DEFAULT_AGENT_SETTINGS,
     ...(value ?? {}),
+    inherit_vlm_mode: normalizeAgentInheritRoute(value?.inherit_vlm_mode),
     endpoint: value?.endpoint ?? {}
   };
+}
+
+function normalizeAgentInheritRoute(value: string | undefined): AgentInheritRoute {
+  return AGENT_INHERIT_ROUTES.includes(value as AgentInheritRoute)
+    ? (value as AgentInheritRoute)
+    : "active";
+}
+
+function resolveAgentInheritedKey(
+  config: SettingsConfig,
+  route: AgentInheritRoute
+): VlmEndpointKey {
+  if (route !== "active") return route;
+  return VLM_ENDPOINTS.includes(config.vlm.mode as VlmEndpointKey)
+    ? (config.vlm.mode as VlmEndpointKey)
+    : "local";
+}
+
+function inheritRouteLabel(route: AgentInheritRoute, resolvedKey: VlmEndpointKey) {
+  if (route === "active") return `the active VLM route (${endpointTitle(resolvedKey)})`;
+  return `the ${endpointTitle(route)} preset`;
 }
 
 function normalizeCreativePanel(

@@ -77,6 +77,7 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     config["vlm"]["prompt_profile"] = "frontier_strict"
     config["vlm"]["frontier"]["model"] = "anthropic/claude-sonnet-4.5"
     config["vlm"]["frontier"]["api_key_env"] = "OPENROUTER_TEST_KEY"
+    config["agent"]["inherit_vlm_mode"] = "remote"
     config["worker"]["poll_interval_ms"] = 250
 
     updated = client.put("/api/settings", json={"config": config})
@@ -88,6 +89,7 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     assert saved["vlm"]["prompt_profile"] == "frontier_strict"
     assert saved["vlm"]["frontier"]["model"] == "anthropic/claude-sonnet-4.5"
     assert saved["vlm"]["frontier"]["api_key_env"] == "OPENROUTER_TEST_KEY"
+    assert saved["agent"]["inherit_vlm_mode"] == "remote"
     assert saved["worker"]["poll_interval_ms"] == 250
     assert "endpoint" not in saved["vlm"]
     assert saved["agent"]["endpoint"] == {}

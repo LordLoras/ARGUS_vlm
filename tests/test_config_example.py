@@ -94,6 +94,35 @@ def test_agent_inherits_vlm_mode_endpoint():
     assert config.agent.endpoint.stream is False
 
 
+def test_agent_can_inherit_specific_vlm_endpoint():
+    from ad_classifier.config import AppConfig
+
+    data = {
+        "vlm": {
+            "mode": "frontier",
+            "remote": {
+                "endpoint": "https://api.example.com/v1",
+                "model": "gpt-4o-mini",
+                "api_key_env": "REMOTE_KEY",
+                "timeout_s": 70,
+            },
+            "frontier": {
+                "endpoint": "https://openrouter.ai/api/v1",
+                "model": "openrouter/auto",
+                "api_key_env": "OPENROUTER_KEY",
+            },
+        },
+        "agent": {"inherit_vlm": True, "inherit_vlm_mode": "remote"},
+    }
+    config = AppConfig.model_validate(data)
+    assert config.vlm.endpoint.model == "openrouter/auto"
+    assert config.agent.inherit_vlm_mode == "remote"
+    assert config.agent.endpoint.endpoint == "https://api.example.com/v1"
+    assert config.agent.endpoint.model == "gpt-4o-mini"
+    assert config.agent.endpoint.api_key_env == "REMOTE_KEY"
+    assert config.agent.endpoint.timeout_s == 70
+
+
 def test_creative_panel_inherits_vlm_mode_endpoint():
     from ad_classifier.config import AppConfig
 

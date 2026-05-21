@@ -133,6 +133,7 @@ export type SettingsConfig = {
   };
   agent: {
     inherit_vlm: boolean;
+    inherit_vlm_mode?: "active" | "local" | "remote" | "frontier" | string;
     endpoint: Partial<EndpointSettings>;
     max_iterations: number;
     list_max_rows: number;

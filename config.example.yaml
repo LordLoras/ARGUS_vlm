@@ -165,8 +165,8 @@ vlm:
   #   "local"  → vlm.local is used (OpenAI-compatible engine on this machine)
   #   "remote" → vlm.remote is used (cloud / hosted endpoint)
   #   "frontier" → vlm.frontier is used (OpenRouter/frontier-model route)
-  # The agent inherits the active preset when agent.inherit_vlm is true.
-  # Flip the flag to switch all VLM calls + agent between local and remote.
+  # The agent can inherit the active preset or pin itself to local/remote/frontier
+  # with agent.inherit_vlm_mode.
   mode: local
   # auto uses frontier_strict for Frontier routing and standard elsewhere.
   # Use frontier_strict explicitly when a strong remote/frontier model should
@@ -320,12 +320,12 @@ worker:
   concurrency: 1
 
 agent:
-  # inherit_vlm: true (default) — agent automatically follows vlm.mode.
-  # When vlm.mode is "remote" the agent uses the remote endpoint; when
-  # "local" it uses the local one.  Override agent.endpoint fields below
-  # to pin the analyst agent and campaign deep research to a specific
-  # backend regardless of vlm.mode.
+  # inherit_vlm: true (default) lets the agent reuse a VLM endpoint preset.
+  # inherit_vlm_mode chooses which preset: active follows vlm.mode; local,
+  # remote, and frontier pin the agent to that preset while ingest can use
+  # a different VLM mode.
   inherit_vlm: true
+  inherit_vlm_mode: active      # active | local | remote | frontier
   # endpoint: leave {} to inherit from vlm when inherit_vlm is true. Fill
   # endpoint/model/api_key_env here only to pin the agent to a different model.
   endpoint: {}
