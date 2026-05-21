@@ -518,6 +518,19 @@ input, textarea, select { font: inherit; color: inherit; }
 }
 .page-head-actions { margin-left: auto; display: flex; gap: 8px; }
 
+@media (max-width: 760px) {
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .page-head-actions {
+    margin-left: 0;
+    align-self: stretch;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
 /* ========== Stat strip ========== */
 .stat-strip {
   display: grid;
@@ -4195,6 +4208,7 @@ button.ts-link:hover {
   padding: 14px;
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 .settings-section-head {
   display: flex;
@@ -4217,6 +4231,8 @@ button.ts-link:hover {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
   gap: 12px;
+  align-items: start;
+  align-content: start;
 }
 .settings-grid.single {
   grid-template-columns: 1fr;
@@ -4225,11 +4241,17 @@ button.ts-link:hover {
   display: grid;
   gap: 5px;
   min-width: 0;
+  align-content: start;
 }
 .settings-field > span {
   font-size: 11px;
   font-weight: 600;
   color: var(--fg);
+  line-height: 1.5;
+}
+.settings-field > .input {
+  height: 30px;
+  min-height: 30px;
 }
 .settings-field small,
 .settings-toggle small {
@@ -4279,6 +4301,7 @@ button.ts-link:hover {
   display: grid;
   gap: 10px;
   min-width: 0;
+  align-content: start;
 }
 .settings-endpoint.active {
   border-color: var(--accent-border);
@@ -4295,11 +4318,14 @@ button.ts-link:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  align-items: start;
 }
 .settings-inline-toggles {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  align-items: start;
+  align-content: start;
 }
 .settings-note {
   border: 1px solid var(--border);
@@ -4335,6 +4361,7 @@ button.ts-link:hover {
   display: grid;
   gap: 3px;
   min-width: 0;
+  align-content: start;
 }
 .settings-toggle strong {
   font-size: 11.5px;
