@@ -6,6 +6,7 @@ import { cn } from "../lib/utils";
 import {
   CampaignsIcon,
   ChatIcon,
+  CubeIcon,
   FlowIcon,
   GraphIcon,
   InfoIcon,
@@ -36,7 +37,8 @@ const workspace: NavEntry[] = [
 const intelligence: NavEntry[] = [
   { to: "/agent", label: "Agent", icon: ChatIcon, badge: "●", accentBadge: true },
   { to: "/debate", label: "Debate", icon: FlowIcon, badge: "new", accentBadge: true },
-  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon, badge: "new", accentBadge: true }
+  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon, badge: "new", accentBadge: true },
+  { to: "/cube", label: "Cube Graph", icon: CubeIcon, badge: "exp", accentBadge: true }
 ];
 
 const disabledIntelligence: { label: string; icon: IconComponent }[] = [

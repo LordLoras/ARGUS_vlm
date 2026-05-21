@@ -208,3 +208,11 @@ export const GraphIcon = ({ size = 14, ...props }: Props) => (
     <line x1="7.5" y1="6" x2="16.5" y2="6" />
   </svg>
 );
+
+export const CubeIcon = ({ size = 14, ...props }: Props) => (
+  <svg {...base(size, props)} strokeWidth={1.8}>
+    <path d="M12 2L3 7v10l9 5 9-5V7z" />
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <line x1="3" y1="7" x2="21" y2="7" />
+  </svg>
+);
