@@ -71,7 +71,8 @@ def embeddings_scatter(
             vectors = vectors[indices]
             ad_ids = [ad_ids[i] for i in indices]
 
-        # PCA to 3D
+        # PCA to 3D, then apply a display-only cluster layout so small demo
+        # datasets do not read as random sparse points.
         coords = _pca_3d(vectors)
 
         # Hydrate with ad metadata
@@ -82,11 +83,17 @@ def embeddings_scatter(
         ).fetchall()
         ad_meta = {row[0]: dict(row) for row in ad_rows}
 
+        point_categories = [
+            ad_meta.get(ad_id, {}).get("primary_category") or "uncategorized"
+            for ad_id in ad_ids
+        ]
+        coords = _category_guided_layout(coords, point_categories)
+
         categories_seen: set[str] = set()
         points: list[dict[str, Any]] = []
         for i, ad_id in enumerate(ad_ids):
             meta = ad_meta.get(ad_id, {})
-            cat = meta.get("primary_category") or "uncategorized"
+            cat = point_categories[i]
             categories_seen.add(cat)
             points.append({
                 "id": ad_id,
@@ -105,6 +112,7 @@ def embeddings_scatter(
             "total": len(rows),
             "sampled": len(points),
             "type": type,
+            "projection": "category_guided_pca_3d",
         }
     finally:
         conn.close()
@@ -144,3 +152,39 @@ def _pca_3d(vectors: np.ndarray) -> np.ndarray:
             projected[:, dim] = (col - lo) / (hi - lo) * 80 - 40
 
     return projected.astype(np.float32)
+
+
+def _category_guided_layout(coords: np.ndarray, categories: list[str]) -> np.ndarray:
+    """Spread category clusters for the demo view without changing stored vectors."""
+    unique_categories = sorted({category for category in categories if category})
+    if len(coords) < 4 or len(unique_categories) < 2:
+        return coords.astype(np.float32)
+
+    out = coords.copy()
+    category_count = len(unique_categories)
+    anchor_radius = min(64.0, 34.0 + category_count * 5.0)
+    vertical_step = 8.0
+    cluster_scale = 0.34 if len(coords) < 40 else 0.42
+    residual_scale = 0.12 if len(coords) < 40 else 0.08
+    anchors: dict[str, np.ndarray] = {}
+
+    for i, category in enumerate(unique_categories):
+        angle = (2 * np.pi * i) / category_count
+        anchors[category] = np.array(
+            [
+                np.cos(angle) * anchor_radius,
+                ((i % 3) - 1) * vertical_step,
+                np.sin(angle) * anchor_radius,
+            ],
+            dtype=np.float32,
+        )
+
+    for category in unique_categories:
+        idx = [i for i, point_category in enumerate(categories) if point_category == category]
+        if not idx:
+            continue
+        cluster = coords[idx]
+        centroid = cluster.mean(axis=0)
+        out[idx] = anchors[category] + (cluster - centroid) * cluster_scale + cluster * residual_scale
+
+    return out.astype(np.float32)

@@ -269,6 +269,7 @@ export const api = {
       total: number;
       sampled: number;
       type: string;
+      projection?: string;
     }>(`/api/embeddings/scatter${params({ type, sample })}`),
 
   listCampaigns: (query: { brand?: string; created_by?: string; q?: string; limit?: number; offset?: number } = {}) =>

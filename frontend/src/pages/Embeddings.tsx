@@ -21,18 +21,19 @@ interface ScatterResponse {
   total: number;
   sampled: number;
   type: EmbeddingType;
+  projection?: string;
 }
 
 const EMBEDDING_META: Record<EmbeddingType, { label: string; model: string; dims: string; source: string }> = {
   text: {
-    label: "Text vectors",
-    model: "MiniLM semantic",
+    label: "MiniLM space",
+    model: "MiniLM text vectors",
     dims: "384d",
     source: "Transcript + OCR",
   },
   visual: {
-    label: "Visual vectors",
-    model: "SigLIP 2 visual",
+    label: "SigLIP space",
+    model: "SigLIP 2 visual vectors",
     dims: "768d",
     source: "Keyframe mean pool",
   },
@@ -47,7 +48,7 @@ function LoadingFallback() {
       </div>
       <div className="kg-loading-text">
         <span className="kg-loading-title">Computing Embedding Space</span>
-        <span className="kg-loading-sub">Running PCA dimensionality reduction...</span>
+        <span className="kg-loading-sub">Projecting MiniLM / SigLIP vectors...</span>
       </div>
     </div>
   );
@@ -290,7 +291,7 @@ export function Embeddings() {
                     onClick={() => setEmbedType("text")}
                   >
                     <LayersIcon size={12} />
-                    <span>Text vectors</span>
+                    <span>MiniLM</span>
                     <span className="es-type-dim">384d</span>
                   </button>
                   <button
@@ -298,7 +299,7 @@ export function Embeddings() {
                     onClick={() => setEmbedType("visual")}
                   >
                     <LayersIcon size={12} />
-                    <span>Visual vectors</span>
+                    <span>SigLIP</span>
                     <span className="es-type-dim">768d</span>
                   </button>
                 </div>
@@ -322,7 +323,7 @@ export function Embeddings() {
                 </div>
               </div>
 
-              <div className="kg-type-filters">
+              <div className="kg-type-filters es-filter-row">
                 {data?.categories.map((cat) => (
                   <button
                     key={cat}
@@ -357,7 +358,7 @@ export function Embeddings() {
 
               <div className="es-map-panel">
                 <div className="es-map-panel-head">
-                  <span className="es-map-kicker">PCA projection</span>
+                  <span className="es-map-kicker">Guided projection</span>
                   <strong>{embeddingMeta.model}</strong>
                 </div>
                 <div className="es-map-grid">
@@ -454,15 +455,15 @@ export function Embeddings() {
                       <strong>{embeddingMeta.model}</strong>
                     </div>
                     <div>
-                      <span>X</span>
+                      <span>P1</span>
                       <strong>{selectedPoint.x.toFixed(1)}</strong>
                     </div>
                     <div>
-                      <span>Y</span>
+                      <span>P2</span>
                       <strong>{selectedPoint.y.toFixed(1)}</strong>
                     </div>
                     <div>
-                      <span>Z</span>
+                      <span>P3</span>
                       <strong>{selectedPoint.z.toFixed(1)}</strong>
                     </div>
                   </div>

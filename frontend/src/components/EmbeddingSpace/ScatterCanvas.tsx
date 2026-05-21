@@ -72,7 +72,6 @@ export function ScatterCanvas({
   const cameraTweenRef = useRef(0);
   const connectionLinesRef = useRef<THREE.LineSegments | null>(null);
   const dustRef = useRef<THREE.Points | null>(null);
-  const axisGroupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -133,35 +132,16 @@ export function ScatterCanvas({
     ground.position.y = -44;
     scene.add(ground);
 
-    // Grid with finer lines
-    const gridHelper = new THREE.GridHelper(160, 32, 0x141822, 0x0e1018);
+    // Subtle ground reference. The projection itself does not expose literal X/Y/Z axes.
+    const gridHelper = new THREE.GridHelper(150, 30, 0x0b1018, 0x080c12);
     gridHelper.position.y = -43.8;
-    scene.add(gridHelper);
-
-    // Axis indicators
-    const axisGroup = new THREE.Group();
-    const axisLen = 52;
-    const axisAlpha = 0.12;
-    const axisColors = [0x7c3aed, 0x3b82f6, 0x10b981];
-    const dirs = [
-      new THREE.Vector3(1, 0, 0),
-      new THREE.Vector3(0, 1, 0),
-      new THREE.Vector3(0, 0, 1),
-    ];
-    dirs.forEach((dir, i) => {
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        dir.clone().multiplyScalar(axisLen),
-      ]);
-      const mat = new THREE.LineBasicMaterial({
-        color: axisColors[i],
-        transparent: true,
-        opacity: axisAlpha,
-      });
-      axisGroup.add(new THREE.Line(geo, mat));
+    const gridMaterial = gridHelper.material as THREE.Material | THREE.Material[];
+    const gridMaterials = Array.isArray(gridMaterial) ? gridMaterial : [gridMaterial];
+    gridMaterials.forEach((mat) => {
+      mat.transparent = true;
+      mat.opacity = 0.18;
     });
-    scene.add(axisGroup);
-    axisGroupRef.current = axisGroup;
+    scene.add(gridHelper);
 
     // Dust particles for atmosphere
     const dustCount = 600;
@@ -227,14 +207,6 @@ export function ScatterCanvas({
       // Slow dust rotation
       if (dustRef.current) {
         dustRef.current.rotation.y = t * 0.008;
-      }
-
-      // Pulse axis lines
-      if (axisGroupRef.current) {
-        axisGroupRef.current.children.forEach((line, i) => {
-          const mat = (line as THREE.Line).material as THREE.LineBasicMaterial;
-          mat.opacity = axisAlpha + Math.sin(t * 0.5 + i * 2) * 0.03;
-        });
       }
 
       composer.render();
