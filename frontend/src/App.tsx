@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { Topbar } from "./components/Topbar";
 import { EmptyState } from "./components/shared/EmptyState";
+import { About } from "./pages/About";
 import { Agent } from "./pages/Agent";
 import { Campaigns } from "./pages/Campaigns";
 import { DebatePanel } from "./pages/DebatePanel";
@@ -40,6 +41,7 @@ export default function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/library" replace />} />
+        <Route path="/about" element={<About />} />
         <Route path="/library" element={<Library />} />
         <Route path="/upload" element={<Upload />} />
         <Route path="/search" element={<SearchPage />} />

@@ -7,6 +7,7 @@ import {
   CampaignsIcon,
   ChatIcon,
   FlowIcon,
+  InfoIcon,
   LayersIcon,
   LibraryIcon,
   SearchIcon,
@@ -41,6 +42,7 @@ const disabledIntelligence: { label: string; icon: IconComponent }[] = [
 ];
 
 const system: NavEntry[] = [
+  { to: "/about", label: "About", icon: InfoIcon },
   { to: "/pipelines", label: "Jobs", icon: FlowIcon },
   { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon }
