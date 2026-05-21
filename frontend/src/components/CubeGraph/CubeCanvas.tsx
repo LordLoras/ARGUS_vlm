@@ -4,10 +4,14 @@ import * as THREE from "three";
 import type { GraphData, GraphNode, GraphLink, NodeType } from "./types";
 import { NODE_TYPE_COLORS, NODE_TYPE_SIZES, FACE_COLORS } from "./types";
 
+export type CubeFace = "brand" | "product" | "top" | "bottom" | "company" | "category";
+
 interface Props {
   graphData: GraphData;
   selectedNodeId: string | null;
   onNodeClick: (node: GraphNode) => void;
+  focusedFace?: CubeFace | null;
+  onFaceFocus?: (node: GraphNode, face: CubeFace | null) => void;
   onBackgroundClick?: () => void;
   hoveredNodeId: string | null;
   onNodeHover: (node: GraphNode | null) => void;
@@ -20,8 +24,9 @@ interface ConnectionMap {
   product: string[];
   subsidiary: string[];
   future: string[];
-  research: string[];
 }
+
+type RotatableConnectionFace = Extract<keyof ConnectionMap, CubeFace>;
 
 const TEX_RES = 256;
 
@@ -39,17 +44,27 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   product: "Product",
   subsidiary: "Subsidiary",
   future: "Future Signal",
-  research: "Research Brief",
 };
 
-const HORIZON_NODE_TYPES = new Set<NodeType>(["future", "research"]);
+const HORIZON_NODE_TYPES = new Set<NodeType>(["future"]);
 
-const FACE_ROTATIONS: Record<string, { x: number; y: number }> = {
+const FACE_ROTATIONS: Record<CubeFace | "_default", { x: number; y: number }> = {
   brand: { x: 0, y: -Math.PI / 2 },
   product: { x: 0, y: Math.PI / 2 },
+  top: { x: Math.PI / 2, y: 0 },
+  bottom: { x: -Math.PI / 2, y: 0 },
   company: { x: 0, y: 0 },
   category: { x: 0, y: Math.PI },
   _default: { x: -Math.PI / 6, y: Math.PI / 5 },
+};
+
+const FACE_BY_MATERIAL_INDEX: Record<number, CubeFace> = {
+  0: "brand",
+  1: "product",
+  2: "top",
+  3: "bottom",
+  4: "company",
+  5: "category",
 };
 
 const FACE_PRIORITIES: Record<NodeType, Array<keyof ConnectionMap>> = {
@@ -58,8 +73,7 @@ const FACE_PRIORITIES: Record<NodeType, Array<keyof ConnectionMap>> = {
   category: ["product", "brand", "company", "category"],
   product: ["category", "brand", "company", "product"],
   subsidiary: ["company", "brand", "product", "category"],
-  future: ["research", "company", "brand", "product", "category"],
-  research: ["future", "company", "brand", "category", "product"],
+  future: ["company", "brand", "product", "category"],
 };
 
 function easeOutElastic(t: number): number {
@@ -226,7 +240,7 @@ function createFaceTexture(
 
     ctx.fillStyle = "#3a3f4a";
     ctx.font = `10px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.fillText("Click to rotate", S / 2, S * 0.84);
+    ctx.fillText("Click face to focus", S / 2, S * 0.84);
   } else {
     ctx.fillStyle = color;
     ctx.font = `bold 14px "JetBrains Mono", ui-monospace, monospace`;
@@ -313,19 +327,29 @@ function buildCubeMaterials(node: GraphNode, graphData: GraphData): THREE.Materi
     totalConnections,
   });
 
-  const infoItems = [
+  const metadataItems = [
     node.founded ? `Est. ${node.founded}` : "",
     node.headquarters ?? "",
     node.website ?? "",
   ].filter(Boolean);
+  const futureInfoItems =
+    node.type === "future"
+      ? ["Forward graph edge", "Agentic work later", "Click faces to inspect"]
+      : connMap.future.length > 0
+        ? [`${connMap.future.length} future signal${connMap.future.length === 1 ? "" : "s"}`, "Expansion path queued"]
+        : [];
+  const infoItems = metadataItems.length > 0 ? metadataItems : futureInfoItems;
 
-  const bottomTex = createFaceTexture("info", infoItems, "#6b7280", {});
+  const bottomTex = createFaceTexture("info", infoItems, futureInfoItems.length > 0 ? FACE_COLORS.future : "#6b7280", {});
   const brandTex = createFaceTexture("brands", connMap.brand, FACE_COLORS.brand, {});
   const companyTex = createFaceTexture("companies", connMap.company, FACE_COLORS.company, {});
-  const categoryTex = createFaceTexture("categories", connMap.category, FACE_COLORS.category, {});
+  const categoryItems = connMap.future.length > 0
+    ? [...connMap.category, ...connMap.future.map((label) => `Future: ${label}`)]
+    : connMap.category;
+  const categoryTex = createFaceTexture("categories", categoryItems, FACE_COLORS.category, {});
   const productTex = createFaceTexture("products", connMap.product, FACE_COLORS.product, {});
 
-  const cacheKey = `mat:${node.id}:${node.label}:${connectionSignature}:${infoItems.join("|")}`;
+  const cacheKey = `mat:${node.id}:${node.label}:${connectionSignature}:${infoItems.join("|")}:${categoryItems.join("|")}`;
   if (matCache.has(cacheKey)) return matCache.get(cacheKey)!;
 
   const mats = [
@@ -342,7 +366,7 @@ function buildCubeMaterials(node: GraphNode, graphData: GraphData): THREE.Materi
 
 function buildConnectionMap(nodeId: string, graphData: GraphData): ConnectionMap {
   const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]));
-  const result: ConnectionMap = { brand: [], company: [], category: [], product: [], subsidiary: [], future: [], research: [] };
+  const result: ConnectionMap = { brand: [], company: [], category: [], product: [], subsidiary: [], future: [] };
   const addLabel = (node: GraphNode) => {
     const bucket = result[node.type as NodeType];
     if (bucket && !bucket.includes(node.label)) bucket.push(node.label);
@@ -361,11 +385,38 @@ function buildConnectionMap(nodeId: string, graphData: GraphData): ConnectionMap
   return result;
 }
 
-function getFocusedFaceRotation(node: GraphNode, graphData: GraphData): { x: number; y: number } {
+function getFocusedFaceRotation(node: GraphNode, graphData: GraphData, focusedFace?: CubeFace | null): { x: number; y: number } {
+  if (focusedFace) return FACE_ROTATIONS[focusedFace] ?? FACE_ROTATIONS._default;
+  if (node.type === "future") return FACE_ROTATIONS.bottom;
   const connMap = buildConnectionMap(node.id, graphData);
   const priority = FACE_PRIORITIES[node.type] ?? ["brand", "product", "company", "category"];
-  const face = priority.find((type) => connMap[type].length > 0 && FACE_ROTATIONS[type]) ?? "company";
-  return FACE_ROTATIONS[face] ?? FACE_ROTATIONS._default;
+  const face = priority.find((type): type is RotatableConnectionFace => connMap[type].length > 0 && isRotatableConnectionFace(type));
+  return face ? FACE_ROTATIONS[face] : FACE_ROTATIONS.company;
+}
+
+function isRotatableConnectionFace(type: keyof ConnectionMap): type is RotatableConnectionFace {
+  return type === "brand" || type === "product" || type === "company" || type === "category";
+}
+
+function getPointerFace(
+  fg: any,
+  group: THREE.Group | undefined,
+  event?: MouseEvent
+): CubeFace | null {
+  const renderer = typeof fg?.renderer === "function" ? fg.renderer() : null;
+  const camera = typeof fg?.camera === "function" ? fg.camera() : null;
+  if (!renderer || !camera || !group || !event) return null;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const pointer = new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObject(group, true).find((item) => item.object.userData?.argusCubeFaceMesh);
+  const materialIndex = hit?.face?.materialIndex;
+  return materialIndex == null ? null : FACE_BY_MATERIAL_INDEX[materialIndex] ?? null;
 }
 
 function getBoxGeometry(size: number): THREE.BoxGeometry {
@@ -428,6 +479,8 @@ export function CubeCanvas({
   graphData,
   selectedNodeId,
   onNodeClick,
+  focusedFace = null,
+  onFaceFocus,
   onBackgroundClick,
   hoveredNodeId,
   onNodeHover,
@@ -559,10 +612,12 @@ export function CubeCanvas({
   }, [selectedNodeId, flyToNode]);
 
   const handleNodeClick = useCallback(
-    (node: GraphNode) => {
+    (node: GraphNode, event?: MouseEvent) => {
+      const clickedFace = getPointerFace(fgRef.current, cubeGroupRefs.current.get(node.id), event);
+      onFaceFocus?.(node, clickedFace);
       onNodeClick(node);
     },
-    [onNodeClick]
+    [onFaceFocus, onNodeClick]
   );
 
   const customNodeRenderer = useCallback(
@@ -577,6 +632,7 @@ export function CubeCanvas({
 
       const materials = buildCubeMaterials(node, graphData);
       const mesh = new THREE.Mesh(geometry, materials);
+      mesh.userData.argusCubeFaceMesh = true;
       group.add(mesh);
 
       const edgesGeo = getEdgesGeometry(cubeSize);
@@ -595,7 +651,7 @@ export function CubeCanvas({
       }
 
       if (isSelected) {
-        const focusedRotation = getFocusedFaceRotation(node, graphData);
+        const focusedRotation = getFocusedFaceRotation(node, graphData, focusedFace);
         group.rotation.x = focusedRotation.x;
         group.rotation.y = focusedRotation.y;
       } else {
@@ -606,7 +662,7 @@ export function CubeCanvas({
       cubeGroupRefs.current.set(node.id, group);
       return group;
     },
-    [selectedNodeId, hoveredNodeId, graphData, graphSignature]
+    [selectedNodeId, hoveredNodeId, graphData, graphSignature, focusedFace]
   );
 
   useEffect(() => {
@@ -615,7 +671,7 @@ export function CubeCanvas({
     if (!group) return;
 
     const node = graphData.nodes.find((n) => n.id === selectedNodeId);
-    const rotTarget = node ? getFocusedFaceRotation(node, graphData) : FACE_ROTATIONS._default;
+    const rotTarget = node ? getFocusedFaceRotation(node, graphData, focusedFace) : FACE_ROTATIONS._default;
 
     const startRot = { x: group.rotation.x, y: group.rotation.y };
     const startTime = performance.now();
@@ -640,7 +696,7 @@ export function CubeCanvas({
     animFrame.current = requestAnimationFrame(animate);
 
     return () => cancelAnimationFrame(animFrame.current);
-  }, [selectedNodeId, graphData.nodes]);
+  }, [selectedNodeId, graphData.nodes, graphData.links, focusedFace]);
 
   const isLinkHighlighted = useCallback(
     (link: GraphLink) => {
@@ -658,8 +714,7 @@ export function CubeCanvas({
       const linkedHorizonNode = [srcNode, tgtNode].find((node) => node && HORIZON_NODE_TYPES.has(node.type));
       if (linkedHorizonNode) return linkedHorizonNode.type;
       const label = (link.label ?? "").toLowerCase();
-      if (label.includes("research")) return "research";
-      if (label.includes("future")) return "future";
+      if (label.includes("future") || label.includes("agentic")) return "future";
       return null;
     },
     [nodeMap]
@@ -752,15 +807,11 @@ export function CubeCanvas({
           <span className="cg-face-swatch" style={{ background: FACE_COLORS.product }} />
           <span>Products</span>
         </div>
-        <div className="cg-face-swatch-note">Click to rotate</div>
+        <div className="cg-face-swatch-note">Click a cube face to focus it</div>
         <div className="cg-face-legend-title cg-face-legend-subtitle">Horizon Edges</div>
         <div className="cg-face-item">
           <span className="cg-face-swatch cg-face-swatch-pulse" style={{ background: FACE_COLORS.future, color: FACE_COLORS.future }} />
           <span>Future signals</span>
-        </div>
-        <div className="cg-face-item">
-          <span className="cg-face-swatch cg-face-swatch-pulse" style={{ background: FACE_COLORS.research, color: FACE_COLORS.research }} />
-          <span>Research briefs</span>
         </div>
       </div>
       <div className="kg-controls-hint">

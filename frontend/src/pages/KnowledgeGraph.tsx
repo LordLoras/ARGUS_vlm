@@ -11,6 +11,7 @@ import { ChevronRightIcon, CloseIcon } from "../lib/icons";
 import { SparkleIcon, SearchIcon } from "../lib/icons";
 import { FACE_COLORS } from "../components/CubeGraph/types";
 import type { NodeType as CubeNodeType } from "../components/CubeGraph/types";
+import type { CubeFace } from "../components/CubeGraph/CubeCanvas";
 
 const FACE_GROUPS: { key: CubeNodeType; label: string; color: string }[] = [
   { key: "brand", label: "Brands", color: FACE_COLORS.brand },
@@ -19,8 +20,30 @@ const FACE_GROUPS: { key: CubeNodeType; label: string; color: string }[] = [
   { key: "product", label: "Products", color: FACE_COLORS.product },
   { key: "subsidiary", label: "Subsidiaries", color: FACE_COLORS.subsidiary },
   { key: "future", label: "Future Signals", color: FACE_COLORS.future },
-  { key: "research", label: "Research Briefs", color: FACE_COLORS.research },
 ];
+
+type DetailConnection = {
+  node: GraphNode;
+  labels: string[];
+  strength: number;
+  direction: "incoming" | "outgoing";
+};
+
+const FACE_FOR_GROUP: Partial<Record<CubeNodeType, CubeFace>> = {
+  brand: "brand",
+  company: "company",
+  category: "category",
+  product: "product",
+};
+
+const FACE_LABELS: Record<CubeFace, string> = {
+  brand: "+X brand face",
+  product: "-X product face",
+  top: "+Y identity face",
+  bottom: "-Y metadata face",
+  company: "+Z company face",
+  category: "-Z category face",
+};
 
 function LoadingFallback() {
   return (
@@ -46,6 +69,7 @@ export function KnowledgeGraph() {
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const [focusedFace, setFocusedFace] = useState<{ nodeId: string; face: CubeFace } | null>(null);
   const expandingNodeIds = useRef(new Set<string>());
 
   useEffect(() => {
@@ -85,15 +109,23 @@ export function KnowledgeGraph() {
     setHoveredNode(node);
   }, []);
 
+  const handleFaceFocus = useCallback((node: GraphNode, face: CubeFace | null) => {
+    setFocusedFace(face ? { nodeId: node.id, face } : null);
+  }, []);
+
   const handleNavigate = useCallback(
     (node: GraphNode) => {
+      setFocusedFace(null);
       setSelectedNode(node);
       if (!expandedNodeIds.has(node.id)) handleNodeClick(node);
     },
     [expandedNodeIds, handleNodeClick]
   );
 
-  const handleClose = useCallback(() => setSelectedNode(null), []);
+  const handleClose = useCallback(() => {
+    setFocusedFace(null);
+    setSelectedNode(null);
+  }, []);
 
   const filteredNodes = useMemo(() => {
     if (!searchQuery.trim()) return null;
@@ -106,29 +138,44 @@ export function KnowledgeGraph() {
   const connByType = useMemo(() => {
     if (!selectedNode) return null;
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]));
-    const result: Record<string, GraphNode[]> = { brand: [], company: [], category: [], product: [], subsidiary: [], future: [], research: [] };
+    const result = createEmptyConnectionGroups();
     for (const link of graphData.links) {
       const src = endpointId(link.source);
       const tgt = endpointId(link.target);
-      const addNode = (n: GraphNode) => {
+      const addNode = (n: GraphNode, direction: DetailConnection["direction"]) => {
         const t = n.type as CubeNodeType;
-        if (result[t] && !result[t].some((existing) => existing.id === n.id)) result[t].push(n);
+        const group = result[t];
+        if (!group) return;
+        const label = link.label ?? "connected";
+        const existing = group.find((item) => item.node.id === n.id);
+        if (existing) {
+          if (!existing.labels.includes(label)) existing.labels.push(label);
+          existing.strength = Math.max(existing.strength, link.strength ?? 0.5);
+          return;
+        }
+        group.push({
+          node: n,
+          labels: [label],
+          strength: link.strength ?? 0.5,
+          direction,
+        });
       };
-      if (src === selectedNode.id) { const t = nodeMap.get(tgt); if (t) addNode(t); }
-      else if (tgt === selectedNode.id) { const s = nodeMap.get(src); if (s) addNode(s); }
+      if (src === selectedNode.id) { const t = nodeMap.get(tgt); if (t) addNode(t, "outgoing"); }
+      else if (tgt === selectedNode.id) { const s = nodeMap.get(src); if (s) addNode(s, "incoming"); }
     }
     return result;
   }, [selectedNode, graphData]);
 
   const totalConnections = connByType ? Object.values(connByType).flat().length : 0;
+  const focusedFaceForPanel = selectedNode && focusedFace?.nodeId === selectedNode.id ? focusedFace.face : null;
   const color = selectedNode ? NODE_TYPE_COLORS[selectedNode.type] : "#7c3aed";
   const stats = {
     nodes: graphData.nodes.length,
     links: graphData.links.length,
     expansions: expandedNodeIds.size,
-    horizon: graphData.nodes.filter((n) => n.type === "future" || n.type === "research").length,
+    horizon: graphData.nodes.filter((n) => n.type === "future").length,
   };
-  const isAgenticNode = selectedNode?.type === "future" || selectedNode?.type === "research";
+  const isAgenticNode = selectedNode?.type === "future";
 
   return (
     <>
@@ -197,6 +244,8 @@ export function KnowledgeGraph() {
                 graphData={graphData}
                 selectedNodeId={selectedNode?.id ?? null}
                 onNodeClick={handleNodeClick}
+                focusedFace={focusedFaceForPanel}
+                onFaceFocus={handleFaceFocus}
                 onBackgroundClick={handleClose}
                 hoveredNodeId={hoveredNode?.id ?? null}
                 onNodeHover={handleNodeHover}
@@ -228,9 +277,9 @@ export function KnowledgeGraph() {
 
                   {isAgenticNode && (
                     <div className="cg-detail-agentic" style={{ borderColor: `${color}55`, background: `${color}12` }}>
-                      <span className="cg-detail-agentic-label" style={{ color }}>Agentic research edge</span>
+                      <span className="cg-detail-agentic-label" style={{ color }}>Future signal edge</span>
                       <span className="cg-detail-agentic-text">
-                        Deep research can follow this node to assemble competitor ads, launch timing, claim language, category movement, and evidence-backed next questions.
+                        This is a forward edge in the property graph. Later, Argus can hand it to an agentic workflow that expands competitor ads, claim language, launch timing, and category movement.
                       </span>
                     </div>
                   )}
@@ -272,30 +321,75 @@ export function KnowledgeGraph() {
                     </div>
                   )}
 
+                  {focusedFaceForPanel && (
+                    <div className="cg-detail-explored" style={{ borderColor: `${color}45`, background: `${color}10`, color }}>
+                      <span className="kg-expanded-pulse" />
+                      Focused {FACE_LABELS[focusedFaceForPanel]}
+                    </div>
+                  )}
+
                   <div className="cg-face-grid">
                     {FACE_GROUPS.map(({ key, label, color: groupColor }) => {
                       const items = connByType[key] || [];
                       if (items.length === 0) return null;
+                      const groupFace = FACE_FOR_GROUP[key];
+                      const isFocusedGroup = !!groupFace && focusedFaceForPanel === groupFace;
                       return (
-                        <div key={key} className="cg-face-card" style={{ borderColor: `${groupColor}50` }}>
-                          <div className="cg-face-card-header">
+                        <div
+                          key={key}
+                          className="cg-face-card"
+                          style={{
+                            borderColor: isFocusedGroup ? groupColor : `${groupColor}50`,
+                            background: isFocusedGroup ? `${groupColor}12` : undefined,
+                            boxShadow: isFocusedGroup ? `0 0 0 1px ${groupColor}35, 0 14px 36px ${groupColor}12` : undefined,
+                          }}
+                        >
+                          <div
+                            className="cg-face-card-header"
+                            role={groupFace ? "button" : undefined}
+                            tabIndex={groupFace ? 0 : undefined}
+                            title={groupFace ? `Focus ${FACE_LABELS[groupFace]}` : undefined}
+                            onClick={() => groupFace && setFocusedFace({ nodeId: selectedNode.id, face: groupFace })}
+                            onKeyDown={(event) => {
+                              if (!groupFace) return;
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setFocusedFace({ nodeId: selectedNode.id, face: groupFace });
+                              }
+                            }}
+                            style={{ cursor: groupFace ? "pointer" : undefined }}
+                          >
                             <span className="cg-face-card-dot" style={{ background: groupColor }} />
                             <span className="cg-face-card-label" style={{ color: groupColor }}>{label}</span>
                             <span className="cg-face-card-count" style={{ color: groupColor }}>{items.length}</span>
                           </div>
                           <div className="cg-face-card-items">
-                            {items.slice(0, 6).map((n) => (
+                            {items.slice(0, 6).map((conn) => (
                               <button
-                                key={n.id}
+                                key={conn.node.id}
                                 className="cg-face-chip"
                                 style={{ background: `${groupColor}15`, borderColor: `${groupColor}35`, color: groupColor }}
-                                onMouseEnter={() => setHoveredNode(n)}
+                                onMouseEnter={() => setHoveredNode(conn.node)}
                                 onMouseLeave={() => setHoveredNode(null)}
-                                onFocus={() => setHoveredNode(n)}
+                                onFocus={() => setHoveredNode(conn.node)}
                                 onBlur={() => setHoveredNode(null)}
-                                onClick={() => handleNavigate(n)}
+                                onClick={() => handleNavigate(conn.node)}
                               >
-                                {n.label}
+                                <span>{conn.node.label}</span>
+                                <span
+                                  style={{
+                                    border: `1px solid ${groupColor}35`,
+                                    borderRadius: 3,
+                                    color: "#aeb7c8",
+                                    fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                                    fontSize: 7,
+                                    letterSpacing: 0,
+                                    padding: "1px 4px",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  {formatRelationshipLabels(conn.labels)}
+                                </span>
                                 <ChevronRightIcon size={7} className="cg-chip-chevron" />
                               </button>
                             ))}
@@ -397,6 +491,25 @@ function endpointId(endpoint: string | GraphNode): string {
 
 function linkKey(link: GraphLink): string {
   return `${endpointId(link.source)}:${link.label ?? ""}:${endpointId(link.target)}`;
+}
+
+function createEmptyConnectionGroups(): Record<CubeNodeType, DetailConnection[]> {
+  return {
+    brand: [],
+    company: [],
+    category: [],
+    product: [],
+    subsidiary: [],
+    future: [],
+  };
+}
+
+function formatRelationshipLabels(labels: string[]): string {
+  const label = labels[0] ?? "connected";
+  const formatted = label
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return labels.length > 1 ? `${formatted} +${labels.length - 1}` : formatted;
 }
 
 function seedExpansionNodes(nodes: GraphNode[], source: GraphNode): GraphNode[] {

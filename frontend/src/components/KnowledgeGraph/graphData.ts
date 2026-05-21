@@ -110,14 +110,11 @@ const INITIAL_NODES: GraphNode[] = [
   { id: "toyota-bz4x", label: "Toyota bZ4X", type: "product", description: "Battery electric SUV in Toyota's bZ electric lineup.", categories: ["SUV", "Electric Vehicle"] },
   { id: "honda-prologue", label: "Honda Prologue", type: "product", description: "Battery electric SUV positioned as Honda's mainstream EV entry.", categories: ["SUV", "Electric Vehicle"] },
   { id: "chevy-equinox-ev", label: "Chevrolet Equinox EV", type: "product", description: "Electric compact SUV positioned for mass-market EV adoption.", categories: ["SUV", "Electric Vehicle"] },
-  { id: "future-ev-price-compression", label: "EV Price Compression", type: "future", description: "Future signal: track how EV ads shift from range leadership to discounts, lease offers, tax-credit language, and affordability claims." },
-  { id: "future-charging-confidence", label: "Charging Confidence", type: "future", description: "Future signal: monitor how brands reduce charging anxiety through network access, home-charging bundles, route planning, and fleet uptime claims." },
-  { id: "future-software-defined-ux", label: "Software-defined UX", type: "future", description: "Future signal: follow OTA updates, hands-free driving claims, subscription features, cockpit AI, and app-connected ownership narratives." },
-  { id: "future-battery-localization", label: "Battery Localization", type: "future", description: "Future signal: watch sourcing, domestic assembly, chemistry, warranty, and battery-health claims that may shape EV ad messaging." },
-  { id: "research-ev-incentives", label: "Deep Research: EV Incentives", type: "research", description: "Agentic brief: compare lease terms, tax-credit framing, range claims, and competitor offers across mass-market and premium EV ads." },
-  { id: "research-sdv-claims", label: "Deep Research: SDV Claims", type: "research", description: "Agentic brief: trace hands-free, AI cabin, OTA update, safety-assist, and connected-service claims by brand and product line." },
-  { id: "research-offroad-positioning", label: "Deep Research: Off-road Identity", type: "research", description: "Agentic brief: map ruggedness, trail capability, adventure lifestyle, and durability claims across Jeep, Bronco, Subaru, Rivian, and truck campaigns." },
-  { id: "research-battery-supply", label: "Deep Research: Battery Supply", type: "research", description: "Agentic brief: connect battery sourcing, warranty promises, charging claims, and domestic-production language to brand-level EV positioning." },
+  { id: "future-ev-price-compression", label: "EV Price Compression", type: "future", description: "Future signal: a forward edge the graph can hand to an agentic workflow to track EV ads shifting from range leadership to discounts, lease offers, tax-credit language, and affordability claims." },
+  { id: "future-charging-confidence", label: "Charging Confidence", type: "future", description: "Future signal: an ever-expanding agentic path for monitoring how brands reduce charging anxiety through network access, home-charging bundles, route planning, and fleet uptime claims." },
+  { id: "future-software-defined-ux", label: "Software-defined UX", type: "future", description: "Future signal: a queued agentic expansion path for OTA updates, hands-free driving claims, subscription features, cockpit AI, and app-connected ownership narratives." },
+  { id: "future-battery-localization", label: "Battery Localization", type: "future", description: "Future signal: a forward-looking graph edge for sourcing, domestic assembly, chemistry, warranty, and battery-health claims that may shape EV ad messaging." },
+  { id: "future-offroad-positioning", label: "Off-road Identity Shift", type: "future", description: "Future signal: agentic work can expand from this node into ruggedness, trail capability, adventure lifestyle, and durability claims across SUVs, trucks, and electric adventure vehicles." },
 ];
 
 const INITIAL_LINKS: GraphLink[] = [
@@ -278,17 +275,14 @@ const INITIAL_LINKS: GraphLink[] = [
   { source: "autonomous-driving", target: "future-software-defined-ux", label: "future_signal", strength: 0.55 },
   { source: "software-defined-vehicle", target: "future-software-defined-ux", label: "future_signal", strength: 0.6 },
   { source: "battery-supply-chain", target: "future-battery-localization", label: "future_signal", strength: 0.55 },
-  { source: "future-ev-price-compression", target: "research-ev-incentives", label: "research_brief", strength: 0.8 },
-  { source: "future-charging-confidence", target: "research-ev-incentives", label: "research_brief", strength: 0.7 },
-  { source: "future-software-defined-ux", target: "research-sdv-claims", label: "research_brief", strength: 0.8 },
-  { source: "future-battery-localization", target: "research-battery-supply", label: "research_brief", strength: 0.8 },
-  { source: "off-road", target: "research-offroad-positioning", label: "research_brief", strength: 0.7 },
-  { source: "tesla", target: "future-software-defined-ux", label: "research_input", strength: 0.45 },
+  { source: "off-road", target: "future-offroad-positioning", label: "future_signal", strength: 0.65 },
+  { source: "pickup-truck", target: "future-offroad-positioning", label: "future_signal", strength: 0.45 },
+  { source: "tesla", target: "future-software-defined-ux", label: "agentic_input", strength: 0.45 },
   { source: "gm", target: "autonomous-driving", label: "operates_in", strength: 0.45 },
   { source: "mercedes", target: "autonomous-driving", label: "operates_in", strength: 0.45 },
-  { source: "byd", target: "future-battery-localization", label: "research_input", strength: 0.45 },
-  { source: "rivian-r1t", target: "research-offroad-positioning", label: "research_input", strength: 0.55 },
-  { source: "lucid-air", target: "research-ev-incentives", label: "research_input", strength: 0.45 },
+  { source: "byd", target: "future-battery-localization", label: "agentic_input", strength: 0.45 },
+  { source: "rivian-r1t", target: "future-offroad-positioning", label: "agentic_input", strength: 0.55 },
+  { source: "lucid-air", target: "future-ev-price-compression", label: "agentic_input", strength: 0.45 },
 ];
 
 const EXPANSIONS: Record<string, GraphData> = {
