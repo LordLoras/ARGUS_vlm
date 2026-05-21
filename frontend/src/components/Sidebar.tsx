@@ -34,14 +34,13 @@ const workspace: NavEntry[] = [
 ];
 
 const intelligence: NavEntry[] = [
-  { to: "/agent", label: "Agent", icon: ChatIcon, badge: "●", accentBadge: true },
-  { to: "/debate", label: "Debate", icon: FlowIcon, badge: "new", accentBadge: true },
-  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon, badge: "new", accentBadge: true }
+  { to: "/agent", label: "Agent", icon: ChatIcon },
+  { to: "/debate", label: "Debate", icon: FlowIcon },
+  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon },
+  { to: "/embeddings", label: "Embeddings", icon: LayersIcon }
 ];
 
-const disabledIntelligence: { label: string; icon: IconComponent }[] = [
-  { label: "Embeddings", icon: LayersIcon }
-];
+const disabledIntelligence: { label: string; icon: IconComponent }[] = [];
 
 const system: NavEntry[] = [
   { to: "/about", label: "About", icon: InfoIcon },

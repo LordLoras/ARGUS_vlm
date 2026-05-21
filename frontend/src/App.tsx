@@ -19,6 +19,10 @@ const KnowledgeGraph = lazy(() =>
   import("./pages/KnowledgeGraph").then((m) => ({ default: m.KnowledgeGraph }))
 );
 
+const Embeddings = lazy(() =>
+  import("./pages/Embeddings").then((m) => ({ default: m.Embeddings }))
+);
+
 
 
 function Placeholder({ title, hint }: { title: string; hint?: string }) {
@@ -59,7 +63,7 @@ export default function App() {
         
         <Route path="/taxonomy" element={<Taxonomy />} />
         <Route path="/pipelines" element={<Jobs />} />
-        <Route path="/embeddings" element={<Placeholder title="Embeddings" />} />
+        <Route path="/embeddings" element={<Suspense fallback={null}><Embeddings /></Suspense>} />
         <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>

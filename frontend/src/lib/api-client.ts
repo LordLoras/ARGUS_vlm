@@ -253,6 +253,24 @@ export const api = {
       `/api/search${params(query)}`
     ),
 
+  getEmbeddingsScatter: (type: "text" | "visual", sample = 600) =>
+    apiFetch<{
+      points: Array<{
+        id: string;
+        x: number;
+        y: number;
+        z: number;
+        category: string;
+        confidence: number;
+        brand: string;
+        label: string;
+      }>;
+      categories: string[];
+      total: number;
+      sampled: number;
+      type: string;
+    }>(`/api/embeddings/scatter${params({ type, sample })}`),
+
   listCampaigns: (query: { brand?: string; created_by?: string; q?: string; limit?: number; offset?: number } = {}) =>
     apiFetch<{ items: Campaign[]; limit: number; offset: number }>(`/api/campaigns${params(query)}`),
 

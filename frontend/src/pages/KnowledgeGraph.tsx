@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, Suspense, lazy, useMemo, useRef } from "react";
+import type { CSSProperties } from "react";
 import { Topbar } from "../components/Topbar";
 import { graphService } from "../components/KnowledgeGraph/graphService";
 import type { GraphData, GraphLink, GraphNode } from "../components/KnowledgeGraph/types";
@@ -325,16 +326,8 @@ export function KnowledgeGraph() {
                               >
                                 <span>{conn.node.label}</span>
                                 <span
-                                  style={{
-                                    border: `1px solid ${groupColor}35`,
-                                    borderRadius: 3,
-                                    color: "#aeb7c8",
-                                    fontFamily: "JetBrains Mono, ui-monospace, monospace",
-                                    fontSize: 7,
-                                    letterSpacing: 0,
-                                    padding: "1px 4px",
-                                    textTransform: "uppercase",
-                                  }}
+                                  className="cg-face-chip-edge"
+                                  style={{ "--edge-color": groupColor } as CSSProperties}
                                 >
                                   {formatRelationshipLabels(conn.labels)}
                                 </span>
