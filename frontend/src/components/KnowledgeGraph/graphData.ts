@@ -321,6 +321,99 @@ const EXPANSIONS: Record<string, GraphData> = {
       { source: "muscle-car", target: "dodge-challenger", label: "includes", strength: 0.7 },
     ],
   },
+  "chrysler": {
+    nodes: [
+      { id: "chrysler-300", label: "Chrysler 300", type: "product", description: "Full-size luxury sedan by Chrysler.", categories: ["Sedan", "Luxury"] },
+      { id: "chrysler-pacifica", label: "Chrysler Pacifica", type: "product", description: "Minivan by Chrysler, also available as a plug-in hybrid.", categories: ["Minivan"] },
+      { id: "minivan", label: "Minivan", type: "category", description: "Multi-purpose vehicle designed for passenger and cargo capacity." },
+    ],
+    links: [
+      { source: "chrysler", target: "chrysler-300", label: "produces", strength: 0.9 },
+      { source: "chrysler", target: "chrysler-pacifica", label: "produces", strength: 0.9 },
+      { source: "chrysler", target: "luxury", label: "category", strength: 0.7 },
+      { source: "chrysler", target: "minivan", label: "category", strength: 0.7 },
+      { source: "minivan", target: "chrysler-pacifica", label: "includes", strength: 0.7 },
+      { source: "luxury", target: "chrysler-300", label: "includes", strength: 0.7 },
+    ],
+  },
+  "gmc": {
+    nodes: [
+      { id: "gmc-sierra", label: "GMC Sierra", type: "product", description: "Full-size pickup truck by GMC.", categories: ["Pickup Truck"] },
+      { id: "gmc-terrain", label: "GMC Terrain", type: "product", description: "Compact crossover SUV by GMC.", categories: ["SUV", "Compact"] },
+      { id: "gmc-yukon", label: "GMC Yukon", type: "product", description: "Full-size SUV by GMC.", categories: ["SUV"] },
+    ],
+    links: [
+      { source: "gmc", target: "gmc-sierra", label: "produces", strength: 0.9 },
+      { source: "gmc", target: "gmc-terrain", label: "produces", strength: 0.9 },
+      { source: "gmc", target: "gmc-yukon", label: "produces", strength: 0.9 },
+      { source: "pickup-truck", target: "gmc-sierra", label: "includes", strength: 0.7 },
+      { source: "suv", target: "gmc-terrain", label: "includes", strength: 0.7 },
+      { source: "suv", target: "gmc-yukon", label: "includes", strength: 0.7 },
+    ],
+  },
+  "ram-1500": {
+    nodes: [
+      { id: "ram-trx", label: "RAM 1500 TRX", type: "product", description: "High-performance off-road pickup truck.", categories: ["Pickup Truck", "Performance"] },
+      { id: "ram-rebel", label: "RAM 1500 Rebel", type: "product", description: "Off-road oriented trim of the RAM 1500.", categories: ["Pickup Truck", "Off-road"] },
+    ],
+    links: [
+      { source: "ram", target: "ram-trx", label: "produces", strength: 0.9 },
+      { source: "ram", target: "ram-rebel", label: "produces", strength: 0.9 },
+      { source: "pickup-truck", target: "ram-trx", label: "includes", strength: 0.7 },
+      { source: "pickup-truck", target: "ram-rebel", label: "includes", strength: 0.7 },
+    ],
+  },
+  "ram-2500": {
+    nodes: [
+      { id: "ram-power-wagon", label: "RAM Power Wagon", type: "product", description: "Heavy-duty off-road pickup truck by RAM.", categories: ["Pickup Truck", "Off-road"] },
+    ],
+    links: [
+      { source: "ram", target: "ram-power-wagon", label: "produces", strength: 0.9 },
+      { source: "pickup-truck", target: "ram-power-wagon", label: "includes", strength: 0.7 },
+    ],
+  },
+  "jeep-grand-cherokee": {
+    nodes: [
+      { id: "jeep-wagoneer", label: "Jeep Grand Wagoneer", type: "product", description: "Full-size luxury SUV by Jeep.", categories: ["SUV", "Luxury"] },
+    ],
+    links: [
+      { source: "jeep", target: "jeep-wagoneer", label: "produces", strength: 0.9 },
+      { source: "luxury", target: "jeep-wagoneer", label: "includes", strength: 0.7 },
+    ],
+  },
+  "dodge-durango": {
+    nodes: [
+      { id: "dodge-durango-srt", label: "Dodge Durango SRT", type: "product", description: "High-performance version of the Dodge Durango SUV.", categories: ["SUV", "Performance"] },
+      { id: "performance", label: "Performance Vehicle", type: "category", description: "Vehicles designed for high-speed capability and driving dynamics." },
+    ],
+    links: [
+      { source: "dodge", target: "dodge-durango-srt", label: "produces", strength: 0.9 },
+      { source: "dodge", target: "performance", label: "category", strength: 0.7 },
+      { source: "performance", target: "dodge-durango-srt", label: "includes", strength: 0.7 },
+    ],
+  },
+  "luxury": {
+    nodes: [
+      { id: "bmw", label: "BMW Group", type: "company", description: "German multinational automotive manufacturer known for luxury and performance vehicles.", industries: ["Automotive", "Luxury"], headquarters: "Munich, Germany", founded: "1916" },
+      { id: "mercedes", label: "Mercedes-Benz Group", type: "company", description: "German multinational automotive corporation known for premium vehicles.", industries: ["Automotive", "Luxury"], headquarters: "Stuttgart, Germany", founded: "1926" },
+    ],
+    links: [
+      { source: "bmw", target: "luxury", label: "operates_in", strength: 0.8 },
+      { source: "mercedes", target: "luxury", label: "operates_in", strength: 0.8 },
+      { source: "bmw", target: "automotive", label: "operates_in", strength: 0.5 },
+      { source: "mercedes", target: "automotive", label: "operates_in", strength: 0.5 },
+    ],
+  },
+  "automotive": {
+    nodes: [
+      { id: "hyundai", label: "Hyundai Motor Company", type: "company", description: "South Korean multinational automotive manufacturer.", industries: ["Automotive"], headquarters: "Seoul, South Korea", founded: "1967" },
+      { id: "vw-group", label: "Volkswagen Group", type: "company", description: "German multinational automotive manufacturing company, the largest automaker in Europe.", industries: ["Automotive", "Luxury"], headquarters: "Wolfsburg, Germany", founded: "1937" },
+    ],
+    links: [
+      { source: "hyundai", target: "automotive", label: "operates_in", strength: 0.5 },
+      { source: "vw-group", target: "automotive", label: "operates_in", strength: 0.5 },
+    ],
+  },
 };
 
 export async function getInitialGraph(): Promise<GraphResponse> {
@@ -341,18 +434,17 @@ export async function expandNode(nodeId: string): Promise<ExpandResponse> {
   if (!expansion) {
     return { new_nodes: [], new_links: [], expanded_from: nodeId };
   }
-  // Deduplicate: only return nodes/links not already in the graph
-  const existingIds = new Set(INITIAL_NODES.map((n) => n.id));
+  const allKnownIds = new Set<string>();
+  INITIAL_NODES.forEach((n) => allKnownIds.add(n.id));
   for (const key of Object.keys(EXPANSIONS)) {
-    if (key === nodeId) continue;
-    for (const n of EXPANSIONS[key].nodes) existingIds.add(n.id);
+    EXPANSIONS[key].nodes.forEach((n) => allKnownIds.add(n.id));
   }
-  const newNodes = expansion.nodes.filter((n) => !existingIds.has(n.id));
+  const newNodes = expansion.nodes.filter((n) => !allKnownIds.has(n.id));
   const newLinks = expansion.links.filter(
     (l) => {
       const s = typeof l.source === "string" ? l.source : (l.source as GraphNode).id;
       const t = typeof l.target === "string" ? l.target : (l.target as GraphNode).id;
-      return newNodes.some((n) => n.id === s) || newNodes.some((n) => n.id === t);
+      return !allKnownIds.has(s) || !allKnownIds.has(t);
     }
   );
   await delay(1200 + Math.random() * 800);

@@ -68,18 +68,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     (node: GraphNode) => {
       const fg = fgRef.current;
       if (!fg) return;
-      const distance = 100;
-      const distRatio =
-        1 + distance / Math.hypot(node.x ?? 0, node.y ?? 0, node.z ?? 0);
-      fg.cameraPosition(
-        {
-          x: (node.x ?? 0) * distRatio,
-          y: (node.y ?? 0) * distRatio,
-          z: (node.z ?? 0) * distRatio,
-        },
-        node,
-        1400
-      );
+      const camDistance = 140;
+      const nodePos = { x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 };
+      const camDir = { x: nodePos.x * 0.15, y: nodePos.y * 0.15 + camDistance * 0.55, z: camDistance };
+      fg.cameraPosition(camDir, nodePos, 1400);
       onNodeClick(node);
     },
     [onNodeClick]

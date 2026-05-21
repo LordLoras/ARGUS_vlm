@@ -316,10 +316,10 @@ export function CubeCanvas({
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("charge")?.strength(-300);
+    fg.d3Force("charge")?.strength(-360);
     fg.d3Force("link")?.distance((link: any) => {
       const strength = link.strength ?? 0.5;
-      return 85 + (1 - strength) * 55;
+      return 100 + (1 - strength) * 60;
     });
   }, [graphData]);
 
@@ -327,13 +327,10 @@ export function CubeCanvas({
     (node: GraphNode) => {
       const fg = fgRef.current;
       if (!fg) return;
-      const distance = 140;
-      const distRatio = 1 + distance / Math.hypot(node.x ?? 0, node.y ?? 0, node.z ?? 0);
-      fg.cameraPosition(
-        { x: (node.x ?? 0) * distRatio, y: (node.y ?? 0) * distRatio, z: (node.z ?? 0) * distRatio },
-        node,
-        1400
-      );
+      const camDistance = 180;
+      const nodePos = { x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 };
+      const camDir = { x: nodePos.x * 0.15, y: nodePos.y * 0.15 + camDistance * 0.6, z: camDistance };
+      fg.cameraPosition(camDir, nodePos, 1400);
       onNodeClick(node);
     },
     [onNodeClick]
@@ -461,7 +458,7 @@ export function CubeCanvas({
         }
         return "rgba(255,255,255,0.55)";
       }
-      return "rgba(255,255,255,0.18)";
+return "rgba(255,255,255,0.10)";
     },
     [isLinkHighlighted, graphData.nodes, selectedNodeId, hoveredNodeId]
   );
@@ -470,8 +467,8 @@ export function CubeCanvas({
     (link: GraphLink) => {
       const highlighted = isLinkHighlighted(link);
       const strength = link.strength ?? 0.5;
-      const base = 0.6 + strength * 1.2;
-      return highlighted ? base * 2.0 : base;
+      const base = 0.4 + strength * 0.8;
+      return highlighted ? base * 2.5 : base;
     },
     [isLinkHighlighted]
   );
