@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, Suspense, lazy, useMemo } from "react";
+import { useState, useEffect, useCallback, Suspense, lazy, useMemo, useRef } from "react";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { graphService } from "../components/KnowledgeGraph/graphService";
 import type { GraphData, GraphNode, GraphMeta, NodeType } from "../components/KnowledgeGraph/types";
 import { NODE_TYPE_COLORS, NODE_TYPE_LABELS } from "../components/KnowledgeGraph/types";
+import type { GraphCanvasHandle } from "../components/KnowledgeGraph/GraphCanvas";
 
 const GraphCanvas = lazy(() =>
   import("../components/KnowledgeGraph/GraphCanvas").then((m) => ({ default: m.GraphCanvas }))
@@ -45,6 +46,7 @@ function LoadingFallback() {
 
 export function KnowledgeGraph() {
   const health = useApiHealth();
+  const canvasHandle = useRef<GraphCanvasHandle | null>(null);
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
@@ -196,6 +198,7 @@ export function KnowledgeGraph() {
 
             <Suspense fallback={<LoadingFallback />}>
               <GraphCanvas
+                ref={canvasHandle}
                 graphData={graphData}
                 selectedNodeId={selectedNode?.id ?? null}
                 onNodeClick={handleNodeClick}
@@ -212,6 +215,7 @@ export function KnowledgeGraph() {
                   expanded={expandedNodeIds.has(selectedNode.id)}
                   onClose={handleClose}
                   onNavigate={handleNavigate}
+                  canvasHandle={canvasHandle.current}
                 />
               </Suspense>
             )}

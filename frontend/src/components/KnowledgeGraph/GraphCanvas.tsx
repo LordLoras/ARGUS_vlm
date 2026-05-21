@@ -1,9 +1,14 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
 import * as THREE from "three";
 import type { GraphData, GraphNode, GraphLink, NodeType } from "./types";
 import { NODE_TYPE_COLORS, NODE_TYPE_SIZES } from "./types";
+
+export interface GraphCanvasHandle {
+  projectToScreen: (x: number, y: number, z: number) => { x: number; y: number } | null;
+  getCanvasRect: () => DOMRect | null;
+}
 
 interface Props {
   graphData: GraphData;
@@ -13,21 +18,26 @@ interface Props {
   onNodeHover: (node: GraphNode | null) => void;
 }
 
-const NODE_MAP = () => {
-  const m = new Map<string, GraphNode>();
-  return m;
-};
-
-export function GraphCanvas({
-  graphData,
-  selectedNodeId,
-  onNodeClick,
-  hoveredNodeId,
-  onNodeHover,
-}: Props) {
+export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
+  { graphData, selectedNodeId, onNodeClick, hoveredNodeId, onNodeHover },
+  ref
+) {
   const fgRef = useRef<any>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  useImperativeHandle(ref, () => ({
+    projectToScreen(x: number, y: number, z: number) {
+      const fg = fgRef.current;
+      if (!fg) return null;
+      const coords = fg.graph2ScreenCoords(x, y, z);
+      if (!coords || !isFinite(coords.x) || !isFinite(coords.y)) return null;
+      return { x: coords.x, y: coords.y };
+    },
+    getCanvasRect() {
+      return wrapRef.current?.getBoundingClientRect() ?? null;
+    },
+  }));
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -175,7 +185,6 @@ export function GraphCanvas({
           typeof link.source === "string" ? link.source : (link.source as GraphNode).id;
         const tgtId =
           typeof link.target === "string" ? link.target : (link.target as GraphNode).id;
-        const srcNode = nodeMap().get(srcId);
         const activeId = srcId === selectedNodeId || srcId === hoveredNodeId ? srcId : tgtId;
         const activeNode = nodeMap().get(activeId);
         if (activeNode) {
@@ -252,4 +261,4 @@ export function GraphCanvas({
       </div>
     </div>
   );
-}
+});
