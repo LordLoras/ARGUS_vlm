@@ -402,6 +402,14 @@ export function Embeddings() {
   const textNeighbors = selectedTextPoint ? nearestPoints(selectedTextPoint, mirrorData.text?.points ?? []) : [];
   const visualNeighbors = selectedVisualPoint ? nearestPoints(selectedVisualPoint, mirrorData.visual?.points ?? []) : [];
   const selectedMirrorLabel = selectedPoint?.label || selectedPoint?.brand || "Select an ad";
+  const mirrorAlignmentScore = mirrorDelta == null
+    ? 0
+    : Math.max(0, Math.min(100, Math.round(100 - mirrorDelta)));
+  const selectedCategoryTotal = selectedPoint
+    ? (viewMode === "mirror"
+      ? Array.from(mirrorPointMap.values()).filter((point) => point.category === selectedPoint.category).length
+      : data?.points.filter((point) => point.category === selectedPoint.category).length ?? 0)
+    : 0;
 
   return (
     <>
@@ -602,10 +610,16 @@ export function Embeddings() {
                     <span className="es-map-kicker">Dual-Embedding Mirror</span>
                     <strong>{selectedMirrorLabel}</strong>
                     <p>{signalSplitCopy(mirrorDelta)}</p>
-                    <div className={`es-mirror-signal is-${signalSplitLabel(mirrorDelta).toLowerCase().replace(/\s+/g, "-")}`}>
+                    <div
+                      className={`es-mirror-signal is-${signalSplitLabel(mirrorDelta).toLowerCase().replace(/\s+/g, "-")}`}
+                      style={{ "--type-color": selectedColor, "--alignment": `${mirrorAlignmentScore}%` } as CSSProperties}
+                    >
                       <span>Signal read</span>
                       <b>{signalSplitLabel(mirrorDelta)}</b>
                       <em>{mirrorDelta == null ? "Click a bubble" : `${Math.round(mirrorDelta)} projection drift`}</em>
+                      <div className="es-mirror-alignment">
+                        <i />
+                      </div>
                     </div>
                     <div className="es-mirror-vector-grid">
                       <div>
@@ -617,6 +631,73 @@ export function Embeddings() {
                         <strong>{formatPointCoords(selectedVisualPoint)}</strong>
                       </div>
                     </div>
+                    {selectedPoint ? (
+                      <div
+                        className="es-mirror-profile"
+                        style={{ "--type-color": selectedColor } as CSSProperties}
+                      >
+                        <div className="es-mirror-profile-head">
+                          <ConfidenceRing value={selectedPoint.confidence} color={selectedColor} size={42} />
+                          <div>
+                            <span>Selected ad</span>
+                            <strong>{selectedPoint.label}</strong>
+                            <em>{selectedSpace === "text" ? "Selected from message map" : "Selected from creative map"}</em>
+                          </div>
+                          <button className="es-detail-close" onClick={handleClose} aria-label="Close selected ad">
+                            <CloseIcon size={14} />
+                          </button>
+                        </div>
+
+                        <div className="es-mirror-metrics">
+                          <div>
+                            <span>Confidence</span>
+                            <strong>{Math.round(selectedPoint.confidence * 100)}%</strong>
+                          </div>
+                          <div>
+                            <span>Similar</span>
+                            <strong>{clusterAds.length}</strong>
+                          </div>
+                          <div>
+                            <span>Category set</span>
+                            <strong>{selectedCategoryTotal}</strong>
+                          </div>
+                        </div>
+
+                        <div className="es-mirror-meta">
+                          {selectedPoint.brand && (
+                            <div>
+                              <span>Brand</span>
+                              <strong>{selectedPoint.brand}</strong>
+                            </div>
+                          )}
+                          <div>
+                            <span>Category</span>
+                            <strong>{selectedPoint.category}</strong>
+                          </div>
+                          <div>
+                            <span>Ad ID</span>
+                            <strong>{selectedPoint.id}</strong>
+                          </div>
+                        </div>
+
+                        <div className="es-mirror-model-strip">
+                          <div>
+                            <span>Message model</span>
+                            <strong>MiniLM 384d</strong>
+                          </div>
+                          <div>
+                            <span>Creative model</span>
+                            <strong>SigLIP 768d</strong>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="es-mirror-profile is-empty">
+                        <span>Presentation cue</span>
+                        <strong>Pick one ad to show the multimodal split.</strong>
+                        <p>The same ad is highlighted in both spaces, making it easy to explain whether the language and the visuals tell the same story.</p>
+                      </div>
+                    )}
                     <div className="es-mirror-neighbors">
                       <div>
                         <span>Nearby in message</span>
@@ -681,7 +762,7 @@ export function Embeddings() {
             </div>
 
             {/* Detail panel */}
-            {selectedPoint && (
+            {selectedPoint && viewMode === "single" && (
               <div className={`es-detail ${detailOpen ? "is-open" : ""}`}>
                 <div className="es-detail-header">
                   <div className="es-detail-header-left">
@@ -733,7 +814,7 @@ export function Embeddings() {
                     </div>
                     <div className="es-metric-card">
                       <span className="es-metric-value">
-                        {data?.points.filter((p) => p.category === selectedPoint.category).length ?? 0}
+                        {selectedCategoryTotal}
                       </span>
                       <span className="es-metric-label">Category Total</span>
                     </div>
@@ -804,10 +885,7 @@ export function Embeddings() {
                             borderColor: `${selectedColor}30`,
                             color: selectedColor,
                           }}
-                          onClick={() => {
-                            if (viewMode === "mirror") handleMirrorPointClick(p, selectedSpace);
-                            else handleSinglePointClick(p);
-                          }}
+                          onClick={() => handleSinglePointClick(p)}
                         >
                           <span className="es-cluster-chip-label">{p.label}</span>
                           <span className="es-cluster-chip-sub">{p.brand || p.id.slice(0, 8)}</span>
