@@ -26,6 +26,7 @@ interface Props {
   onPointHover: (point: ScatterPoint | null, position?: { x: number; y: number }) => void;
   categoryColors: Record<string, string>;
   activeCategories: Set<string>;
+  compact?: boolean;
 }
 
 const POINT_SIZE_BASE = 0.74;
@@ -111,6 +112,7 @@ export function ScatterCanvas({
   onPointHover,
   categoryColors,
   activeCategories,
+  compact = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -142,7 +144,7 @@ export function ScatterCanvas({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 800);
-    camera.position.set(70, 50, 70);
+    camera.position.set(compact ? 92 : 70, compact ? 58 : 50, compact ? 92 : 70);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
@@ -168,7 +170,7 @@ export function ScatterCanvas({
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.minDistance = 15;
-    controls.maxDistance = 200;
+    controls.maxDistance = compact ? 240 : 200;
     controls.target.set(0, 0, 0);
     controls.maxPolarAngle = Math.PI * 0.85;
     controlsRef.current = controls;
@@ -292,7 +294,7 @@ export function ScatterCanvas({
         el.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [compact]);
 
   // Resize observer
   useEffect(() => {
@@ -429,12 +431,12 @@ export function ScatterCanvas({
       const color = categoryColors[category] || "#7c3aed";
       const label = new SpriteText(
         `${formatCategoryLabel(category)}\n${cluster.count} ${cluster.count === 1 ? "ad" : "ads"}`,
-        2.75,
+        compact ? 1.8 : 2.75,
         "#f8fafc"
       );
       label.position.set(
         cluster.x / cluster.count,
-        cluster.y / cluster.count + 8.5,
+        cluster.y / cluster.count + (compact ? 6.5 : 8.5),
         cluster.z / cluster.count
       );
       label.renderOrder = 10;
@@ -447,7 +449,7 @@ export function ScatterCanvas({
       label.padding = 3;
       labelGroup.add(label);
     });
-  }, [points, activeCategories, categoryColors]);
+  }, [points, activeCategories, categoryColors, compact]);
 
   // Highlight selected / hovered + draw connections
   useEffect(() => {
@@ -565,7 +567,7 @@ export function ScatterCanvas({
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
     const target = new THREE.Vector3(point.x, point.y, point.z);
-    const endPos = target.clone().add(new THREE.Vector3(42, 28, 48).normalize().multiplyScalar(62));
+    const endPos = target.clone().add(new THREE.Vector3(42, 28, 48).normalize().multiplyScalar(compact ? 78 : 62));
     const startTime = performance.now();
     const duration = 850;
 
@@ -581,7 +583,7 @@ export function ScatterCanvas({
     cancelAnimationFrame(cameraTweenRef.current);
     cameraTweenRef.current = requestAnimationFrame(animateCamera);
     return () => cancelAnimationFrame(cameraTweenRef.current);
-  }, [selectedId, points]);
+  }, [selectedId, points, compact]);
 
   // Raycasting
   const getIntersectedPoint = useCallback(

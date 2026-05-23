@@ -14,6 +14,7 @@ const CATEGORY_PALETTE = [
 ];
 
 type EmbeddingType = "text" | "visual";
+type ExplorerMode = "single" | "mirror";
 
 interface ScatterResponse {
   points: ScatterPoint[];
@@ -136,11 +137,50 @@ function HoverTooltip({
   );
 }
 
+function projectionDistance(a: ScatterPoint, b: ScatterPoint) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+}
+
+function nearestPoints(point: ScatterPoint | null | undefined, points: ScatterPoint[], limit = 3) {
+  if (!point) return [];
+  return points
+    .filter((candidate) => candidate.id !== point.id)
+    .sort((a, b) => projectionDistance(point, a) - projectionDistance(point, b))
+    .slice(0, limit);
+}
+
+function signalSplitLabel(delta: number | null) {
+  if (delta == null) return "Select an ad";
+  if (delta < 42) return "Aligned";
+  if (delta < 82) return "Mixed signal";
+  return "Divergent";
+}
+
+function signalSplitCopy(delta: number | null) {
+  if (delta == null) return "Click a bubble in either map to compare where the same ad lands in language space and visual space.";
+  if (delta < 42) return "The ad lands in a similar territory in both maps, so messaging and creative are reinforcing each other.";
+  if (delta < 82) return "The ad shares some neighborhood structure, but the message and the visuals emphasize different signals.";
+  return "The ad moves to a different territory between maps, which is useful for spotting ads that say one thing and show another.";
+}
+
+function formatPointCoords(point: ScatterPoint | null | undefined) {
+  if (!point) return "not indexed";
+  return `${point.x.toFixed(0)} / ${point.y.toFixed(0)} / ${point.z.toFixed(0)}`;
+}
+
 export function Embeddings() {
   const [data, setData] = useState<ScatterResponse | null>(null);
+  const [viewMode, setViewMode] = useState<ExplorerMode>("single");
+  const [mirrorData, setMirrorData] = useState<Record<EmbeddingType, ScatterResponse | null>>({
+    text: null,
+    visual: null,
+  });
+  const [mirrorLoading, setMirrorLoading] = useState(false);
+  const [mirrorError, setMirrorError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [embedType, setEmbedType] = useState<EmbeddingType>("text");
+  const [selectedSpace, setSelectedSpace] = useState<EmbeddingType>("text");
   const [selectedPoint, setSelectedPoint] = useState<ScatterPoint | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<ScatterPoint | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -150,22 +190,34 @@ export function Embeddings() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const embeddingMeta = EMBEDDING_META[embedType];
+  const detailMeta = EMBEDDING_META[viewMode === "mirror" ? selectedSpace : embedType];
+
+  const categoriesForFilters = useMemo(() => {
+    if (viewMode === "mirror") {
+      return Array.from(new Set([
+        ...(mirrorData.text?.categories ?? []),
+        ...(mirrorData.visual?.categories ?? []),
+      ])).sort();
+    }
+    return data?.categories ?? [];
+  }, [data, mirrorData, viewMode]);
 
   const categoryColors = useMemo<Record<string, string>>(() => {
-    if (!data) return {};
     const map: Record<string, string> = {};
-    data.categories.forEach((cat, i) => {
+    categoriesForFilters.forEach((cat, i) => {
       map[cat] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length];
     });
     return map;
-  }, [data]);
+  }, [categoriesForFilters]);
 
   useEffect(() => {
+    if (viewMode !== "single") return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     setDetailOpen(false);
     setSelectedPoint(null);
+    setSelectedSpace(embedType);
     api
       .getEmbeddingsScatter(embedType)
       .then((res) => {
@@ -180,11 +232,45 @@ export function Embeddings() {
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [embedType, reloadKey]);
+  }, [embedType, reloadKey, viewMode]);
 
-  const visiblePoints = useMemo(() => {
-    if (!data) return [];
-    let pts = data.points.filter((p) => activeCategories.has(p.category));
+  useEffect(() => {
+    if (viewMode !== "mirror") return;
+    let cancelled = false;
+    setMirrorLoading(true);
+    setMirrorError(null);
+    setDetailOpen(false);
+    setSelectedPoint(null);
+    setHoveredPoint(null);
+    setHoverPos(null);
+
+    Promise.all([
+      api.getEmbeddingsScatter("text"),
+      api.getEmbeddingsScatter("visual"),
+    ])
+      .then(([textRes, visualRes]) => {
+        if (cancelled) return;
+        const nextMirrorData = {
+          text: textRes as ScatterResponse,
+          visual: visualRes as ScatterResponse,
+        };
+        setMirrorData(nextMirrorData);
+        setActiveCategories(new Set([
+          ...nextMirrorData.text.categories,
+          ...nextMirrorData.visual.categories,
+        ]));
+        setMirrorLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMirrorError(err instanceof Error ? err.message : "Failed to load embedding mirror");
+        setMirrorLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [reloadKey, viewMode]);
+
+  const filterPoints = useCallback((points: ScatterPoint[]) => {
+    let pts = points.filter((p) => activeCategories.has(p.category));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       pts = pts.filter(
@@ -196,42 +282,83 @@ export function Embeddings() {
       );
     }
     return pts;
-  }, [data, activeCategories, searchQuery]);
+  }, [activeCategories, searchQuery]);
+
+  const visiblePoints = useMemo(() => {
+    if (!data) return [];
+    return filterPoints(data.points);
+  }, [data, filterPoints]);
+
+  const mirrorVisiblePoints = useMemo(() => ({
+    text: mirrorData.text ? filterPoints(mirrorData.text.points) : [],
+    visual: mirrorData.visual ? filterPoints(mirrorData.visual.points) : [],
+  }), [filterPoints, mirrorData]);
+
+  const mirrorPointMap = useMemo(() => {
+    const map = new Map<string, ScatterPoint>();
+    mirrorData.text?.points.forEach((point) => map.set(point.id, point));
+    mirrorData.visual?.points.forEach((point) => {
+      if (!map.has(point.id)) map.set(point.id, point);
+    });
+    return map;
+  }, [mirrorData]);
+
+  const mirrorVisibleIds = useMemo(() => new Set([
+    ...mirrorVisiblePoints.text.map((point) => point.id),
+    ...mirrorVisiblePoints.visual.map((point) => point.id),
+  ]), [mirrorVisiblePoints]);
 
   const stats = useMemo(() => {
+    if (viewMode === "mirror") {
+      return {
+        total: Math.max(mirrorData.text?.total ?? 0, mirrorData.visual?.total ?? 0),
+        sampled: mirrorPointMap.size,
+        categories: categoriesForFilters.length,
+        visible: mirrorVisibleIds.size,
+      };
+    }
     if (!data) return { total: 0, sampled: 0, categories: 0, visible: 0 };
     return {
       total: data.total,
       sampled: data.sampled,
-      categories: data.categories.length,
+      categories: categoriesForFilters.length,
       visible: visiblePoints.length,
     };
-  }, [data, visiblePoints]);
+  }, [categoriesForFilters.length, data, mirrorData, mirrorPointMap, mirrorVisibleIds, viewMode, visiblePoints]);
 
   const categoryCounts = useMemo(() => {
-    if (!data) return new Map<string, number>();
     const map = new Map<string, number>();
-    data.points.forEach((p) => map.set(p.category, (map.get(p.category) || 0) + 1));
+    const sourcePoints = viewMode === "mirror" ? Array.from(mirrorPointMap.values()) : data?.points ?? [];
+    sourcePoints.forEach((p) => map.set(p.category, (map.get(p.category) || 0) + 1));
     return map;
-  }, [data]);
+  }, [data, mirrorPointMap, viewMode]);
 
-  const handlePointClick = useCallback(
+  const updateClusterAds = useCallback((point: ScatterPoint, points: ScatterPoint[]) => {
+    const nearby = points
+      .filter((p) => p.category === point.category && p.id !== point.id)
+      .sort((a, b) => projectionDistance(point, a) - projectionDistance(point, b))
+      .slice(0, 20);
+    setClusterAds(nearby);
+  }, []);
+
+  const handleSinglePointClick = useCallback(
     (point: ScatterPoint) => {
+      setSelectedSpace(embedType);
       setSelectedPoint(point);
       setDetailOpen(true);
-      if (data) {
-        const nearby = data.points
-          .filter((p) => p.category === point.category && p.id !== point.id)
-          .sort((a, b) => {
-            const da = Math.sqrt((a.x - point.x) ** 2 + (a.y - point.y) ** 2 + (a.z - point.z) ** 2);
-            const db = Math.sqrt((b.x - point.x) ** 2 + (b.y - point.y) ** 2 + (b.z - point.z) ** 2);
-            return da - db;
-          })
-          .slice(0, 20);
-        setClusterAds(nearby);
-      }
+      updateClusterAds(point, data?.points ?? []);
     },
-    [data]
+    [data, embedType, updateClusterAds]
+  );
+
+  const handleMirrorPointClick = useCallback(
+    (point: ScatterPoint, type: EmbeddingType) => {
+      setSelectedSpace(type);
+      setSelectedPoint(point);
+      setDetailOpen(true);
+      updateClusterAds(point, mirrorData[type]?.points ?? []);
+    },
+    [mirrorData, updateClusterAds]
   );
 
   const handleClose = useCallback(() => {
@@ -261,6 +388,20 @@ export function Embeddings() {
   const selectedColor = selectedPoint
     ? categoryColors[selectedPoint.category] || "#7c3aed"
     : "#7c3aed";
+  const isLoading = viewMode === "mirror" ? mirrorLoading : loading;
+  const activeError = viewMode === "mirror" ? mirrorError : error;
+  const selectedTextPoint = selectedPoint
+    ? mirrorData.text?.points.find((point) => point.id === selectedPoint.id) ?? null
+    : null;
+  const selectedVisualPoint = selectedPoint
+    ? mirrorData.visual?.points.find((point) => point.id === selectedPoint.id) ?? null
+    : null;
+  const mirrorDelta = selectedTextPoint && selectedVisualPoint
+    ? projectionDistance(selectedTextPoint, selectedVisualPoint)
+    : null;
+  const textNeighbors = selectedTextPoint ? nearestPoints(selectedTextPoint, mirrorData.text?.points ?? []) : [];
+  const visualNeighbors = selectedVisualPoint ? nearestPoints(selectedVisualPoint, mirrorData.visual?.points ?? []) : [];
+  const selectedMirrorLabel = selectedPoint?.label || selectedPoint?.brand || "Select an ad";
 
   return (
     <>
@@ -277,13 +418,13 @@ export function Embeddings() {
       />
 
       <div className="knowledge-graph-layout">
-        {loading ? (
+        {isLoading ? (
           <LoadingFallback />
-        ) : error ? (
+        ) : activeError ? (
           <div className="page" style={{ padding: 32 }}>
             <div className="es-error">
               <span className="es-error-title">Failed to load embeddings</span>
-              <span className="es-error-msg">{error}</span>
+              <span className="es-error-msg">{activeError}</span>
               <button
                 className="es-error-retry"
                 onClick={() => setReloadKey((key) => key + 1)}
@@ -296,23 +437,49 @@ export function Embeddings() {
           <>
             <div className="kg-toolbar">
               <div className="kg-toolbar-row">
-                <div className="es-type-toggle">
-                  <button
-                    className={`es-type-btn ${embedType === "text" ? "is-active" : ""}`}
-                    onClick={() => setEmbedType("text")}
-                  >
-                    <LayersIcon size={12} />
-                    <span>MiniLM</span>
-                    <span className="es-type-dim">384d</span>
-                  </button>
-                  <button
-                    className={`es-type-btn ${embedType === "visual" ? "is-active" : ""}`}
-                    onClick={() => setEmbedType("visual")}
-                  >
-                    <LayersIcon size={12} />
-                    <span>SigLIP</span>
-                    <span className="es-type-dim">768d</span>
-                  </button>
+                <div className="es-toolbar-left">
+                  <div className="es-mode-toggle">
+                    <button
+                      className={`es-mode-btn ${viewMode === "single" ? "is-active" : ""}`}
+                      onClick={() => setViewMode("single")}
+                    >
+                      Explore
+                    </button>
+                    <button
+                      className={`es-mode-btn ${viewMode === "mirror" ? "is-active" : ""}`}
+                      onClick={() => setViewMode("mirror")}
+                    >
+                      Mirror
+                    </button>
+                  </div>
+
+                  {viewMode === "single" ? (
+                    <div className="es-type-toggle">
+                      <button
+                        className={`es-type-btn ${embedType === "text" ? "is-active" : ""}`}
+                        onClick={() => setEmbedType("text")}
+                      >
+                        <LayersIcon size={12} />
+                        <span>MiniLM</span>
+                        <span className="es-type-dim">384d</span>
+                      </button>
+                      <button
+                        className={`es-type-btn ${embedType === "visual" ? "is-active" : ""}`}
+                        onClick={() => setEmbedType("visual")}
+                      >
+                        <LayersIcon size={12} />
+                        <span>SigLIP</span>
+                        <span className="es-type-dim">768d</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="es-mirror-pill">
+                      <LayersIcon size={12} />
+                      <span>MiniLM</span>
+                      <b>vs</b>
+                      <span>SigLIP</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="kg-toolbar-actions">
@@ -335,7 +502,7 @@ export function Embeddings() {
               </div>
 
               <div className="kg-type-filters es-filter-row">
-                {data?.categories.map((cat) => (
+                {categoriesForFilters.map((cat) => (
                   <button
                     key={cat}
                     className={`kg-type-filter ${activeCategories.has(cat) ? "is-active" : ""}`}
@@ -356,50 +523,160 @@ export function Embeddings() {
             </div>
 
             <div className="es-canvas-area">
-              <ScatterCanvas
-                points={visiblePoints}
-                selectedId={selectedPoint?.id ?? null}
-                onPointClick={handlePointClick}
-                onBackgroundClick={handleClose}
-                hoveredId={hoveredPoint?.id ?? null}
-                onPointHover={handleHover}
-                categoryColors={categoryColors}
-                activeCategories={activeCategories}
-              />
+              {viewMode === "single" ? (
+                <>
+                  <ScatterCanvas
+                    points={visiblePoints}
+                    selectedId={selectedPoint?.id ?? null}
+                    onPointClick={handleSinglePointClick}
+                    onBackgroundClick={handleClose}
+                    hoveredId={hoveredPoint?.id ?? null}
+                    onPointHover={handleHover}
+                    categoryColors={categoryColors}
+                    activeCategories={activeCategories}
+                  />
 
-              <div className="es-map-panel">
-                <div className="es-map-panel-head">
-                  <span className="es-map-kicker">Ad similarity map</span>
-                  <strong>{embeddingMeta.territory}</strong>
-                  <p>{embeddingMeta.explanation}</p>
-                </div>
-                <div className="es-map-reading">
-                  <span><b>Bubble</b> one ad</span>
-                  <span><b>Near</b> similar</span>
-                  <span><b>Color</b> category</span>
-                </div>
-                <div className="es-map-grid">
-                  <span><b>{stats.sampled}</b> sampled</span>
-                  <span><b>{stats.visible}</b> visible</span>
-                  <span><b>{stats.categories}</b> categories</span>
-                  <span><b>{embeddingMeta.dims}</b> dims</span>
-                </div>
-                <div className="es-map-source">{embeddingMeta.source}</div>
-              </div>
+                  <div className="es-map-panel">
+                    <div className="es-map-panel-head">
+                      <span className="es-map-kicker">Ad similarity map</span>
+                      <strong>{embeddingMeta.territory}</strong>
+                      <p>{embeddingMeta.explanation}</p>
+                    </div>
+                    <div className="es-map-reading">
+                      <span><b>Bubble</b> one ad</span>
+                      <span><b>Near</b> similar</span>
+                      <span><b>Color</b> category</span>
+                    </div>
+                    <div className="es-map-grid">
+                      <span><b>{stats.sampled}</b> sampled</span>
+                      <span><b>{stats.visible}</b> visible</span>
+                      <span><b>{stats.categories}</b> categories</span>
+                      <span><b>{embeddingMeta.dims}</b> dims</span>
+                    </div>
+                    <div className="es-map-source">{embeddingMeta.source}</div>
+                  </div>
 
-              {visiblePoints.length === 0 && (
-                <div className="es-empty-overlay">
-                  <span className="es-empty-title">No vectors in view</span>
-                  <span className="es-empty-sub">Clear search or re-enable a category filter.</span>
-                </div>
-              )}
+                  {visiblePoints.length === 0 && (
+                    <div className="es-empty-overlay">
+                      <span className="es-empty-title">No vectors in view</span>
+                      <span className="es-empty-sub">Clear search or re-enable a category filter.</span>
+                    </div>
+                  )}
 
-              {hoveredPoint && !selectedPoint && (
-                <HoverTooltip
-                  point={hoveredPoint}
-                  color={categoryColors[hoveredPoint.category] || "#7c3aed"}
-                  position={hoverPos}
-                />
+                  {hoveredPoint && !selectedPoint && (
+                    <HoverTooltip
+                      point={hoveredPoint}
+                      color={categoryColors[hoveredPoint.category] || "#7c3aed"}
+                      position={hoverPos}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="es-mirror-stage">
+                  <div className="es-mirror-pane is-text">
+                    <div className="es-mirror-pane-head">
+                      <span className="es-map-kicker">Message space</span>
+                      <strong>MiniLM text map</strong>
+                      <p>What the ad says: transcript, OCR, offers, claims, and calls to action.</p>
+                      <em>{mirrorVisiblePoints.text.length} visible</em>
+                    </div>
+                    <div className="es-mirror-canvas">
+                      <ScatterCanvas
+                        compact
+                        points={mirrorVisiblePoints.text}
+                        selectedId={selectedPoint?.id ?? null}
+                        onPointClick={(point) => handleMirrorPointClick(point, "text")}
+                        onBackgroundClick={handleClose}
+                        hoveredId={hoveredPoint?.id ?? null}
+                        onPointHover={(point) => {
+                          setHoveredPoint(point);
+                          setHoverPos(null);
+                        }}
+                        categoryColors={categoryColors}
+                        activeCategories={activeCategories}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="es-mirror-bridge">
+                    <span className="es-map-kicker">Dual-Embedding Mirror</span>
+                    <strong>{selectedMirrorLabel}</strong>
+                    <p>{signalSplitCopy(mirrorDelta)}</p>
+                    <div className={`es-mirror-signal is-${signalSplitLabel(mirrorDelta).toLowerCase().replace(/\s+/g, "-")}`}>
+                      <span>Signal read</span>
+                      <b>{signalSplitLabel(mirrorDelta)}</b>
+                      <em>{mirrorDelta == null ? "Click a bubble" : `${Math.round(mirrorDelta)} projection drift`}</em>
+                    </div>
+                    <div className="es-mirror-vector-grid">
+                      <div>
+                        <span>Message position</span>
+                        <strong>{formatPointCoords(selectedTextPoint)}</strong>
+                      </div>
+                      <div>
+                        <span>Visual position</span>
+                        <strong>{formatPointCoords(selectedVisualPoint)}</strong>
+                      </div>
+                    </div>
+                    <div className="es-mirror-neighbors">
+                      <div>
+                        <span>Nearby in message</span>
+                        {textNeighbors.length ? textNeighbors.map((point) => (
+                          <button
+                            key={point.id}
+                            onClick={() => handleMirrorPointClick(point, "text")}
+                            style={{ "--type-color": categoryColors[point.category] || "#7c3aed" } as CSSProperties}
+                          >
+                            {point.label}
+                          </button>
+                        )) : <small>Select an ad</small>}
+                      </div>
+                      <div>
+                        <span>Nearby in creative</span>
+                        {visualNeighbors.length ? visualNeighbors.map((point) => (
+                          <button
+                            key={point.id}
+                            onClick={() => handleMirrorPointClick(point, "visual")}
+                            style={{ "--type-color": categoryColors[point.category] || "#7c3aed" } as CSSProperties}
+                          >
+                            {point.label}
+                          </button>
+                        )) : <small>Select an ad</small>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="es-mirror-pane is-visual">
+                    <div className="es-mirror-pane-head">
+                      <span className="es-map-kicker">Creative space</span>
+                      <strong>SigLIP visual map</strong>
+                      <p>What the ad shows: scenes, objects, layouts, people, products, and visual style.</p>
+                      <em>{mirrorVisiblePoints.visual.length} visible</em>
+                    </div>
+                    <div className="es-mirror-canvas">
+                      <ScatterCanvas
+                        compact
+                        points={mirrorVisiblePoints.visual}
+                        selectedId={selectedPoint?.id ?? null}
+                        onPointClick={(point) => handleMirrorPointClick(point, "visual")}
+                        onBackgroundClick={handleClose}
+                        hoveredId={hoveredPoint?.id ?? null}
+                        onPointHover={(point) => {
+                          setHoveredPoint(point);
+                          setHoverPos(null);
+                        }}
+                        categoryColors={categoryColors}
+                        activeCategories={activeCategories}
+                      />
+                    </div>
+                  </div>
+
+                  {mirrorVisibleIds.size === 0 && (
+                    <div className="es-empty-overlay">
+                      <span className="es-empty-title">No vectors in either mirror</span>
+                      <span className="es-empty-sub">Clear search or re-enable a category filter.</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -461,7 +738,7 @@ export function Embeddings() {
                       <span className="es-metric-label">Category Total</span>
                     </div>
                     <div className="es-metric-card">
-                      <span className="es-metric-value">{embedType === "text" ? "384" : "768"}</span>
+                      <span className="es-metric-value">{detailMeta.dims}</span>
                       <span className="es-metric-label">Dimensions</span>
                     </div>
                   </div>
@@ -469,7 +746,7 @@ export function Embeddings() {
                   <div className="es-vector-strip">
                     <div>
                       <span>Model</span>
-                      <strong>{embeddingMeta.territory}</strong>
+                      <strong>{detailMeta.territory}</strong>
                     </div>
                     <div>
                       <span>P1</span>
@@ -527,7 +804,10 @@ export function Embeddings() {
                             borderColor: `${selectedColor}30`,
                             color: selectedColor,
                           }}
-                          onClick={() => handlePointClick(p)}
+                          onClick={() => {
+                            if (viewMode === "mirror") handleMirrorPointClick(p, selectedSpace);
+                            else handleSinglePointClick(p);
+                          }}
                         >
                           <span className="es-cluster-chip-label">{p.label}</span>
                           <span className="es-cluster-chip-sub">{p.brand || p.id.slice(0, 8)}</span>
@@ -562,13 +842,13 @@ export function Embeddings() {
                 </div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat">
-                  <span className="kg-stat-value">{embedType === "text" ? "384d" : "768d"}</span>
+                  <span className="kg-stat-value">{viewMode === "mirror" ? "384d + 768d" : embeddingMeta.dims}</span>
                   <span className="kg-stat-label">Dimensions</span>
                 </div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat kg-stat-accent">
                   <SparkleIcon size={9} />
-                  <span className="kg-stat-value">{embeddingMeta.label}</span>
+                  <span className="kg-stat-value">{viewMode === "mirror" ? "Dual mirror" : embeddingMeta.label}</span>
                   <span className="kg-stat-label">Active Space</span>
                 </div>
               </div>
