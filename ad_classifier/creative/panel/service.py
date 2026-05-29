@@ -301,7 +301,7 @@ def _persona_messages(persona: Persona, context: _PanelContext) -> list[dict[str
         "citation_ids": ["c0"],
     }
     system = (
-        "You are ARGUS Creative Review Panel, a local-first ad analysis assistant. "
+        "You are ARGUS Creative Review Panel, an ad analysis assistant. "
         "Simulate the requested persona's evaluation lens, not a real demographic sample. "
         "Internally reason from the supplied ad evidence before answering: identify what is "
         "clearly communicated, what is missing or ambiguous, which citation supports the read, "

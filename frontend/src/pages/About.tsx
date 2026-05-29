@@ -172,6 +172,33 @@ const SEARCH_CARDS: CardItem[] = [
   },
 ];
 
+const FEATURE_CARDS: CardItem[] = [
+  {
+    title: "Natural-Language Agent",
+    body: "Ask questions in plain English. The agent calls read-only tools, cites ad and campaign IDs, and logs every turn.",
+    icon: MessageSquare,
+    color: "var(--accent-2)",
+  },
+  {
+    title: "Creative Debate Panel",
+    body: "Adversarial persona review with opening statements, cross-examination, closing arguments, tensions, and a moderator scorecard.",
+    icon: BrainCircuit,
+    color: "var(--amber)",
+  },
+  {
+    title: "Knowledge Graph",
+    body: "Interactive graph visualization of entity relationships. Currently shows sample data — the adapter is wired and ready to connect to a live graph backend at any time. Planned: agentic auto-discovery of emerging signals and cross-campaign patterns.",
+    icon: Network,
+    color: "var(--emerald)",
+  },
+  {
+    title: "Embedding Space",
+    body: "Interactive UMAP projection of text and visual vectors. Highly experimental — dimensions are approximate, not precise coordinates.",
+    icon: Radar,
+    color: "var(--rose)",
+  },
+];
+
 const STACK_LAYERS = [
   {
     layer: "Interface",
@@ -617,7 +644,7 @@ export function About() {
         <div className="about-section-head">
           <span>05</span>
           <div>
-            <h2>Search And Discovery</h2>
+            <h2>Search And Retrieval</h2>
             <p>Different retrieval modes answer different analyst questions.</p>
           </div>
         </div>
@@ -625,15 +652,27 @@ export function About() {
         <div className="about-plain-callout about-plain-callout-sky">
           <Zap size={18} />
           <span>
-            Visual search is the key differentiator: ask for something on screen,
-            then jump to the matching frame instead of reading a whole transcript.
+            Ranking uses reciprocal rank fusion with heuristic text-evidence bonuses.
+            Weak partial matches can surface because there is no learned reranker yet —
+            a custom reranker model will close this gap in a future release.
           </span>
         </div>
       </FadeSection>
 
-      <FadeSection className="about-section" id="trust">
+      <FadeSection className="about-section" id="features">
         <div className="about-section-head">
           <span>06</span>
+          <div>
+            <h2>Built-In Tools</h2>
+            <p>Analysis surfaces beyond the core pipeline.</p>
+          </div>
+        </div>
+        <CardGrid items={FEATURE_CARDS} columns="two" />
+      </FadeSection>
+
+      <FadeSection className="about-section" id="trust">
+        <div className="about-section-head">
+          <span>07</span>
           <div>
             <h2>Trust Boundaries</h2>
             <p>These points keep the project understandable and defensible.</p>
@@ -644,7 +683,7 @@ export function About() {
 
       <FadeSection className="about-section" id="architecture">
         <div className="about-section-head">
-          <span>07</span>
+          <span>08</span>
           <div>
             <h2>Under The Hood</h2>
             <p>A semi-technical summary of the stack layers.</p>
@@ -682,7 +721,7 @@ export function About() {
 
       <FadeSection className="about-section" id="tour">
         <div className="about-section-head">
-          <span>08</span>
+          <span>09</span>
           <div>
             <h2>Explore</h2>
             <p>Navigate to any section of the application.</p>

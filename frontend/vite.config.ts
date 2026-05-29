@@ -404,7 +404,7 @@ function renderLoginPage(redirectTo: string, error?: string) {
           <input name="password" type="password" autocomplete="current-password" required />
         </label>
         <button type="submit">Enter ARGUS</button>
-        <div class="foot">Local-first demo gate. Keep the API port private.</div>
+        <div class="foot">Authentication gate. Keep the API port private.</div>
       </form>
     </main>
   </body>

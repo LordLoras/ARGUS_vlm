@@ -12,7 +12,7 @@ from ad_classifier.cli.operational import api, init_db, recover_jobs, reindex_vi
 
 app = typer.Typer(
     name="ad-classifier",
-    help="Local-first multimodal ad-classification pipeline.",
+    help="Multimodal ad-classification pipeline.",
     no_args_is_help=True,
 )
 

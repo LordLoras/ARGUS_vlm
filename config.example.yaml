@@ -4,7 +4,7 @@
 # Choices are documented inline so setup does not require jumping between docs.
 
 paths:
-  # Local artifact roots. Relative paths resolve from the repo/config location.
+  # Artifact roots. Relative paths resolve from the repo/config location.
   # Move data_root/sqlite_path to a larger drive if you ingest many videos.
   data_root: ./data
   uploads: ./data/uploads
@@ -31,15 +31,19 @@ whisper:
   #   mock                    — returns empty transcript (for testing without a model)
   backend: whisper_cpp
   # ── Model ──
-  #   tiny.en       (39 MB, fastest, worst accuracy — "Jeep" heard as "cheap")
-  #   large-v3-turbo (~1.6 GB q5_0 or 3.1 GB full, best accuracy, recommended)
-  model: large-v3-turbo
+  #   tiny.en       (75 MB, fastest, worst accuracy — "Jeep" heard as "cheap")
+  #   base.en       (148 MB, decent for short spots)
+  #   small.en      (500 MB, good balance)
+  #   large-v3-turbo (~1.6 GB q5_0 or 3.1 GB full, best accuracy, recommended for production)
+  model: tiny.en
   compute_type: int8              # faster-whisper only
   language: null                  # null = auto-detect
   whisper_cpp:
     # Windows path: download a ggml model from https://huggingface.co/ggerganov/whisper.cpp
+    # ggml-tiny.en.bin is bundled with the repository for quick-start.
+    # Switch to ggml-large-v3-turbo.bin for production transcription quality.
     command: ./tools/whisper.cpp/whisper-cli.exe
-    model_path: ./models/whisper/ggml-large-v3-turbo.bin
+    model_path: ./models/whisper/ggml-tiny.en.bin
     use_gpu: true
     device: 0
     threads: 8
@@ -98,20 +102,18 @@ glm_ocr:
   # separately as ocr_items.engine = "glm_ocr" and included in search text
   # when include_in_search is true. It is not used as grounded OCR evidence
   # for rules/marketing unless you explicitly wire that downstream. Keep false
-  # in the template so fresh installs do not require a GLM-OCR endpoint; enable
-  # for normal local ingestion when an OpenAI-compatible GLM-OCR engine is
-  # listening on port 5050.
+  # so fresh installs do not require a GLM-OCR endpoint; enable when an
+  # OpenAI-compatible GLM-OCR engine is available.
   enabled: false
-  # Choices: local | remote. The selected preset below is copied to
-  # glm_ocr.endpoint at runtime.
-  mode: local                 # local | remote
+  # Choices: local | remote. The selected preset is copied to glm_ocr.endpoint at runtime.
+  mode: local
   prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
   image_max_dim: 1024
   # include_in_search: add GLM-OCR text to keyword/vector text search.
   include_in_search: true
   # include_in_vlm_bundle: feed GLM-OCR text to the classifier. Keep false
   # unless you trust the OCR-VL output for fine print/legal text.
-  include_in_vlm_bundle: false # keep false for finance/legal fine print unless reviewed
+  include_in_vlm_bundle: false
   # run_on_text_frames: allow automatic gated calls when PaddleOCR sees enough text.
   run_on_text_frames: true
   # min_ocr_chars: frame must have this many raw OCR chars before gated GLM-OCR.
@@ -128,7 +130,7 @@ glm_ocr:
     max_retries: 1
     retry_delay_s: 1
     temperature: 0
-    max_tokens: 2048
+    max_tokens: 4096
     stream: true
   remote:
     endpoint: "https://your-openai-compatible-glm-ocr.example/v1"
@@ -144,9 +146,6 @@ glm_ocr:
     # force_all: true calls GLM-OCR on every kept frame up to max_frames_per_ad.
     # Use only for diagnostics; normal mode should stay false.
     force_all: false
-    # Thresholds below decide what "hard frame" means. Higher dense/fragment
-    # thresholds call GLM-OCR less often; higher confidence thresholds call it
-    # more often because more frames count as low-confidence.
     mean_confidence_threshold: 0.70
     min_item_confidence_threshold: 0.50
     dense_text_char_threshold: 500
@@ -156,14 +155,14 @@ glm_ocr:
 rules:
   # null = built-in ad_classifier/pipeline/rules/default_rules.yaml.
   # Set to a YAML path to use project/customer-specific deterministic rules.
-  rules_path: null                # null = built-in ad_classifier/pipeline/rules/default_rules.yaml
+  rules_path: null
   # Transcript segments within this window are attached to nearby frames.
   alignment_window_ms: 1500
 
 vlm:
   # mode: local | remote | frontier — selects which endpoint preset is active.
-  #   "local"  → vlm.local is used (OpenAI-compatible engine on this machine)
-  #   "remote" → vlm.remote is used (cloud / hosted endpoint)
+  #   "local"    → vlm.local is used (OpenAI-compatible engine on this machine)
+  #   "remote"   → vlm.remote is used (cloud / hosted endpoint)
   #   "frontier" → vlm.frontier is used (OpenRouter/frontier-model route)
   # The agent can inherit the active preset or pin itself to local/remote/frontier
   # with agent.inherit_vlm_mode.
@@ -282,7 +281,7 @@ campaigns:
     min_campaign_signal_confidence: 0.80
     # Choices: hdbscan | agglomerative. hdbscan finds variable-sized clusters;
     # agglomerative is deterministic and easier to reason about on small sets.
-    clusterer: hdbscan            # hdbscan | agglomerative
+    clusterer: hdbscan
     name_template: "{brand} {month} {year}"
 
 brand_profiles:
@@ -290,7 +289,7 @@ brand_profiles:
   # part of ingest and never overwrites ad-extracted marketing evidence.
   # Uses Wikimedia public read APIs; set a descriptive User-Agent per API etiquette.
   enabled: true
-  user_agent: "ARGUS-VLM/0.1 (local-first ad classifier; https://github.com/LordLoras/ARGUS_vlm)"
+  user_agent: "ARGUS-VLM/0.1 (ad classifier; https://github.com/LordLoras/ARGUS_vlm)"
   timeout_s: 10
   cache_days: 90
   max_candidates: 5
@@ -301,9 +300,7 @@ api:
   # FastAPI bind address. 127.0.0.1 keeps the API local-only.
   host: 127.0.0.1
   port: 8000
-  # Browser CORS allowlist for split-origin deployments. In normal Vite dev
-  # mode, the frontend uses same-origin /api and /data proxying, so random
-  # tunnel URLs do not need to be added here.
+  # Browser CORS allowlist. Add additional origins for remote deployments.
   cors_origins:
     - http://localhost:5173
   upload:
@@ -312,11 +309,16 @@ api:
       - video/mp4
       - video/quicktime
       - video/webm
+  # Public read-only API under /api/public/*. Requires an API key.
+  # Set enabled: true and api_key to a secret string to activate.
+  public:
+    enabled: false
+    api_key: null
 
 worker:
   # Polling interval for queued jobs. Lower reacts faster; higher is quieter.
   poll_interval_ms: 1000
-  # Pipeline concurrency. Keep 1 for local GPU/VLM stability.
+  # Pipeline concurrency. Keep 1 for GPU/VLM stability.
   concurrency: 1
 
 agent:
@@ -339,8 +341,8 @@ agent:
 
 creative_panel:
   # Creative Panel and Debate are user-triggered synthetic analysis calls.
-  # Keep inherit_vlm: true for old behavior. Set false and fill endpoint to
-  # keep these calls local/remote while ingest uses a Frontier model.
+  # Keep inherit_vlm: true to reuse the active VLM endpoint. Set false and
+  # fill endpoint to pin these calls to a specific endpoint.
   inherit_vlm: true
   endpoint: {}
   temperature: 0.1
@@ -350,14 +352,13 @@ search:
   # Minimum cosine-similarity threshold for vector search results.
   # Results below these scores are dropped before ranking/filtering.
   # Lower values = more recall, higher values = more precision.
-  # Set to 0 to disable relevance filtering entirely.
   # SigLIP2 cross-modal (text→image) cosine similarities cluster close
   # to zero on local video frames, and ad-level visual vectors are
   # mean-pooled from keyframes (diluting the signal), so the visual
   # threshold must be much more permissive than text-vector search.
-  # For visual mode, the filter also checks
-  # per-frame similarity (picking the best keyframe), not just the
-  # ad-level vector, so an ad survives if ANY keyframe clears the bar.
+  # For visual mode, the filter also checks per-frame similarity (picking
+  # the best keyframe), not just the ad-level vector, so an ad survives
+  # if ANY keyframe clears the bar.
   text_min_score: 0.20          # text-vector (all-MiniLM-L6-v2) and hybrid mode
   visual_min_score: 0.03        # visual-only / exploratory SigLIP2 queries
   visual_hybrid_min_score: 0.08 # visual-only additions when keyword hits exist

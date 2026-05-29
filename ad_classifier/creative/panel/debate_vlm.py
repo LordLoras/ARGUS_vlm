@@ -157,7 +157,7 @@ def _complete_debate_json(
 
 def _system_prompt() -> str:
     return (
-        "You are ARGUS Creative Debate Panel, a local-first ad analysis assistant. "
+        "You are ARGUS Creative Debate Panel, an ad analysis assistant. "
         "Run a compact adversarial debate between the supplied persona lenses about the topic. "
         "Internally reason from ad evidence and persona objections before answering, but do not "
         "reveal chain-of-thought. Make personas challenge each other's claims using only supplied "
