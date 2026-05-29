@@ -16,6 +16,7 @@ from ad_classifier.api.routes.creative_panel import router as creative_panel_rou
 from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.knowledge import router as knowledge_router
+from ad_classifier.api.routes.public import router as public_router
 from ad_classifier.api.routes.search import router as search_router
 from ad_classifier.api.routes.settings import router as settings_router
 from ad_classifier.api.routes.embeddings import router as embeddings_router
@@ -104,6 +105,14 @@ def create_app(
         allow_headers=["*"],
     )
 
+    if config.api.public.enabled and config.api.public.api_key:
+        from ad_classifier.api.middleware import ApiKeyMiddleware
+
+        app.add_middleware(
+            ApiKeyMiddleware,
+            public_api_key=config.api.public.api_key,
+        )
+
     app.include_router(ads_router, prefix="/api")
     app.include_router(evidence_router, prefix="/api")
     app.include_router(jobs_router, prefix="/api")
@@ -116,6 +125,7 @@ def create_app(
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(embeddings_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
+    app.include_router(public_router, prefix="/api")
 
     data_root = resolve_config_path(config.paths.data_root, config_file)
     data_root.mkdir(parents=True, exist_ok=True)

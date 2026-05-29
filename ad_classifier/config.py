@@ -243,6 +243,13 @@ class UploadConfig(BaseModel):
     )
 
 
+class PublicApiConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    api_key: str | None = None
+
+
 class APIConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -250,6 +257,7 @@ class APIConfig(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     upload: UploadConfig = Field(default_factory=UploadConfig)
+    public: PublicApiConfig = Field(default_factory=PublicApiConfig)
 
 
 class WorkerConfig(BaseModel):
@@ -426,7 +434,7 @@ class BrandProfilesConfig(BaseModel):
 
     enabled: bool = True
     user_agent: str = (
-        "ARGUS-VLM/0.1 (local-first ad classifier; "
+        "ARGUS-VLM/0.1 (ad classifier; "
         "https://github.com/LordLoras/ARGUS_vlm)"
     )
     timeout_s: float = Field(default=10.0, ge=0.1)
@@ -550,6 +558,7 @@ def config_file_payload(config: AppConfig) -> dict[str, Any]:
         exclude={
             "vlm": {"endpoint"},
             "glm_ocr": {"endpoint"},
+            "api": {"public": {"api_key"}},
         },
     )
     if payload.get("agent", {}).get("inherit_vlm") is True:

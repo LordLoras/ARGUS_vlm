@@ -17,6 +17,7 @@ env/
 huggingface/
 ~/.cache/huggingface/
 /models/
+!/models/whisper/ggml-tiny.en.bin
 
 # Local native tool binaries
 /tools/whisper.cpp/

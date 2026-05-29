@@ -126,8 +126,8 @@ const TRUST_CARDS: CardItem[] = [
     color: "var(--amber)",
   },
   {
-    title: "Local-first by default",
-    body: "The demo runs from local files, a local worker, SQLite, and local model endpoints. No Docker is required.",
+    title: "Self-contained deployment",
+    body: "SQLite stores everything in one file. No Docker or cloud services required, though remote VLM endpoints are supported.",
     icon: Server,
     color: "var(--emerald)",
   },
@@ -309,7 +309,7 @@ function DemoSignalPanel({ activeStep }: { activeStep: number }) {
         <span className="about-window-dot" />
         <span className="about-window-dot" />
         <span className="about-window-dot" />
-        <strong>live_demo.argus</strong>
+        <strong>pipeline.argus</strong>
       </div>
 
       <div className="about-demo-grid">
@@ -468,22 +468,22 @@ export function About() {
           <div className="about-hero-copy">
             <div className="about-kicker">
               <span className="about-live-dot" />
-              Live demo briefing
+              About ARGUS
             </div>
             <h1>ARGUS</h1>
             <p className="about-hero-subtitle">
-              A local-first system that turns video ads into searchable evidence:
+              A multimodal system that turns video ads into searchable evidence:
               categories, marketing entities, campaign variants, visual matches,
               and agent answers you can trace back to the source.
             </p>
             <div className="about-hero-actions">
               <a href="#demo-path" className="about-btn about-btn-primary">
                 <Play size={15} />
-                Start talk track
+                See the pipeline
               </a>
               <Link to="/upload" className="about-btn">
                 <Upload size={15} />
-                Upload demo ad
+                Upload an ad
               </Link>
               <Link to="/agent" className="about-btn">
                 <MessageSquare size={15} />
@@ -511,7 +511,7 @@ export function About() {
           <span>01</span>
           <div>
             <h2>What ARGUS Does</h2>
-            <p>Use this as the opening explanation before you touch the app.</p>
+            <p>How the system processes video ads into structured, searchable records.</p>
           </div>
         </div>
         <div className="about-lead-block">
@@ -535,8 +535,8 @@ export function About() {
         <div className="about-section-head">
           <span>02</span>
           <div>
-            <h2>Five-Part Demo Story</h2>
-            <p>A simple path for non-technical and semi-technical audiences.</p>
+            <h2>How It Works</h2>
+            <p>The pipeline stages that turn raw video into structured evidence.</p>
           </div>
         </div>
         <div className="about-demo-story">
@@ -600,8 +600,8 @@ export function About() {
         <div className="about-section-head">
           <span>04</span>
           <div>
-            <h2>Questions People Can Ask</h2>
-            <p>These are good live prompts because the answers point back to stored evidence.</p>
+            <h2>Questions You Can Ask</h2>
+            <p>Example prompts that demonstrate search, retrieval, and agent capabilities.</p>
           </div>
         </div>
         <div className="about-question-cloud">
@@ -625,8 +625,8 @@ export function About() {
         <div className="about-plain-callout about-plain-callout-sky">
           <Zap size={18} />
           <span>
-            Visual search is the demo moment: ask for something on screen, then jump
-            to the matching frame instead of reading a whole transcript.
+            Visual search is the key differentiator: ask for something on screen,
+            then jump to the matching frame instead of reading a whole transcript.
           </span>
         </div>
       </FadeSection>
@@ -647,7 +647,7 @@ export function About() {
           <span>07</span>
           <div>
             <h2>Under The Hood</h2>
-            <p>A semi-technical summary without turning the demo into an architecture review.</p>
+            <p>A semi-technical summary of the stack layers.</p>
           </div>
         </div>
         <div className="about-stack-table">
@@ -684,8 +684,8 @@ export function About() {
         <div className="about-section-head">
           <span>08</span>
           <div>
-            <h2>Demo Stops</h2>
-            <p>Use these links as your slide deck navigation.</p>
+            <h2>Explore</h2>
+            <p>Navigate to any section of the application.</p>
           </div>
         </div>
         <div className="about-feature-grid">
@@ -712,9 +712,9 @@ export function About() {
           </div>
         </div>
         <p>
-          The short version: upload a video ad, let the local pipeline build evidence,
-          then search, compare, cluster, and ask questions without losing the trail
-          back to the original frames.
+          Upload a video ad, let the pipeline build evidence, then search, compare,
+          cluster, and ask questions — every answer traces back to the original
+          frames.
         </p>
       </footer>
     </div>

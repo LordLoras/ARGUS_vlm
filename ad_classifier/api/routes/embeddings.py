@@ -20,6 +20,7 @@ def embeddings_scatter(
     request: Request,
     type: Literal["text", "visual"] = "text",
     sample: int = Query(default=600, ge=10, le=2000),
+    layout: Literal["guided", "real"] = "guided",
 ) -> dict[str, Any]:
     config = get_config(request)
     conn = open_request_db(request)
@@ -71,11 +72,8 @@ def embeddings_scatter(
             vectors = vectors[indices]
             ad_ids = [ad_ids[i] for i in indices]
 
-        # PCA to 3D, then apply a display-only cluster layout so small demo
-        # datasets do not read as random sparse points.
         coords = _pca_3d(vectors)
 
-        # Hydrate with ad metadata
         placeholders = ", ".join("?" for _ in ad_ids)
         ad_rows = conn.execute(
             f"SELECT id, brand_name, primary_category, brand_confidence, promotion_name FROM ads WHERE id IN ({placeholders})",
@@ -87,7 +85,11 @@ def embeddings_scatter(
             ad_meta.get(ad_id, {}).get("primary_category") or "uncategorized"
             for ad_id in ad_ids
         ]
-        coords = _category_guided_layout(coords, point_categories)
+
+        projection = "pca_3d"
+        if layout == "guided":
+            coords = _category_guided_layout(coords, point_categories)
+            projection = "category_guided_pca_3d"
 
         categories_seen: set[str] = set()
         points: list[dict[str, Any]] = []
@@ -112,7 +114,7 @@ def embeddings_scatter(
             "total": len(rows),
             "sampled": len(points),
             "type": type,
-            "projection": "category_guided_pca_3d",
+            "projection": projection,
         }
     finally:
         conn.close()

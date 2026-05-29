@@ -166,6 +166,11 @@ function createAuthMiddleware(
       return;
     }
 
+    if (request.method === "GET" && path.startsWith("/api/public")) {
+      next();
+      return;
+    }
+
     if (path === "/api" || path.startsWith("/api/") || path === "/data" || path.startsWith("/data/")) {
       response.statusCode = 401;
       response.setHeader("Content-Type", "application/json; charset=utf-8");

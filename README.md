@@ -6,7 +6,7 @@
 
 **Ad Retrieval, Graphing & Understanding System**
 
-Local-first multimodal ad analysis for video ads, marketing-entity extraction,
+Multimodal ad analysis for video ads, marketing-entity extraction,
 campaign discovery, hybrid retrieval, and a read-only natural-language agent.
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://python.org)
@@ -40,26 +40,6 @@ and search.
 
 ---
 
-## What Is Included
-
-This repository contains the ARGUS backend, worker, React frontend, SQLite
-migrations, search tooling, and the Windows `whisper-cli.exe` binary under
-`tools/whisper.cpp/`.
-
-The repository does not include:
-
-- Whisper `.bin` model files
-- a running VLM or downloaded VLM weights
-- ffmpeg / ffprobe
-- Python, Node.js, or Git
-- PyTorch GPU wheels
-- PaddleOCR runtime model caches
-
-This matters because a fresh clone can start the app code, but full ingestion
-needs the external binaries and model files described below.
-
----
-
 ## Architecture
 
 ```text
@@ -78,7 +58,6 @@ Video upload
 ```
 
 Data lives in one SQLite database plus local artifact directories under `data/`.
-The default deployment does not require Docker or cloud services.
 
 ---
 
@@ -331,7 +310,7 @@ rediscovery. Manual campaign creation and per-ad assignment use the same
 `campaigns` and `ad_campaigns` tables with `created_by = 'user'` /
 `assigned_by = 'user'`.
 
-Campaign detail includes a local-first analyst research mode exposed at
+Campaign detail includes an analyst research mode exposed at
 `POST /api/campaigns/{id}/research/deep`. It does not call the internet. It
 builds a local evidence bundle from assigned ads, structured marketing
 entities, classification tags, OCR/GLM-OCR excerpts, transcript excerpts,
@@ -363,14 +342,9 @@ Sessions, messages, tool calls, and tool results are audited in
 The backend exposes three main surfaces:
 
 - FastAPI JSON endpoints for upload, library views, detail views, search,
-  campaigns, frames, evidence, and similar ads
+  campaigns, frames, evidence, similar ads, and a read-only public API
 - SSE streams for job progress and agent responses
 - a decoupled Vite/React frontend that consumes only the HTTP/SSE API
-
-During local development, the frontend uses same-origin requests by default.
-Vite proxies `/api` and `/data` to the local FastAPI service, so a temporary
-remote test only needs the frontend port exposed. `VITE_API_BASE_URL` remains
-available for intentional split-origin deployments.
 
 The frontend is not part of the pipeline contract. The backend owns ingestion,
 persistence, retrieval, and the agent; the UI is a client over JSON and SSE.
@@ -466,11 +440,14 @@ PyTorch is intentionally not listed as a direct dependency in `pyproject.toml`.
 Windows GPU wheels are hardware-specific, and a normal `pip install` can replace
 a working AMD/NVIDIA GPU wheel with a CPU build.
 
-MiniLM text embeddings and SigLIP 2 visual embeddings both rely on PyTorch:
+#### SigLIP 2 and MiniLM Installation
 
-- `sentence-transformers/all-MiniLM-L6-v2` is used for text vectors.
-- `google/siglip2-base-patch16-224` is used for image vectors and text-to-image
-  visual queries.
+ARGUS uses two embedding models that both depend on PyTorch:
+
+| Model | Role | Dimensions |
+|---|---|---|
+| `sentence-transformers/all-MiniLM-L6-v2` | Text vectors from transcript + OCR | 384 |
+| `google/siglip2-base-patch16-224` | Visual vectors from keyframes and text-to-image search | 768 |
 
 After your torch build is already installed, add the embedding packages without
 letting pip resolve and replace torch:
@@ -478,6 +455,10 @@ letting pip resolve and replace torch:
 ```powershell
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 ```
+
+`sentence-transformers` downloads MiniLM on first use. SigLIP 2 is loaded
+through `transformers` the first time a visual query runs. Both models cache to
+`~/.cache/huggingface/` by default.
 
 If you do not have torch installed yet, use mock embeddings for tests or set
 `image_embedder.enabled: false` in `config.yaml` until the GPU stack is ready.
@@ -649,55 +630,28 @@ Default local services:
 | API docs | `http://localhost:8000/docs` |
 | Frontend | `http://localhost:5173` |
 
-For coworker or client testing through a temporary tunnel, expose only the
-frontend service on port `5173`. Browser requests to `/api` and `/data` stay on
-that same frontend origin, and Vite forwards them to the local API at
-`http://127.0.0.1:8000`. Leave `VITE_API_BASE_URL` blank for this mode; set
-`VITE_API_PROXY_TARGET` only if your API is running on a different local port or
-host.
+### Authentication
 
-For Cloudflare Tunnel on `argus.rest`, point the public hostname to the Vite
-service at `http://127.0.0.1:5173` and allow that host in `frontend/.env.local`:
-
-```powershell
-cd frontend
-Set-Content .env.local @"
-VITE_ALLOWED_HOSTS=.argus.rest
-ARGUS_AUTH_ENABLED=true
-ARGUS_AUTH_MODE=login
-ARGUS_AUTH_USERS=h-tech:change-this-password
-ARGUS_AUTH_REALM=ARGUS Demo
-"@
-npm run dev
-```
-
-The leading dot in `.argus.rest` allows both the apex domain and subdomains.
-Do not expose `http://127.0.0.1:8000` as a second public hostname unless you are
-intentionally doing a split-origin deployment.
-
-For a public demo domain, enable the ARGUS login gate in
-`frontend/.env.local` before starting the frontend. The file is ignored by git:
+For deployments that need a login gate, configure authentication in
+`frontend/.env.local` (the file is ignored by git):
 
 ```powershell
 cd frontend
 Set-Content .env.local @"
 ARGUS_AUTH_ENABLED=true
 ARGUS_AUTH_MODE=login
-ARGUS_AUTH_USERS=h-tech:change-this-password,analyst:another-password
-ARGUS_AUTH_REALM=ARGUS Demo
+ARGUS_AUTH_USERS=analyst:change-this-password
+ARGUS_AUTH_REALM=ARGUS
 ARGUS_AUTH_SESSION_TTL_HOURS=12
 "@
 npm run dev
 ```
 
-Add users by adding comma-separated `username:password` pairs to
-`ARGUS_AUTH_USERS`, then restart Vite. Auth is disabled by default. Use HTTPS on
-the domain and keep the FastAPI port private; this is suitable for short demos,
-not as a long-term public authentication system. Set `ARGUS_AUTH_MODE=basic`
-only if you want the browser-native Basic Auth prompt instead of the themed
-login page.
+Add users as comma-separated `username:password` pairs. Set
+`ARGUS_AUTH_MODE=basic` for the browser-native Basic Auth prompt instead of the
+themed login page. Authentication is disabled by default.
 
-First-run sanity checks:
+### First-Run Checks
 
 - `http://127.0.0.1:8000/docs` loads the FastAPI docs.
 - `http://127.0.0.1:5173` loads the ARGUS frontend.
@@ -779,6 +733,43 @@ python -m ad_classifier reindex-visual-frames
 | `POST` | `/api/campaigns/{id}/research/deep` | Run local campaign research and answer an optional analyst question |
 | `GET` | `/api/jobs/{id}/events` | Stream job progress |
 | `GET` | `/api/agent/sessions/{id}/events` | Stream agent responses |
+| `GET` | `/api/public/ads` | List ads (API key required) |
+| `GET` | `/api/public/ads/{id}` | Fetch ad detail (API key required) |
+| `GET` | `/api/public/stats` | Aggregate stats (API key required) |
+| `GET` | `/api/public/campaigns` | List campaigns (API key required) |
+
+---
+
+## Public API
+
+ARGUS exposes a read-only public API under `/api/public/*` for external
+integrations. Public endpoints require an API key passed via the `X-API-Key`
+header or `api_key` query parameter.
+
+Enable in `config.yaml`:
+
+```yaml
+api:
+  public:
+    enabled: true
+    api_key: "your-secret-key"
+```
+
+Public endpoints:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/public/ads` | List ads with brand, category, risk, and search filters |
+| `GET` | `/api/public/ads/{id}` | Full ad detail with classification, marketing entities, campaigns, frames, transcript, OCR, and rules |
+| `GET` | `/api/public/ads/{id}/transcript` | Transcript segments and full text |
+| `GET` | `/api/public/ads/{id}/ocr` | OCR items with frame references |
+| `GET` | `/api/public/ads/{id}/frames` | Frame metadata |
+| `GET` | `/api/public/stats` | Aggregate counts by category, brand, and risk label |
+| `GET` | `/api/public/campaigns` | List campaigns |
+| `GET` | `/api/public/campaigns/{id}` | Campaign detail with assigned ads |
+
+Public responses strip internal fields such as source paths, hashes, and VLM
+model metadata.
 
 ---
 
@@ -799,6 +790,8 @@ Primary pages:
 | Search | `/search` |
 | Campaigns | `/campaigns` |
 | Agent | `/agent` |
+| Embeddings | `/embeddings` |
+| About | `/about` |
 
 ---
 
@@ -821,7 +814,7 @@ python -m pytest tests/search tests/vectors tests/agent/test_tools.py -q
 
 ```text
 ad_classifier/
-  api/            FastAPI routes and SSE endpoints
+  api/            FastAPI routes, middleware, and SSE endpoints
   agent/          Tool-calling NL agent
   cli/            Operational and diagnostic commands
   db/             SQLite connection, migrations, repositories

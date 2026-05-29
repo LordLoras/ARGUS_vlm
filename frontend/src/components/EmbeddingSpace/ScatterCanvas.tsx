@@ -27,6 +27,7 @@ interface Props {
   categoryColors: Record<string, string>;
   activeCategories: Set<string>;
   compact?: boolean;
+  showCategoryLabels?: boolean;
 }
 
 const POINT_SIZE_BASE = 0.74;
@@ -99,9 +100,7 @@ function disposeObject(object: THREE.Object3D) {
   });
 }
 
-function formatCategoryLabel(category: string) {
-  return category.replace(/_/g, " ");
-}
+
 
 export function ScatterCanvas({
   points,
@@ -113,6 +112,7 @@ export function ScatterCanvas({
   categoryColors,
   activeCategories,
   compact = false,
+  showCategoryLabels = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -263,7 +263,6 @@ export function ScatterCanvas({
 
       controls.update();
 
-      // Breathing animation on premium data bubbles.
       group.children.forEach((child, i) => {
         if (child.userData.pointId) {
           const base = child.userData.baseScale || 1;
@@ -275,7 +274,6 @@ export function ScatterCanvas({
         }
       });
 
-      // Slow dust rotation
       if (dustRef.current) {
         dustRef.current.rotation.y = t * 0.008;
       }
@@ -405,7 +403,7 @@ export function ScatterCanvas({
     }
   }, [points, categoryColors, activeCategories]);
 
-  // Presentation labels for category territories.
+  // Category labels via sprites (no clipping — single-line, short text)
   useEffect(() => {
     const labelGroup = labelGroupRef.current;
     if (!labelGroup) return;
@@ -415,6 +413,8 @@ export function ScatterCanvas({
       labelGroup.remove(child);
       disposeObject(child);
     }
+
+    if (!showCategoryLabels) return;
 
     const clusters = new Map<string, { count: number; x: number; y: number; z: number }>();
     points.forEach((point) => {
@@ -429,27 +429,25 @@ export function ScatterCanvas({
 
     clusters.forEach((cluster, category) => {
       const color = categoryColors[category] || "#7c3aed";
-      const label = new SpriteText(
-        `${formatCategoryLabel(category)}\n${cluster.count} ${cluster.count === 1 ? "ad" : "ads"}`,
-        compact ? 1.8 : 2.75,
-        "#f8fafc"
-      );
+      const name = category.replace(/_/g, " ");
+      const fontSize = compact ? 1.4 : 1.9;
+      const label = new SpriteText(name, fontSize, "#f8fafc");
       label.position.set(
         cluster.x / cluster.count,
-        cluster.y / cluster.count + (compact ? 6.5 : 8.5),
+        cluster.y / cluster.count + (compact ? 4.5 : 6),
         cluster.z / cluster.count
       );
       label.renderOrder = 10;
-      label.material.depthWrite = false;
-      label.material.opacity = 0.82;
+      label.material.depthTest = false;
+      label.material.opacity = 0.85;
       label.backgroundColor = "rgba(6, 9, 14, 0.72)";
       label.borderColor = `${color}88`;
-      label.borderWidth = 0.4;
-      label.borderRadius = 3;
-      label.padding = 3;
+      label.borderWidth = 0.3;
+      label.borderRadius = 2;
+      label.padding = 2;
       labelGroup.add(label);
     });
-  }, [points, activeCategories, categoryColors, compact]);
+  }, [points, activeCategories, categoryColors, compact, showCategoryLabels]);
 
   // Highlight selected / hovered + draw connections
   useEffect(() => {
@@ -590,10 +588,11 @@ export function ScatterCanvas({
     (event: MouseEvent): ScatterPoint | null => {
       const camera = cameraRef.current;
       const group = groupRef.current;
-      const el = containerRef.current;
-      if (!camera || !group || !el) return null;
+      const renderer = rendererRef.current;
+      if (!camera || !group || !renderer) return null;
 
-      const rect = el.getBoundingClientRect();
+      const canvas = renderer.domElement;
+      const rect = canvas.getBoundingClientRect();
       mouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 

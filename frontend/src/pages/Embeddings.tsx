@@ -14,7 +14,7 @@ const CATEGORY_PALETTE = [
 ];
 
 type EmbeddingType = "text" | "visual";
-type ExplorerMode = "single" | "mirror";
+type ExplorerMode = "single" | "real3d";
 
 interface ScatterResponse {
   points: ScatterPoint[];
@@ -141,26 +141,18 @@ function projectionDistance(a: ScatterPoint, b: ScatterPoint) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 }
 
-function nearestPoints(point: ScatterPoint | null | undefined, points: ScatterPoint[], limit = 3) {
-  if (!point) return [];
-  return points
-    .filter((candidate) => candidate.id !== point.id)
-    .sort((a, b) => projectionDistance(point, a) - projectionDistance(point, b))
-    .slice(0, limit);
-}
-
 function signalSplitLabel(delta: number | null) {
   if (delta == null) return "Select an ad";
-  if (delta < 42) return "Aligned";
-  if (delta < 82) return "Mixed signal";
+  if (delta < 15) return "Aligned";
+  if (delta < 35) return "Mixed";
   return "Divergent";
 }
 
 function signalSplitCopy(delta: number | null) {
-  if (delta == null) return "Click a bubble in either map to compare where the same ad lands in language space and visual space.";
-  if (delta < 42) return "The ad lands in a similar territory in both maps, so messaging and creative are reinforcing each other.";
-  if (delta < 82) return "The ad shares some neighborhood structure, but the message and the visuals emphasize different signals.";
-  return "The ad moves to a different territory between maps, which is useful for spotting ads that say one thing and show another.";
+  if (delta == null) return "Click a bubble in either map to compare where the same ad genuinely lands in text space and visual space — no artificial layout.";
+  if (delta < 15) return "The ad lands close in both real spaces. Message and visuals are tightly correlated in the raw embeddings.";
+  if (delta < 35) return "The ad shows some separation between what it says and how it looks — this is the honest distance between text and visual vectors.";
+  return "The ad occupies meaningfully different regions in text vs visual space. The language and imagery tell different stories.";
 }
 
 function formatPointCoords(point: ScatterPoint | null | undefined) {
@@ -171,12 +163,12 @@ function formatPointCoords(point: ScatterPoint | null | undefined) {
 export function Embeddings() {
   const [data, setData] = useState<ScatterResponse | null>(null);
   const [viewMode, setViewMode] = useState<ExplorerMode>("single");
-  const [mirrorData, setMirrorData] = useState<Record<EmbeddingType, ScatterResponse | null>>({
+  const [real3dData, setReal3dData] = useState<Record<EmbeddingType, ScatterResponse | null>>({
     text: null,
     visual: null,
   });
-  const [mirrorLoading, setMirrorLoading] = useState(false);
-  const [mirrorError, setMirrorError] = useState<string | null>(null);
+  const [real3dLoading, setReal3dLoading] = useState(false);
+  const [real3dError, setReal3dError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [embedType, setEmbedType] = useState<EmbeddingType>("text");
@@ -190,17 +182,17 @@ export function Embeddings() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const embeddingMeta = EMBEDDING_META[embedType];
-  const detailMeta = EMBEDDING_META[viewMode === "mirror" ? selectedSpace : embedType];
+  const detailMeta = EMBEDDING_META[viewMode === "real3d" ? selectedSpace : embedType];
 
   const categoriesForFilters = useMemo(() => {
-    if (viewMode === "mirror") {
+    if (viewMode === "real3d") {
       return Array.from(new Set([
-        ...(mirrorData.text?.categories ?? []),
-        ...(mirrorData.visual?.categories ?? []),
+        ...(real3dData.text?.categories ?? []),
+        ...(real3dData.visual?.categories ?? []),
       ])).sort();
     }
     return data?.categories ?? [];
-  }, [data, mirrorData, viewMode]);
+  }, [data, real3dData, viewMode]);
 
   const categoryColors = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {};
@@ -235,36 +227,36 @@ export function Embeddings() {
   }, [embedType, reloadKey, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== "mirror") return;
+    if (viewMode !== "real3d") return;
     let cancelled = false;
-    setMirrorLoading(true);
-    setMirrorError(null);
+    setReal3dLoading(true);
+    setReal3dError(null);
     setDetailOpen(false);
     setSelectedPoint(null);
     setHoveredPoint(null);
     setHoverPos(null);
 
     Promise.all([
-      api.getEmbeddingsScatter("text"),
-      api.getEmbeddingsScatter("visual"),
+      api.getEmbeddingsScatter("text", 600, "real"),
+      api.getEmbeddingsScatter("visual", 600, "real"),
     ])
       .then(([textRes, visualRes]) => {
         if (cancelled) return;
-        const nextMirrorData = {
+        const next = {
           text: textRes as ScatterResponse,
           visual: visualRes as ScatterResponse,
         };
-        setMirrorData(nextMirrorData);
+        setReal3dData(next);
         setActiveCategories(new Set([
-          ...nextMirrorData.text.categories,
-          ...nextMirrorData.visual.categories,
+          ...next.text.categories,
+          ...next.visual.categories,
         ]));
-        setMirrorLoading(false);
+        setReal3dLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
-        setMirrorError(err instanceof Error ? err.message : "Failed to load embedding mirror");
-        setMirrorLoading(false);
+        setReal3dError(err instanceof Error ? err.message : "Failed to load embedding space");
+        setReal3dLoading(false);
       });
     return () => { cancelled = true; };
   }, [reloadKey, viewMode]);
@@ -289,32 +281,32 @@ export function Embeddings() {
     return filterPoints(data.points);
   }, [data, filterPoints]);
 
-  const mirrorVisiblePoints = useMemo(() => ({
-    text: mirrorData.text ? filterPoints(mirrorData.text.points) : [],
-    visual: mirrorData.visual ? filterPoints(mirrorData.visual.points) : [],
-  }), [filterPoints, mirrorData]);
+  const real3dVisiblePoints = useMemo(() => ({
+    text: real3dData.text ? filterPoints(real3dData.text.points) : [],
+    visual: real3dData.visual ? filterPoints(real3dData.visual.points) : [],
+  }), [filterPoints, real3dData]);
 
-  const mirrorPointMap = useMemo(() => {
+  const real3dPointMap = useMemo(() => {
     const map = new Map<string, ScatterPoint>();
-    mirrorData.text?.points.forEach((point) => map.set(point.id, point));
-    mirrorData.visual?.points.forEach((point) => {
+    real3dData.text?.points.forEach((point) => map.set(point.id, point));
+    real3dData.visual?.points.forEach((point) => {
       if (!map.has(point.id)) map.set(point.id, point);
     });
     return map;
-  }, [mirrorData]);
+  }, [real3dData]);
 
-  const mirrorVisibleIds = useMemo(() => new Set([
-    ...mirrorVisiblePoints.text.map((point) => point.id),
-    ...mirrorVisiblePoints.visual.map((point) => point.id),
-  ]), [mirrorVisiblePoints]);
+  const real3dVisibleIds = useMemo(() => new Set([
+    ...real3dVisiblePoints.text.map((point) => point.id),
+    ...real3dVisiblePoints.visual.map((point) => point.id),
+  ]), [real3dVisiblePoints]);
 
   const stats = useMemo(() => {
-    if (viewMode === "mirror") {
+    if (viewMode === "real3d") {
       return {
-        total: Math.max(mirrorData.text?.total ?? 0, mirrorData.visual?.total ?? 0),
-        sampled: mirrorPointMap.size,
+        total: Math.max(real3dData.text?.total ?? 0, real3dData.visual?.total ?? 0),
+        sampled: real3dPointMap.size,
         categories: categoriesForFilters.length,
-        visible: mirrorVisibleIds.size,
+        visible: real3dVisibleIds.size,
       };
     }
     if (!data) return { total: 0, sampled: 0, categories: 0, visible: 0 };
@@ -324,14 +316,14 @@ export function Embeddings() {
       categories: categoriesForFilters.length,
       visible: visiblePoints.length,
     };
-  }, [categoriesForFilters.length, data, mirrorData, mirrorPointMap, mirrorVisibleIds, viewMode, visiblePoints]);
+  }, [categoriesForFilters.length, data, real3dData, real3dPointMap, real3dVisibleIds, viewMode, visiblePoints]);
 
   const categoryCounts = useMemo(() => {
     const map = new Map<string, number>();
-    const sourcePoints = viewMode === "mirror" ? Array.from(mirrorPointMap.values()) : data?.points ?? [];
+    const sourcePoints = viewMode === "real3d" ? Array.from(real3dPointMap.values()) : data?.points ?? [];
     sourcePoints.forEach((p) => map.set(p.category, (map.get(p.category) || 0) + 1));
     return map;
-  }, [data, mirrorPointMap, viewMode]);
+  }, [data, real3dPointMap, viewMode]);
 
   const updateClusterAds = useCallback((point: ScatterPoint, points: ScatterPoint[]) => {
     const nearby = points
@@ -351,14 +343,14 @@ export function Embeddings() {
     [data, embedType, updateClusterAds]
   );
 
-  const handleMirrorPointClick = useCallback(
+  const handleReal3dPointClick = useCallback(
     (point: ScatterPoint, type: EmbeddingType) => {
       setSelectedSpace(type);
       setSelectedPoint(point);
       setDetailOpen(true);
-      updateClusterAds(point, mirrorData[type]?.points ?? []);
+      updateClusterAds(point, real3dData[type]?.points ?? []);
     },
-    [mirrorData, updateClusterAds]
+    [real3dData, updateClusterAds]
   );
 
   const handleClose = useCallback(() => {
@@ -388,26 +380,24 @@ export function Embeddings() {
   const selectedColor = selectedPoint
     ? categoryColors[selectedPoint.category] || "#7c3aed"
     : "#7c3aed";
-  const isLoading = viewMode === "mirror" ? mirrorLoading : loading;
-  const activeError = viewMode === "mirror" ? mirrorError : error;
+  const isLoading = viewMode === "real3d" ? real3dLoading : loading;
+  const activeError = viewMode === "real3d" ? real3dError : error;
   const selectedTextPoint = selectedPoint
-    ? mirrorData.text?.points.find((point) => point.id === selectedPoint.id) ?? null
+    ? real3dData.text?.points.find((point) => point.id === selectedPoint.id) ?? null
     : null;
   const selectedVisualPoint = selectedPoint
-    ? mirrorData.visual?.points.find((point) => point.id === selectedPoint.id) ?? null
+    ? real3dData.visual?.points.find((point) => point.id === selectedPoint.id) ?? null
     : null;
-  const mirrorDelta = selectedTextPoint && selectedVisualPoint
+  const real3dDelta = selectedTextPoint && selectedVisualPoint
     ? projectionDistance(selectedTextPoint, selectedVisualPoint)
     : null;
-  const textNeighbors = selectedTextPoint ? nearestPoints(selectedTextPoint, mirrorData.text?.points ?? []) : [];
-  const visualNeighbors = selectedVisualPoint ? nearestPoints(selectedVisualPoint, mirrorData.visual?.points ?? []) : [];
-  const selectedMirrorLabel = selectedPoint?.label || selectedPoint?.brand || "Select an ad";
-  const mirrorAlignmentScore = mirrorDelta == null
+  const selectedReal3dLabel = selectedPoint?.label || selectedPoint?.brand || "Select an ad";
+  const real3dAlignmentScore = real3dDelta == null
     ? 0
-    : Math.max(0, Math.min(100, Math.round(100 - mirrorDelta)));
+    : Math.max(0, Math.min(100, Math.round(100 - real3dDelta)));
   const selectedCategoryTotal = selectedPoint
-    ? (viewMode === "mirror"
-      ? Array.from(mirrorPointMap.values()).filter((point) => point.category === selectedPoint.category).length
+    ? (viewMode === "real3d"
+      ? Array.from(real3dPointMap.values()).filter((point) => point.category === selectedPoint.category).length
       : data?.points.filter((point) => point.category === selectedPoint.category).length ?? 0)
     : 0;
 
@@ -454,10 +444,10 @@ export function Embeddings() {
                       Explore
                     </button>
                     <button
-                      className={`es-mode-btn ${viewMode === "mirror" ? "is-active" : ""}`}
-                      onClick={() => setViewMode("mirror")}
+                      className={`es-mode-btn ${viewMode === "real3d" ? "is-active" : ""}`}
+                      onClick={() => setViewMode("real3d")}
                     >
-                      Mirror
+                      Real 3D
                     </button>
                   </div>
 
@@ -482,9 +472,9 @@ export function Embeddings() {
                     </div>
                   ) : (
                     <div className="es-mirror-pill">
-                      <LayersIcon size={12} />
+                      <SparkleIcon size={12} />
                       <span>MiniLM</span>
-                      <b>vs</b>
+                      <b>+</b>
                       <span>SigLIP</span>
                     </div>
                   )}
@@ -583,17 +573,17 @@ export function Embeddings() {
                 <div className="es-mirror-stage">
                   <div className="es-mirror-pane is-text">
                     <div className="es-mirror-pane-head">
-                      <span className="es-map-kicker">Message space</span>
-                      <strong>MiniLM text map</strong>
-                      <p>What the ad says: transcript, OCR, offers, claims, and calls to action.</p>
-                      <em>{mirrorVisiblePoints.text.length} visible</em>
+                      <span className="es-map-kicker">Text PCA (real)</span>
+                      <strong>MiniLM raw projection</strong>
+                      <p>Actual 3D PCA of transcript + OCR embeddings. No category-guided layout. Points are where they genuinely land.</p>
+                      <em>{real3dVisiblePoints.text.length} visible</em>
                     </div>
                     <div className="es-mirror-canvas">
                       <ScatterCanvas
                         compact
-                        points={mirrorVisiblePoints.text}
+                        points={real3dVisiblePoints.text}
                         selectedId={selectedPoint?.id ?? null}
-                        onPointClick={(point) => handleMirrorPointClick(point, "text")}
+                        onPointClick={(point) => handleReal3dPointClick(point, "text")}
                         onBackgroundClick={handleClose}
                         hoveredId={hoveredPoint?.id ?? null}
                         onPointHover={(point) => {
@@ -607,138 +597,125 @@ export function Embeddings() {
                   </div>
 
                   <div className="es-mirror-bridge">
-                    <span className="es-map-kicker">Dual-Embedding Mirror</span>
-                    <strong>{selectedMirrorLabel}</strong>
-                    <p>{signalSplitCopy(mirrorDelta)}</p>
-                    <div
-                      className={`es-mirror-signal is-${signalSplitLabel(mirrorDelta).toLowerCase().replace(/\s+/g, "-")}`}
-                      style={{ "--type-color": selectedColor, "--alignment": `${mirrorAlignmentScore}%` } as CSSProperties}
-                    >
-                      <span>Signal read</span>
-                      <b>{signalSplitLabel(mirrorDelta)}</b>
-                      <em>{mirrorDelta == null ? "Click a bubble" : `${Math.round(mirrorDelta)} projection drift`}</em>
-                      <div className="es-mirror-alignment">
-                        <i />
-                      </div>
-                    </div>
-                    <div className="es-mirror-vector-grid">
-                      <div>
-                        <span>Message position</span>
-                        <strong>{formatPointCoords(selectedTextPoint)}</strong>
-                      </div>
-                      <div>
-                        <span>Visual position</span>
-                        <strong>{formatPointCoords(selectedVisualPoint)}</strong>
-                      </div>
-                    </div>
+                    <span className="es-map-kicker">Real 3D PCA — No Layout Distortion</span>
+                    <strong>{selectedReal3dLabel}</strong>
+                    <p>{signalSplitCopy(real3dDelta)}</p>
+
                     {selectedPoint ? (
                       <div
                         className="es-mirror-profile"
                         style={{ "--type-color": selectedColor } as CSSProperties}
                       >
                         <div className="es-mirror-profile-head">
-                          <ConfidenceRing value={selectedPoint.confidence} color={selectedColor} size={42} />
+                          <ConfidenceRing value={selectedPoint.confidence} color={selectedColor} size={36} />
                           <div>
-                            <span>Selected ad</span>
-                            <strong>{selectedPoint.label}</strong>
-                            <em>{selectedSpace === "text" ? "Selected from message map" : "Selected from creative map"}</em>
+                            <strong>{selectedPoint.brand || selectedPoint.label}</strong>
+                            <span>{selectedPoint.category.replace(/_/g, " ")}</span>
                           </div>
-                          <button className="es-detail-close" onClick={handleClose} aria-label="Close selected ad">
-                            <CloseIcon size={14} />
+                          <button className="es-detail-close" onClick={handleClose} aria-label="Close">
+                            <CloseIcon size={12} />
                           </button>
+                        </div>
+
+                        <div className={`es-mirror-signal is-${signalSplitLabel(real3dDelta).toLowerCase().replace(/\s+/g, "-")}`}
+                          style={{ "--type-color": selectedColor, "--alignment": `${real3dAlignmentScore}%` } as CSSProperties}
+                        >
+                          <b>{signalSplitLabel(real3dDelta)}</b>
+                          <em>{real3dDelta == null ? "Click a point" : `${Math.round(real3dDelta)} unit drift`}</em>
+                          <div className="es-mirror-alignment"><i /></div>
                         </div>
 
                         <div className="es-mirror-metrics">
                           <div>
-                            <span>Confidence</span>
-                            <strong>{Math.round(selectedPoint.confidence * 100)}%</strong>
+                            <span>Text</span>
+                            <strong>{formatPointCoords(selectedTextPoint)}</strong>
                           </div>
                           <div>
-                            <span>Similar</span>
-                            <strong>{clusterAds.length}</strong>
-                          </div>
-                          <div>
-                            <span>Category set</span>
-                            <strong>{selectedCategoryTotal}</strong>
-                          </div>
-                        </div>
-
-                        <div className="es-mirror-meta">
-                          {selectedPoint.brand && (
-                            <div>
-                              <span>Brand</span>
-                              <strong>{selectedPoint.brand}</strong>
-                            </div>
-                          )}
-                          <div>
-                            <span>Category</span>
-                            <strong>{selectedPoint.category}</strong>
-                          </div>
-                          <div>
-                            <span>Ad ID</span>
-                            <strong>{selectedPoint.id}</strong>
-                          </div>
-                        </div>
-
-                        <div className="es-mirror-model-strip">
-                          <div>
-                            <span>Message model</span>
-                            <strong>MiniLM 384d</strong>
-                          </div>
-                          <div>
-                            <span>Creative model</span>
-                            <strong>SigLIP 768d</strong>
+                            <span>Visual</span>
+                            <strong>{formatPointCoords(selectedVisualPoint)}</strong>
                           </div>
                         </div>
                       </div>
                     ) : (
                       <div className="es-mirror-profile is-empty">
-                        <span>Presentation cue</span>
-                        <strong>Pick one ad to show the multimodal split.</strong>
-                        <p>The same ad is highlighted in both spaces, making it easy to explain whether the language and the visuals tell the same story.</p>
+                        <span>Unmodified PCA</span>
+                        <strong>Click a point to inspect its position in both real embedding spaces.</strong>
+                        <p>Positions show genuine PCA coordinates with no artificial category grouping.</p>
                       </div>
                     )}
-                    <div className="es-mirror-neighbors">
-                      <div>
-                        <span>Nearby in message</span>
-                        {textNeighbors.length ? textNeighbors.map((point) => (
-                          <button
-                            key={point.id}
-                            onClick={() => handleMirrorPointClick(point, "text")}
-                            style={{ "--type-color": categoryColors[point.category] || "#7c3aed" } as CSSProperties}
-                          >
-                            {point.label}
-                          </button>
-                        )) : <small>Select an ad</small>}
+
+                    {selectedPoint ? (
+                      <>
+                        {clusterAds.length > 0 && (
+                          <div className="es-mirror-cluster">
+                            <span className="es-mirror-cluster-head">Closest in same category</span>
+                            <div className="es-mirror-cluster-chips">
+                              {clusterAds.slice(0, 6).map((p) => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => handleReal3dPointClick(p, selectedSpace)}
+                                  style={{ "--chip": categoryColors[p.category] || "#7c3aed" } as CSSProperties}
+                                >
+                                  <i />
+                                  <span>{p.brand || p.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : null}
+
+                    <div className="es-mirror-reference">
+                      <div className="es-ref-section">
+                        <span className="es-ref-heading">Category legend</span>
+                        <div className="es-ref-chips">
+                          {categoriesForFilters.map((cat) => (
+                            <span
+                              key={cat}
+                              className="es-ref-chip"
+                              style={{ "--chip": categoryColors[cat] || "#7c3aed" } as CSSProperties}
+                            >
+                              <i />
+                              {cat.replace(/_/g, " ")}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <div>
-                        <span>Nearby in creative</span>
-                        {visualNeighbors.length ? visualNeighbors.map((point) => (
-                          <button
-                            key={point.id}
-                            onClick={() => handleMirrorPointClick(point, "visual")}
-                            style={{ "--type-color": categoryColors[point.category] || "#7c3aed" } as CSSProperties}
-                          >
-                            {point.label}
-                          </button>
-                        )) : <small>Select an ad</small>}
+                      <div className="es-ref-section">
+                        <span className="es-ref-heading">Text-visual drift</span>
+                        <div className="es-ref-drift-list">
+                          <div className="es-ref-drift-row">
+                            <span className="es-ref-tick is-aligned"><i />Aligned &lt;15</span>
+                            <small>Same ad lands at similar coordinates in text and visual PCA — message and creative are reinforcing each other.</small>
+                          </div>
+                          <div className="es-ref-drift-row">
+                            <span className="es-ref-tick is-mixed"><i />Mixed 15–35</span>
+                            <small>Text and visual vectors place the ad in noticeably different regions — language and imagery emphasize different signals.</small>
+                          </div>
+                          <div className="es-ref-drift-row">
+                            <span className="es-ref-tick is-divergent"><i />Divergent &gt;35</span>
+                            <small>The ad occupies meaningfully different territory in each space — says one thing and shows another.</small>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="es-mirror-pane is-visual">
                     <div className="es-mirror-pane-head">
-                      <span className="es-map-kicker">Creative space</span>
-                      <strong>SigLIP visual map</strong>
-                      <p>What the ad shows: scenes, objects, layouts, people, products, and visual style.</p>
-                      <em>{mirrorVisiblePoints.visual.length} visible</em>
+                      <span className="es-map-kicker">Visual PCA (real)</span>
+                      <strong>SigLIP raw projection</strong>
+                      <p>Actual 3D PCA of keyframe visual embeddings. Brand clusters emerge naturally — no artificial positioning.</p>
+                      <em>{real3dVisiblePoints.visual.length} visible</em>
                     </div>
                     <div className="es-mirror-canvas">
                       <ScatterCanvas
                         compact
-                        points={mirrorVisiblePoints.visual}
+                        showCategoryLabels={false}
+                        points={real3dVisiblePoints.visual}
                         selectedId={selectedPoint?.id ?? null}
-                        onPointClick={(point) => handleMirrorPointClick(point, "visual")}
+                        onPointClick={(point) => handleReal3dPointClick(point, "visual")}
                         onBackgroundClick={handleClose}
                         hoveredId={hoveredPoint?.id ?? null}
                         onPointHover={(point) => {
@@ -751,9 +728,9 @@ export function Embeddings() {
                     </div>
                   </div>
 
-                  {mirrorVisibleIds.size === 0 && (
+                  {real3dVisibleIds.size === 0 && (
                     <div className="es-empty-overlay">
-                      <span className="es-empty-title">No vectors in either mirror</span>
+                      <span className="es-empty-title">No vectors in either space</span>
                       <span className="es-empty-sub">Clear search or re-enable a category filter.</span>
                     </div>
                   )}
@@ -920,13 +897,13 @@ export function Embeddings() {
                 </div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat">
-                  <span className="kg-stat-value">{viewMode === "mirror" ? "384d + 768d" : embeddingMeta.dims}</span>
+                  <span className="kg-stat-value">{viewMode === "real3d" ? "384d + 768d" : embeddingMeta.dims}</span>
                   <span className="kg-stat-label">Dimensions</span>
                 </div>
                 <div className="kg-stat-divider" />
                 <div className="kg-stat kg-stat-accent">
                   <SparkleIcon size={9} />
-                  <span className="kg-stat-value">{viewMode === "mirror" ? "Dual mirror" : embeddingMeta.label}</span>
+                  <span className="kg-stat-value">{viewMode === "real3d" ? "Real PCA" : embeddingMeta.label}</span>
                   <span className="kg-stat-label">Active Space</span>
                 </div>
               </div>
