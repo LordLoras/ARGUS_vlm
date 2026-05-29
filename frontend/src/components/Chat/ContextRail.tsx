@@ -1,5 +1,20 @@
 import type { AgentSession } from "../../lib/types";
 
+const TOOL_META: Record<string, { label: string; desc: string }> = {
+  list_ads: { label: "List Ads", desc: "Filter and browse ads by brand, category, status, or free text." },
+  count_ads: { label: "Count Ads", desc: "Count matching ads with the same filter set." },
+  get_ad: { label: "Get Ad", desc: "Fetch a single ad with classification, entities, and campaigns." },
+  aggregate: { label: "Aggregate", desc: "Group ads by any dimension and return counts per group." },
+  hybrid_search: { label: "Hybrid Search", desc: "Keyword + vector search with reciprocal rank fusion." },
+  vector_similarity: { label: "Vector Similarity", desc: "Find ads similar to a seed ad by text or visual embeddings." },
+  compare_ads: { label: "Compare Ads", desc: "Side-by-side comparison with similarity scores and field diffs." },
+  list_campaigns: { label: "List Campaigns", desc: "Browse campaigns filtered by brand or text." },
+  get_campaign: { label: "Get Campaign", desc: "Fetch a campaign with its assigned ads." },
+  sql_readonly: { label: "SQL Query", desc: "Bounded read-only SELECT for questions the tools cannot cover." },
+};
+
+const TOOL_ORDER = Object.keys(TOOL_META);
+
 export function ContextRail({
   session,
   toolCounts,
@@ -9,18 +24,7 @@ export function ContextRail({
   toolCounts?: Record<string, number>;
   toolsCalled?: number;
 }) {
-  const known = [
-    "list_ads",
-    "count_ads",
-    "get_ad",
-    "list_campaigns",
-    "get_campaign",
-    "aggregate",
-    "hybrid_search",
-    "vector_similarity",
-    "compare_ads",
-    "sql_readonly"
-  ];
+  const hasActiveTools = toolsCalled && toolsCalled > 0;
   return (
     <aside className="chat-context">
       <section className="context-section">
@@ -44,23 +48,31 @@ export function ContextRail({
       </section>
 
       <section className="context-section">
-        <h4>Tools called</h4>
+        <h4>{hasActiveTools ? "Tools used" : "Available tools"}</h4>
         <div className="tool-list">
-          {known.map((name) => (
-            <div className="tool-row" key={name} style={{ opacity: toolCounts?.[name] ? 1 : 0.45 }}>
-              <span className="name">{name}</span>
-              <span className="calls">{toolCounts?.[name] ?? 0}</span>
-            </div>
-          ))}
+          {TOOL_ORDER.map((name) => {
+            const meta = TOOL_META[name];
+            const count = toolCounts?.[name] ?? 0;
+            const active = count > 0;
+            return (
+              <div className="tool-row" key={name} data-active={active || undefined} style={{ opacity: hasActiveTools ? (active ? 1 : 0.4) : 0.65 }}>
+                <div className="tool-row-main">
+                  <span className="name">{meta.label}</span>
+                  <span className="tool-desc">{meta.desc}</span>
+                </div>
+                {active && <span className="calls">{count}</span>}
+              </div>
+            );
+          })}
         </div>
       </section>
 
       <section className="context-section">
-        <h4>Notes</h4>
+        <h4>Trust</h4>
         <div style={{ color: "var(--fg-mute)", fontSize: 11.5, lineHeight: 1.55 }}>
-          The agent only reads the local SQLite database. It cannot mutate ads,
-          campaigns, or classifications. Every tool call and result is appended
-          to the session for audit.
+          All tools are read-only. The agent cannot mutate ads, campaigns, or
+          classifications. Every tool call and result is appended to the session
+          for audit.
         </div>
       </section>
     </aside>

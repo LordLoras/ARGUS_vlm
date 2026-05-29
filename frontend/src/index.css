@@ -2889,19 +2889,81 @@ button.ts-link:hover {
 .usage-cell .val { font-family: var(--mono); font-size: 16px; font-weight: 500; color: var(--fg); }
 .usage-cell .sub { font-family: var(--mono); font-size: 10px; color: var(--fg-quiet); }
 
-.tool-list { display: flex; flex-direction: column; gap: 6px; }
+.tool-list { display: flex; flex-direction: column; gap: 4px; }
 .tool-list .tool-row {
   display: grid;
   grid-template-columns: 1fr auto;
+  align-items: start;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.tool-list .tool-row:hover { background: var(--bg-2); }
+.tool-list .tool-row[data-active] { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tool-list .tool-row-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tool-list .tool-row .name { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--accent-2); }
+.tool-list .tool-row .tool-desc { font-size: 10.5px; line-height: 1.4; color: var(--fg-quiet); }
+.tool-list .tool-row .calls { font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 600; padding-top: 2px; }
+
+/* Agent landing tools panel */
+.agent-landing-tools {
+  position: relative;
+  z-index: 1;
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(8, 9, 11, 0.65);
+  backdrop-filter: blur(12px);
+  overflow-y: auto;
+}
+.agent-landing-tools h3 {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--fg-quiet);
+  font-weight: 600;
+  margin: 0;
+}
+.agent-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agent-tool-item {
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.agent-tool-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
+}
+.agent-tool-item strong {
+  display: block;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 4px 6px;
-  border-radius: 3px;
-  color: var(--fg-mute);
+  font-weight: 500;
+  color: var(--accent-2);
+  margin-bottom: 2px;
 }
-.tool-list .tool-row .name { color: var(--accent-2); }
-.tool-list .tool-row .calls { color: var(--fg-quiet); }
-.tool-list .tool-row:hover { background: var(--bg-2); }
+.agent-tool-item span {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--fg-quiet);
+}
+.agent-tools-foot {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--fg-quiet);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
 
 .suggested-grid {
   display: grid;

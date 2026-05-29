@@ -19,6 +19,19 @@ import { SessionList } from "../components/Chat/SessionList";
 
 type RenderedMessage = { role: "user" | "assistant"; content: string };
 
+const AGENT_TOOLS = [
+  { name: "list_ads", label: "List Ads", desc: "Filter and browse ads by brand, category, status, or free-text query." },
+  { name: "count_ads", label: "Count Ads", desc: "Count matching ads with the same filters — totals, breakdowns, slices." },
+  { name: "get_ad", label: "Get Ad", desc: "Fetch a single ad with classification, marketing entities, and campaigns." },
+  { name: "aggregate", label: "Aggregate", desc: "Group ads by any dimension and return counts per group." },
+  { name: "hybrid_search", label: "Hybrid Search", desc: "Search by keyword + vector similarity with reciprocal rank fusion." },
+  { name: "vector_similarity", label: "Vector Similarity", desc: "Find ads similar to a seed ad using text or visual embeddings." },
+  { name: "compare_ads", label: "Compare Ads", desc: "Side-by-side comparison of two ads with similarity scores and field diffs." },
+  { name: "list_campaigns", label: "List Campaigns", desc: "Browse campaigns filtered by brand or text substring." },
+  { name: "get_campaign", label: "Get Campaign", desc: "Fetch a campaign with its assigned ads and metadata." },
+  { name: "sql_readonly", label: "SQL Query", desc: "Bounded read-only SELECT against SQLite for questions the tools cannot cover." },
+] as const;
+
 function sessionLabel(session: AgentSession | undefined | null): string {
   if (!session) return "New conversation";
   return session.user_label || `Chat ${session.id.replace(/^agent_/, "").slice(0, 6)}`;
@@ -285,10 +298,10 @@ export function Agent() {
               <div className="agent-landing-content">
                 <img className="agent-landing-mark" src={logoUrl} alt="" />
                 <div className="agent-landing-badge">ARGUS intelligence agent</div>
-                <h1 className="agent-landing-title">Ask the local ad database.</h1>
+                <h1 className="agent-landing-title">Ask the ad database.</h1>
                 <p className="agent-landing-sub">
                   Query classifications, entities, campaigns, OCR, transcripts, and vector
-                  search through audited read-only tools.
+                  search through audited read-only tools. Every answer cites its sources.
                 </p>
                 <div className="agent-landing-cards">
                   <div className="agent-card">
@@ -309,7 +322,7 @@ export function Agent() {
                   </div>
                 </div>
                 <div className="agent-landing-prompt">
-                  <span className="agent-landing-prompt-icon">⟶</span>
+                  <span className="agent-landing-prompt-icon">Try a prompt</span>
                   <button
                     className="agent-landing-prompt-btn"
                     onClick={() => {
@@ -336,6 +349,20 @@ export function Agent() {
                   </button>
                 </div>
               </div>
+              <aside className="agent-landing-tools">
+                <h3>Available Tools</h3>
+                <div className="agent-tools-list">
+                  {AGENT_TOOLS.map((tool) => (
+                    <div className="agent-tool-item" key={tool.name}>
+                      <strong>{tool.label}</strong>
+                      <span>{tool.desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="agent-tools-foot">
+                  All tools are read-only. Every call and result is audited in the session log.
+                </div>
+              </aside>
             </div>
           )}
           <ChatInput
