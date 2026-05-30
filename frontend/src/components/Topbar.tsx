@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 
-import { SearchIcon } from "../lib/icons";
-
 export function Topbar({ crumbs, actions }: { crumbs: string[]; actions?: ReactNode }) {
   return (
     <header className="topbar">
@@ -20,13 +18,6 @@ export function Topbar({ crumbs, actions }: { crumbs: string[]; actions?: ReactN
         )}
       </div>
       <div className="topbar-actions">
-        <div className="cmdk-stub">
-          <SearchIcon size={12} />
-          <span>Search ads, campaigns…</span>
-          <span className="kbd" style={{ marginLeft: "auto" }}>
-            Ctrl K
-          </span>
-        </div>
         {actions}
       </div>
     </header>
