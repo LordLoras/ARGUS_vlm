@@ -2374,6 +2374,9 @@ button.ts-link:hover {
   min-height: 0;
   overflow: hidden;
 }
+.chat-layout--full {
+  grid-template-columns: 280px 1fr;
+}
 .chat-sessions {
   border-right: 1px solid var(--border);
   background: var(--bg-1);

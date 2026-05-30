@@ -254,7 +254,7 @@ export function Agent() {
       />
       <ApiOfflineBanner offline={health.isError || apiOffline} />
 
-      <div className="chat-layout">
+      <div className={`chat-layout${activeId ? "" : " chat-layout--full"}`}>
         <SessionList
           sessions={sessions.data?.items ?? []}
           activeId={activeId}
