@@ -161,7 +161,31 @@ def list_ads(
             limit=limit,
             offset=offset,
         )
-        return {"items": [_dump(ad) for ad in ads], "limit": limit, "offset": offset}
+        ad_ids = [ad.id for ad in ads]
+        first_frames: dict[str, str] = {}
+        if ad_ids:
+            placeholders = ",".join("?" for _ in ad_ids)
+            rows = conn.execute(
+                f"""
+                SELECT f.ad_id, f.path
+                FROM frames f
+                WHERE f.kept = 1
+                  AND f.frame_index = (
+                    SELECT MIN(f2.frame_index)
+                    FROM frames f2
+                    WHERE f2.ad_id = f.ad_id AND f2.kept = 1
+                  )
+                  AND f.ad_id IN ({placeholders})
+                """,
+                ad_ids,
+            ).fetchall()
+            first_frames = {row["ad_id"]: row["path"] for row in rows}
+        items = []
+        for ad in ads:
+            item = _dump(ad)
+            item["first_frame_path"] = first_frames.get(ad.id)
+            items.append(item)
+        return {"items": items, "limit": limit, "offset": offset}
     finally:
         conn.close()
 

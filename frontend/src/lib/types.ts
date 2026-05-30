@@ -34,6 +34,7 @@ export type AdRecord = {
   duplicate_of?: string | null;
   duplicate_verdict?: string | null;
   duplicate_score?: number | null;
+  first_frame_path?: string | null;
 };
 
 export type EndpointSettings = {

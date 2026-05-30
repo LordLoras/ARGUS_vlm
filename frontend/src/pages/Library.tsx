@@ -11,6 +11,7 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
+import { filePathToDataUrl } from "../lib/format";
 import { DownloadIcon, LibraryIcon, PlusIcon } from "../lib/icons";
 import type { AdDetail, AdRecord } from "../lib/types";
 
@@ -99,6 +100,16 @@ export function Library() {
       return true;
     });
   }, [ads, detailMap, filters, activeRisks]);
+
+  const framePreviews = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    for (const ad of ads) {
+      if (ad.first_frame_path) {
+        map[ad.id] = filePathToDataUrl(ad.first_frame_path);
+      }
+    }
+    return map;
+  }, [ads]);
 
   const counts = useMemo(() => {
     const byCategory: Record<string, number> = {};
@@ -302,6 +313,7 @@ export function Library() {
             <AdTable
               ads={filteredAds}
               details={detailMap}
+              framePreviews={framePreviews}
               selectedId={selectedAdId}
               onSelect={setSelectedAdId}
             />
