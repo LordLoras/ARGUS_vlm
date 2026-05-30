@@ -373,11 +373,13 @@ export function Agent() {
           />
         </section>
 
-        <ContextRail
-          session={activeSession}
-          toolCounts={toolCounts}
-          toolsCalled={tools.length}
-        />
+        {activeId && (
+          <ContextRail
+            session={activeSession}
+            toolCounts={toolCounts}
+            toolsCalled={tools.length}
+          />
+        )}
       </div>
     </>
   );
