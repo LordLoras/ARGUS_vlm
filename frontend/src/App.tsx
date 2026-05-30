@@ -51,7 +51,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/library" replace />} />
+        <Route index element={<Navigate to="/about" replace />} />
         <Route path="/about" element={<About />} />
         <Route path="/library" element={<Library />} />
         <Route path="/upload" element={<Upload />} />

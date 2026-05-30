@@ -628,6 +628,7 @@ export type StatsCount = {
 
 export type StatsResponse = {
   total_ads: number;
+  total_campaigns: number;
   by_status: StatsCount[];
   by_category: StatsCount[];
   by_brand: StatsCount[];

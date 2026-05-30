@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
@@ -6,13 +6,13 @@ import {
   ArrowRight,
   BadgeInfo,
   BrainCircuit,
-  CheckCircle2,
   Clock3,
   Database,
   Eye,
   FileSearch,
   GitBranch,
   Layers,
+  ListTree,
   LockKeyhole,
   MessageSquare,
   Network,
@@ -120,12 +120,6 @@ const TRUST_CARDS: CardItem[] = [
     color: "var(--sky)",
   },
   {
-    title: "Categorization only",
-    body: "There is no allow, block, escalation, or review queue. Observation tags are descriptive analysis labels.",
-    icon: BadgeInfo,
-    color: "var(--amber)",
-  },
-  {
     title: "Self-contained deployment",
     body: "SQLite stores everything in one file. No Docker or cloud services required, though remote VLM endpoints are supported.",
     icon: Server,
@@ -136,6 +130,39 @@ const TRUST_CARDS: CardItem[] = [
     body: "The natural-language agent routes to fixed read-only tools and uses SQLite query_only enforcement.",
     icon: LockKeyhole,
     color: "var(--rose)",
+  },
+];
+
+const OUTPUT_CARDS: CardItem[] = [
+  {
+    title: "Primary category",
+    body: "Every ad is classified against a configurable taxonomy rooted in IAB standards — from retail and automotive to healthcare and crypto. Sensitive verticals carry informational flags, not gatekeeping.",
+    icon: ListTree,
+    color: "var(--sky)",
+  },
+  {
+    title: "Observation tags",
+    body: "Descriptive labels like deceptive urgency, before-after claims, unverified health claims, and false scarcity. These surface in search and the UI for analyst filtering — they never block or escalate.",
+    icon: Tags,
+    color: "var(--amber)",
+  },
+  {
+    title: "Marketing entities",
+    body: "Structured extraction of brand, products, prices, offers, CTAs, social proof, and disclaimers — each grounded to a specific frame or transcript segment with timestamps.",
+    icon: FileSearch,
+    color: "var(--emerald)",
+  },
+  {
+    title: "Evidence chain",
+    body: "Every classification decision cites its sources: which frame, which OCR line, which transcript segment, which rule triggered. Raw and corrected OCR are stored separately.",
+    icon: Clock3,
+    color: "var(--rose)",
+  },
+  {
+    title: "Brand enrichment",
+    body: "Enrich any brand or advertiser with a Wikipedia-sourced profile on demand — logo, description, industry, and linked entities. Additional search integrations can be added later.",
+    icon: BadgeInfo,
+    color: "var(--accent-2)",
   },
 ];
 
@@ -187,13 +214,13 @@ const FEATURE_CARDS: CardItem[] = [
   },
   {
     title: "Knowledge Graph",
-    body: "Interactive graph visualization of entity relationships. Currently shows sample data — the adapter is wired and ready to connect to a live graph backend at any time. Planned: agentic auto-discovery of emerging signals and cross-campaign patterns.",
+    body: "Interactive graph visualization of entity relationships across your ad library. Select a node to trace brand, product, and category connections. Designed to expand with agentic auto-discovery of emerging signals and cross-campaign patterns.",
     icon: Network,
     color: "var(--emerald)",
   },
   {
     title: "Embedding Space",
-    body: "Interactive UMAP projection of text and visual vectors. Highly experimental — dimensions are approximate, not precise coordinates.",
+    body: "Interactive UMAP projection of text and visual vectors. Explore ad similarity, clusters, and outliers by dragging through embedding space. Projections reflect neighborhood structure, not exact distances.",
     icon: Radar,
     color: "var(--rose)",
   },
@@ -244,42 +271,6 @@ const FEATURE_LINKS = [
   { label: "Agent", to: "/agent", icon: MessageSquare, note: "ask questions" },
   { label: "Embeddings", to: "/embeddings", icon: Radar, note: "show vector space" },
 ];
-
-function CountUp({ target, suffix = "" }: { target: number; suffix?: string }) {
-  const [val, setVal] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || started.current) return;
-        started.current = true;
-        const duration = 1200;
-        const start = performance.now();
-        const tick = (now: number) => {
-          const t = Math.min((now - start) / duration, 1);
-          const ease = 1 - Math.pow(1 - t, 3);
-          setVal(Math.round(ease * target));
-          if (t < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      },
-      { threshold: 0.35 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [target]);
-
-  return (
-    <span ref={ref}>
-      {val.toLocaleString()}
-      {suffix}
-    </span>
-  );
-}
 
 function FadeSection({
   children,
@@ -463,26 +454,18 @@ function CardGrid({ items, columns = "three" }: { items: CardItem[]; columns?: "
 
 export function About() {
   const [activeStep, setActiveStep] = useState(0);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
+    if (paused) return;
     const timer = window.setInterval(() => {
       setActiveStep((current) => (current + 1) % DEMO_STEPS.length);
     }, 2600);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [paused]);
 
   const active = DEMO_STEPS[activeStep];
   const ActiveIcon = active.icon;
-
-  const metricItems = useMemo(
-    () => [
-      { label: "Pipeline", value: <CountUp target={10} />, detail: "restartable stages" },
-      { label: "Search", value: <CountUp target={5} />, detail: "retrieval modes" },
-      { label: "Storage", value: "1", detail: "local SQLite file" },
-      { label: "Agent", value: "0", detail: "write permissions" },
-    ],
-    []
-  );
 
   return (
     <div className="about-page">
@@ -495,7 +478,7 @@ export function About() {
           <div className="about-hero-copy">
             <div className="about-kicker">
               <span className="about-live-dot" />
-              About ARGUS
+              Ad Retrieval, Graphing &amp; Understanding System
             </div>
             <h1>ARGUS</h1>
             <p className="about-hero-subtitle">
@@ -523,16 +506,6 @@ export function About() {
         </div>
       </section>
 
-      <div className="about-metrics">
-        {metricItems.map((item) => (
-          <div key={item.label} className="about-metric">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <em>{item.detail}</em>
-          </div>
-        ))}
-      </div>
-
       <FadeSection className="about-section about-section-intro" id="one-liner">
         <div className="about-section-head">
           <span>01</span>
@@ -547,13 +520,6 @@ export function About() {
             visible text, listens to speech, notes the offer, checks for repeated
             campaign patterns, and stores everything as searchable evidence.
           </p>
-          <div className="about-plain-callout">
-            <CheckCircle2 size={18} />
-            <span>
-              It categorizes content and observations. It does not approve, reject,
-              block, flag, or route ads for human review.
-            </span>
-          </div>
         </div>
         <CardGrid items={PROBLEM_CARDS} />
       </FadeSection>
@@ -566,7 +532,10 @@ export function About() {
             <p>The pipeline stages that turn raw video into structured evidence.</p>
           </div>
         </div>
-        <div className="about-demo-story">
+        <div className="about-demo-story"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
           <StoryRail activeStep={activeStep} onActiveStep={setActiveStep} />
           <div className="about-story-focus" style={{ "--focus-color": active.color } as CSSProperties}>
             <span className="about-story-focus-icon">
@@ -623,12 +592,39 @@ export function About() {
         </div>
       </FadeSection>
 
-      <FadeSection className="about-section" id="questions">
+      <FadeSection className="about-section" id="output">
         <div className="about-section-head">
           <span>04</span>
           <div>
-            <h2>Questions You Can Ask</h2>
-            <p>Example prompts that demonstrate search, retrieval, and agent capabilities.</p>
+            <h2>What Gets Generated</h2>
+            <p>Every ad produces a structured record — categories from the IAB taxonomy, observation tags, and marketing entities grounded to evidence.</p>
+          </div>
+        </div>
+        <CardGrid items={OUTPUT_CARDS} columns="three" />
+        <div className="about-stack-table" style={{ marginTop: 16 }}>
+          {[
+            ["Category", "primary_category + confidence + IAB code", "e.g. automotive, healthcare_pharma, gambling"],
+            ["Risk labels", "observation tags from rule engine + VLM", "e.g. deceptive_urgency, before_after, false_scarcity"],
+            ["Marketing entities", "brand, products, prices, offers, CTAs, social proof, disclaimers", "each grounded to frame index + time_ms"],
+            ["Brand profile", "on-demand Wikipedia enrichment for brand/advertiser", "logo, description, industry, wikidata"],
+            ["Campaigns", "auto-clustered or user-curated groups", "same brand, variants, different SKUs"],
+            ["Embeddings", "384-d text + 768-d visual per keyframe", "MiniLM + SigLIP 2, stored in sqlite-vec"],
+          ].map(([label, detail, example]) => (
+            <div key={label} className="about-stack-row">
+              <strong>{label}</strong>
+              <span>{detail}</span>
+              <code>{example}</code>
+            </div>
+          ))}
+        </div>
+      </FadeSection>
+
+      <FadeSection className="about-section" id="questions">
+        <div className="about-section-head">
+          <span>05</span>
+          <div>
+            <h2>Ask In Plain Language</h2>
+            <p>The agent answers natural-language queries over your entire ad database.</p>
           </div>
         </div>
         <div className="about-question-cloud">
@@ -642,7 +638,7 @@ export function About() {
 
       <FadeSection className="about-section" id="search">
         <div className="about-section-head">
-          <span>05</span>
+          <span>06</span>
           <div>
             <h2>Search And Retrieval</h2>
             <p>Different retrieval modes answer different analyst questions.</p>
@@ -652,16 +648,18 @@ export function About() {
         <div className="about-plain-callout about-plain-callout-sky">
           <Zap size={18} />
           <span>
-            Ranking uses reciprocal rank fusion with heuristic text-evidence bonuses.
-            Weak partial matches can surface because there is no learned reranker yet —
-            a custom reranker model will close this gap in a future release.
+            Hybrid search fuses keyword precision with semantic understanding using
+            reciprocal rank fusion — combining exact matches with meaning-based
+            retrieval so analysts find what they need regardless of phrasing.
+            As the database grows, a custom reranker model will further tighten
+            relevance and suppress weak partial matches.
           </span>
         </div>
       </FadeSection>
 
       <FadeSection className="about-section" id="features">
         <div className="about-section-head">
-          <span>06</span>
+          <span>07</span>
           <div>
             <h2>Built-In Tools</h2>
             <p>Analysis surfaces beyond the core pipeline.</p>
@@ -672,7 +670,7 @@ export function About() {
 
       <FadeSection className="about-section" id="trust">
         <div className="about-section-head">
-          <span>07</span>
+          <span>08</span>
           <div>
             <h2>Trust Boundaries</h2>
             <p>These points keep the project understandable and defensible.</p>
@@ -683,7 +681,7 @@ export function About() {
 
       <FadeSection className="about-section" id="architecture">
         <div className="about-section-head">
-          <span>08</span>
+          <span>09</span>
           <div>
             <h2>Under The Hood</h2>
             <p>A semi-technical summary of the stack layers.</p>
@@ -721,7 +719,7 @@ export function About() {
 
       <FadeSection className="about-section" id="tour">
         <div className="about-section-head">
-          <span>09</span>
+          <span>10</span>
           <div>
             <h2>Explore</h2>
             <p>Navigate to any section of the application.</p>

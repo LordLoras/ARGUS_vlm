@@ -7,6 +7,23 @@ import { ConfidenceBar } from "./shared/ConfidenceBar";
 import { FrameThumbnail } from "./shared/FrameThumbnail";
 import { ObservationTagOverflow, ObservationTagPill } from "./shared/ObservationTagPill";
 
+const MAX_PRODUCTS = 3;
+
+function formatSubLine(ad: AdRecord): string {
+  const parts: string[] = [];
+  if (ad.brand_name) parts.push(ad.brand_name);
+  if (ad.promotion_name) parts.push(ad.promotion_name);
+  if (ad.products_text) {
+    const all = ad.products_text.split(/,\s*/).filter(Boolean);
+    if (all.length > MAX_PRODUCTS) {
+      parts.push(`${all.slice(0, MAX_PRODUCTS).join(", ")} +${all.length - MAX_PRODUCTS} more`);
+    } else {
+      parts.push(all.join(", "));
+    }
+  }
+  return parts.join(" / ") || ad.id;
+}
+
 export function AdTable({
   ads,
   details,
@@ -66,7 +83,7 @@ export function AdTable({
                   <div className="brand-cell">
                     <span className="name">{ad.advertiser_name || ad.brand_name || "Unknown brand"}</span>
                     <span className="sub">
-                      {[ad.brand_name, ad.promotion_name].filter(Boolean).join(" / ") || ad.id}
+                      {formatSubLine(ad)}
                     </span>
                   </div>
                 </td>

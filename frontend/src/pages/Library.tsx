@@ -5,7 +5,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AdDetailDrawer } from "../components/AdDetailDrawer";
 import { AdTable } from "../components/AdTable";
 import { FilterSidebar, type LibraryFilters } from "../components/FilterSidebar";
-import { StatStrip } from "../components/library/StatStrip";
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
@@ -141,7 +140,6 @@ export function Library() {
   const campaignsQuery = useQuery({
     queryKey: ["campaigns"],
     queryFn: () => api.listCampaigns({ limit: 100 }),
-    enabled: Boolean(selectedAdId)
   });
 
   const patchMutation = useMutation({
@@ -218,38 +216,10 @@ export function Library() {
     }
   });
 
-  const totalAds = counts.total;
-  const campaignsCount = useMemo(() => {
-    const ids = new Set<string>();
-    Object.values(detailMap).forEach((d) => d?.campaigns?.forEach((c) => ids.add(c.id)));
-    return ids.size;
-  }, [detailMap]);
+  const campaignsCount = campaignsQuery.data?.items.length ?? 0;
   const brandsCount = useMemo(() => {
     return new Set(ads.map((ad) => ad.brand_name).filter(Boolean) as string[]).size;
   }, [ads]);
-
-  const stats = [
-    {
-      label: "Total ads",
-      value: String(totalAds),
-      delta: totalAds ? `${totalAds} indexed` : "—",
-      sparkValues: sparkSeed(totalAds || 1, 12)
-    },
-    {
-      label: "Campaigns",
-      value: String(campaignsCount),
-      delta: campaignsCount ? `${campaignsCount} active` : "—",
-      sparkValues: sparkSeed(Math.max(campaignsCount, 1), 12),
-      sparkColor: "var(--accent-2)"
-    },
-    {
-      label: "Brands",
-      value: String(brandsCount),
-      delta: brandsCount ? `${brandsCount} unique` : "—",
-      sparkValues: sparkSeed(Math.max(brandsCount, 1), 12),
-      sparkColor: "var(--accent-2)"
-    }
-  ];
 
   return (
     <>
@@ -275,15 +245,30 @@ export function Library() {
           <div>
             <h1 className="page-title">Ad library</h1>
             <p className="page-sub">
-              {totalAds} ads · {campaignsCount} campaigns · {brandsCount} brands
               {adsQuery.dataUpdatedAt
-                ? ` · refreshed ${new Date(adsQuery.dataUpdatedAt).toLocaleTimeString()}`
-                : null}
+                ? `Last refreshed ${new Date(adsQuery.dataUpdatedAt).toLocaleTimeString()}`
+                : "No data yet"}
             </p>
           </div>
         </div>
 
-        <StatStrip stats={stats} />
+        <div className="lib-metrics">
+          <div className="lib-metric">
+            <span className="lib-metric-label">Total ads</span>
+            <strong>{counts.total.toLocaleString()}</strong>
+            <em>{counts.total ? "indexed" : "—"}</em>
+          </div>
+          <div className="lib-metric">
+            <span className="lib-metric-label">Campaigns</span>
+            <strong>{campaignsCount.toLocaleString()}</strong>
+            <em>{campaignsCount ? "active" : "—"}</em>
+          </div>
+          <div className="lib-metric">
+            <span className="lib-metric-label">Brands</span>
+            <strong>{brandsCount.toLocaleString()}</strong>
+            <em>{brandsCount ? "unique" : "—"}</em>
+          </div>
+        </div>
 
         <div className="library-body">
           <FilterSidebar
@@ -371,12 +356,4 @@ export function Library() {
       ) : null}
     </>
   );
-}
-
-function sparkSeed(scale: number, count: number) {
-  const max = Math.max(1, scale);
-  return Array.from({ length: count }, (_, i) => {
-    const v = Math.sin(i * 0.6) + Math.cos(i * 0.21) + 2.3;
-    return Math.round((v / 4.5) * max);
-  });
 }

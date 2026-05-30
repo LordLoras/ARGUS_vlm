@@ -21,8 +21,10 @@ def get_stats(
     try:
         where, params = _filters(brand=brand, category=category, status=status)
         total = conn.execute(f"SELECT COUNT(*) FROM ads {where}", params).fetchone()[0]
+        total_campaigns = conn.execute("SELECT COUNT(*) FROM campaigns").fetchone()[0]
         return {
             "total_ads": int(total),
+            "total_campaigns": int(total_campaigns),
             "by_status": _counts(conn, "status", where, params, limit),
             "by_category": _counts(conn, "primary_category", where, params, limit),
             "by_brand": _counts(conn, "brand_name", where, params, limit),

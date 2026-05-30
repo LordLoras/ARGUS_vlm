@@ -58,6 +58,7 @@ export function AdDetailDrawer({
   const [campaignDialogOpen, setCampaignDialogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoStageRef = useRef<HTMLDivElement | null>(null);
+  const drawerBodyRef = useRef<HTMLDivElement | null>(null);
   const evidenceCount = detail.classification?.evidence?.length ?? 0;
   const relatedCount = related?.semantically_similar?.length ?? 0;
   const videoSrc = filePathToDataUrl(detail.ad.source_path);
@@ -71,6 +72,23 @@ export function AdDetailDrawer({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  useEffect(() => {
+    const el = drawerBodyRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const hasOverflow = el.scrollHeight > el.clientHeight + 1;
+      if (!hasOverflow) return;
+      const atTop = el.scrollTop <= 0 && e.deltaY < 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1 && e.deltaY > 0;
+      if (atTop || atBottom) {
+        const tableWrap = el.closest(".page")?.querySelector(".table-wrap");
+        if (tableWrap) tableWrap.scrollTop += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", onWheel);
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     setTab(initialTab);
@@ -132,7 +150,7 @@ export function AdDetailDrawer({
           </div>
         </header>
 
-        <div className="drawer-body">
+        <div ref={drawerBodyRef} className="drawer-body">
           <div ref={videoStageRef} className="video-stage" style={{ aspectRatio: videoAspect }}>
             {videoSrc ? (
               <video

@@ -568,6 +568,46 @@ input, textarea, select { font: inherit; color: inherit; }
 .stat.sensitive .stat-value { color: #fbbf24; }
 .stat.sensitive .stat-value .delta { color: #fbbf24aa; }
 
+/* ========== Library metrics ========== */
+.lib-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.lib-metric {
+  background: var(--bg-1);
+  padding: 14px 20px;
+  min-width: 0;
+}
+.lib-metric-label {
+  display: block;
+  color: var(--fg-quiet);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.lib-metric strong {
+  display: block;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-feature-settings: "tnum";
+  color: var(--fg);
+}
+.lib-metric em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--fg-quiet);
+  margin-top: 2px;
+  font-family: var(--mono);
+}
+
 /* ========== Library ========== */
 .library-body {
   display: grid;
@@ -4650,7 +4690,7 @@ svg.spark { display: block; width: 100%; height: 100%; }
 .about-page {
   overflow-y: auto;
   overflow-x: hidden;
-  height: 100vh;
+  flex: 1;
   background: var(--bg);
   scroll-behavior: smooth;
 }
@@ -5310,7 +5350,7 @@ svg.spark { display: block; width: 100%; height: 100%; }
    ========================================================== */
 
 .about-page {
-  height: 100vh;
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
