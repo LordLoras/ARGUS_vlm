@@ -2700,10 +2700,10 @@ button.ts-link:hover {
   flex: 1;
   display: flex;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: stretch;
   position: relative;
   overflow: hidden;
-  padding: 40px;
+  padding: 0;
   background:
     linear-gradient(90deg, rgba(8,9,11,0.96) 0%, rgba(8,9,11,0.78) 42%, rgba(8,9,11,0.42) 100%),
     var(--agent-banner) center / cover no-repeat;
@@ -2720,7 +2720,9 @@ button.ts-link:hover {
 .agent-landing-content {
   position: relative;
   z-index: 1;
-  width: min(620px, 100%);
+  flex: 1;
+  min-width: 0;
+  padding: 40px;
   text-align: left;
   display: flex;
   flex-direction: column;
@@ -2912,7 +2914,8 @@ button.ts-link:hover {
 .agent-landing-tools {
   position: relative;
   z-index: 1;
-  width: 280px;
+  width: 300px;
+  max-width: 320px;
   flex-shrink: 0;
   border-left: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   padding: 32px 20px;
