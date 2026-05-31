@@ -1167,8 +1167,6 @@ input, textarea, select { font: inherit; color: inherit; }
     linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 94%, transparent), var(--bg));
 }
 .search-panel-inner {
-  width: min(960px, 100%);
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1341,9 +1339,6 @@ select.search-filter {
   gap: 6px;
 }
 @media (max-width: 760px) {
-  .search-panel-inner {
-    width: 100%;
-  }
   .search-primary-row,
   .search-secondary-row {
     grid-template-columns: minmax(0, 1fr);
