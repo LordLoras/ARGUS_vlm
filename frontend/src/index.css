@@ -1230,6 +1230,7 @@ select.search-filter {
   flex-wrap: wrap;
   gap: 6px;
   align-content: start;
+  padding-top: 22px;
   min-width: 0;
 }
 .search-mode {
