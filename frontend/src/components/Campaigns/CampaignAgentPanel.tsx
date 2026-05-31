@@ -38,6 +38,8 @@ export function CampaignAgentPanel({
         </div>
         <textarea
           className={`input campaign-agent-question ${loading ? "active" : ""}`}
+          name="campaign_agent_question"
+          aria-label="Ask the campaign research agent"
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder="Ask about outliers, offer consistency, fine print, or campaign improvements"
@@ -79,7 +81,7 @@ export function CampaignAgentPanel({
             <FindingList findings={deepResearch.findings} />
           </section>
           <section>
-            <div className="section-title">Creative review</div>
+            <div className="section-title">Creative analysis</div>
             <div className="abcd-grid">
               {deepResearch.creative_review.map((item) => (
                 <div key={item.area} className="abcd-card">
@@ -95,7 +97,7 @@ export function CampaignAgentPanel({
             <SuggestedEdits suggestions={deepResearch.suggested_edits} />
           </section>
           <section>
-            <div className="section-title">Assignment review</div>
+            <div className="section-title">Assignment QA</div>
             <AssignmentReview report={deepResearch} />
           </section>
           <section>

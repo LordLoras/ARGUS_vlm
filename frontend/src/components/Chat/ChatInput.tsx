@@ -39,6 +39,8 @@ export function ChatInput({
         <div className="chat-textarea-wrap">
           <textarea
             className="chat-textarea"
+            aria-label="Ask the ARGUS agent"
+            name="agent_message"
             placeholder="Ask about your ads…"
             value={value}
             disabled={disabled}
@@ -64,7 +66,7 @@ export function ChatInput({
               </button>
             </div>
             {streaming ? (
-              <button className="btn btn-sm btn-icon" onClick={onStop} title="Stop streaming">
+              <button className="btn btn-sm btn-icon" onClick={onStop} aria-label="Stop streaming" title="Stop streaming">
                 <StopIcon size={11} />
               </button>
             ) : (

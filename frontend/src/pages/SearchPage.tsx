@@ -57,7 +57,7 @@ export function SearchPage() {
     enabled: Boolean(submitted)
   });
 
-  const canSubmit = Boolean(q || adId);
+  const canSubmit = Boolean(q || adId || brand || promotion || category || status);
   const items = query.data?.items ?? [];
   const filteredCount = query.data?.filtered_count ?? 0;
 
@@ -92,10 +92,12 @@ export function SearchPage() {
               <span className="search-label">Query</span>
               <input
                 className="input search-query"
+                name="search_query"
+                autoComplete="off"
                 placeholder={
                   mode === "visual" || mode === "visual_hybrid"
-                    ? "red car, product shot, outdoor scene..."
-                    : "financing, health claim, brand..."
+                    ? "red car, product shot, outdoor scene…"
+                    : "financing, health claim, brand…"
                 }
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -105,7 +107,9 @@ export function SearchPage() {
               <span className="search-label">Seed ad</span>
               <input
                 className="input search-seed"
-                placeholder="ad_..."
+                name="seed_ad"
+                autoComplete="off"
+                placeholder="ad_…"
                 value={adId}
                 onChange={(e) => setAdId(e.target.value)}
               />
@@ -139,6 +143,8 @@ export function SearchPage() {
                 <span className="search-label">Brand</span>
                 <input
                   className="input search-filter"
+                  name="search_brand"
+                  autoComplete="off"
                   placeholder="Any brand"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
@@ -148,6 +154,8 @@ export function SearchPage() {
                 <span className="search-label">Category</span>
                 <input
                   className="input search-filter"
+                  name="search_category"
+                  autoComplete="off"
                   placeholder="Any category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -157,6 +165,8 @@ export function SearchPage() {
                 <span className="search-label">Promotion</span>
                 <input
                   className="input search-filter"
+                  name="search_promotion"
+                  autoComplete="off"
                   placeholder="Any event or deal"
                   value={promotion}
                   onChange={(e) => setPromotion(e.target.value)}
@@ -166,6 +176,8 @@ export function SearchPage() {
                 <span className="search-label">Status</span>
                 <select
                   className="input search-filter"
+                  name="search_status"
+                  autoComplete="off"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   title="Pipeline state: completed, processing, failed, duplicate, or new."
@@ -293,11 +305,11 @@ function SearchResultRow({
         className="search-result-actions"
         onClick={(event) => event.stopPropagation()}
       >
-        <button className="btn btn-sm" onClick={onOpen}>
+        <button type="button" className="btn btn-sm" onClick={onOpen}>
           <LibraryIcon size={11} />
           <span>Open</span>
         </button>
-        <button className="btn btn-sm btn-primary" onClick={onEdit}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={onEdit}>
           <EditIcon size={11} />
           <span>Edit</span>
         </button>

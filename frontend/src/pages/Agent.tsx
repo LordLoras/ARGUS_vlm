@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import bannerUrl from "../../banner.png";
+import bannerUrl from "../../banner.jpg";
 import logoUrl from "../../logo-mark.png";
 import type { ToolCard } from "../components/Chat/ToolCallCard";
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";

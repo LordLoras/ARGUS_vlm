@@ -29,7 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import bannerUrl from "../../banner.png";
+import bannerUrl from "../../banner.jpg";
 import logoUrl from "../../logo-mark.png";
 
 type DemoStep = {
@@ -112,16 +112,43 @@ const PROBLEM_CARDS: CardItem[] = [
   },
 ];
 
+const AUDIENCE_CARDS: CardItem[] = [
+  {
+    title: "Built for ad analysts",
+    body: "ARGUS is for teams that need to inspect creative, compare campaigns, mine claims, and retrieve evidence from a growing ad database.",
+    icon: Radar,
+    color: "var(--sky)",
+  },
+  {
+    title: "Works from video evidence",
+    body: "Ingest MP4, MOV, or WebM clips. The pipeline samples frames, aligns transcript segments, preserves OCR, and records timestamps.",
+    icon: Play,
+    color: "var(--emerald)",
+  },
+  {
+    title: "Categorization only",
+    body: "All ingested content is treated as valid TV, promo, or ad material. ARGUS does not approve, reject, block, escalate, or route ads for review.",
+    icon: ShieldCheck,
+    color: "var(--amber)",
+  },
+  {
+    title: "Designed for traceable answers",
+    body: "When a model extracts a brand, price, offer, CTA, claim, or disclaimer, the value is expected to point back to frame or transcript evidence.",
+    icon: FileSearch,
+    color: "var(--rose)",
+  },
+];
+
 const TRUST_CARDS: CardItem[] = [
   {
     title: "Evidence before opinion",
-    body: "Final answers cite frames, timestamps, OCR text, transcript segments, rules, or model evidence.",
+    body: "Final outputs cite frames, timestamps, OCR text, transcript segments, rules, or model evidence.",
     icon: FileSearch,
     color: "var(--sky)",
   },
   {
-    title: "Self-contained deployment",
-    body: "SQLite stores everything in one file. No Docker or cloud services required, though remote VLM endpoints are supported.",
+    title: "Configurable runtime",
+    body: "SQLite stores the working dataset, while OCR, VLM, embedding, and agent routes are configured through the backend and Settings UI.",
     icon: Server,
     color: "var(--emerald)",
   },
@@ -136,13 +163,13 @@ const TRUST_CARDS: CardItem[] = [
 const OUTPUT_CARDS: CardItem[] = [
   {
     title: "Primary category",
-    body: "Every ad is classified against a configurable taxonomy rooted in IAB standards — from retail and automotive to healthcare and crypto. Sensitive verticals carry informational flags, not gatekeeping.",
+    body: "Every ad receives a primary category from the ARGUS taxonomy, with separate IAB product and content projections when those mappings are available.",
     icon: ListTree,
     color: "var(--sky)",
   },
   {
     title: "Observation tags",
-    body: "Descriptive labels like urgency pressure, deceptive imagery, health claims, and unsubstantiated claims. These surface in search and the UI for analyst filtering — they never block or escalate.",
+    body: "Descriptive labels like urgency pressure, deceptive imagery, health claims, and unsubstantiated claims. They surface in search and filtering, but never block or escalate.",
     icon: Tags,
     color: "var(--amber)",
   },
@@ -154,7 +181,7 @@ const OUTPUT_CARDS: CardItem[] = [
   },
   {
     title: "Evidence chain",
-    body: "Every classification decision cites its sources: which frame, which OCR line, which transcript segment, which rule triggered. Raw and corrected OCR are stored separately.",
+    body: "Every classification result cites its sources: which frame, which OCR line, which transcript segment, which rule triggered. Raw and corrected OCR are stored separately.",
     icon: Clock3,
     color: "var(--rose)",
   },
@@ -208,7 +235,7 @@ const FEATURE_CARDS: CardItem[] = [
   },
   {
     title: "Creative Debate Panel",
-    body: "Adversarial persona review with opening statements, cross-examination, closing arguments, tensions, and a moderator scorecard.",
+    body: "Adversarial persona debate with opening statements, cross-examination, closing arguments, tensions, and a moderator scorecard.",
     icon: BrainCircuit,
     color: "var(--amber)",
   },
@@ -346,7 +373,7 @@ function DemoSignalPanel({ activeStep }: { activeStep: number }) {
           <div className="about-demo-frame about-demo-frame-c">
             <span>00:23.5</span>
             <strong>Fine print</strong>
-            <em>OCR review</em>
+            <em>OCR check</em>
           </div>
         </div>
 
@@ -524,9 +551,20 @@ export function About() {
         <CardGrid items={PROBLEM_CARDS} />
       </FadeSection>
 
-      <FadeSection className="about-section" id="demo-path">
+      <FadeSection className="about-section" id="audience">
         <div className="about-section-head">
           <span>02</span>
+          <div>
+            <h2>Audience And Scope</h2>
+            <p>Who the system is for, what it ingests, and the boundaries it keeps.</p>
+          </div>
+        </div>
+        <CardGrid items={AUDIENCE_CARDS} columns="two" />
+      </FadeSection>
+
+      <FadeSection className="about-section" id="demo-path">
+        <div className="about-section-head">
+          <span>03</span>
           <div>
             <h2>How It Works</h2>
             <p>The pipeline stages that turn raw video into structured evidence.</p>
@@ -553,7 +591,7 @@ export function About() {
 
       <FadeSection className="about-section" id="pipeline">
         <div className="about-section-head">
-          <span>03</span>
+          <span>04</span>
           <div>
             <h2>From Footage To Evidence</h2>
             <p>The pipeline is modular, restartable, and built around traceability.</p>
@@ -594,17 +632,18 @@ export function About() {
 
       <FadeSection className="about-section" id="output">
         <div className="about-section-head">
-          <span>04</span>
+          <span>05</span>
           <div>
             <h2>What Gets Generated</h2>
-            <p>Every ad produces a structured record — categories from the IAB taxonomy, observation tags, and marketing entities grounded to evidence.</p>
+            <p>Every ad produces a structured record with an ARGUS category, optional IAB projections, observation tags, and marketing entities grounded to evidence.</p>
           </div>
         </div>
         <CardGrid items={OUTPUT_CARDS} columns="three" />
         <div className="about-stack-table" style={{ marginTop: 16 }}>
           {[
-            ["Category", "primary_category + confidence + IAB code", "e.g. automotive, healthcare_pharma, gambling"],
-            ["Risk labels", "observation tags from the rules engine", "e.g. urgency_pressure, deceptive_imagery, health_claim"],
+            ["Category", "primary_category + confidence", "e.g. automotive, healthcare_pharma, gambling"],
+            ["IAB projections", "product and content taxonomy mappings when available", "e.g. Vehicles > Automotive Leasing"],
+            ["Observation tags", "descriptive tags from rules and verifier output", "e.g. urgency_pressure, deceptive_imagery, health_claim"],
             ["Marketing entities", "brand, products, prices, offers, CTAs, social proof, disclaimers", "each grounded to frame index + time_ms"],
             ["Brand profile", "on-demand Wikipedia + Wikidata enrichment for brand/advertiser", "logo, description, industry, wikidata"],
             ["Campaigns", "auto-clustered or user-curated groups", "same brand, variants, different SKUs"],
@@ -621,7 +660,7 @@ export function About() {
 
       <FadeSection className="about-section" id="questions">
         <div className="about-section-head">
-          <span>05</span>
+          <span>06</span>
           <div>
             <h2>Ask In Plain Language</h2>
             <p>The agent answers natural-language queries over your entire ad database.</p>
@@ -638,7 +677,7 @@ export function About() {
 
       <FadeSection className="about-section" id="search">
         <div className="about-section-head">
-          <span>06</span>
+          <span>07</span>
           <div>
             <h2>Search And Retrieval</h2>
             <p>Different retrieval modes answer different analyst questions.</p>
@@ -659,7 +698,7 @@ export function About() {
 
       <FadeSection className="about-section" id="features">
         <div className="about-section-head">
-          <span>07</span>
+          <span>08</span>
           <div>
             <h2>Built-In Tools</h2>
             <p>Analysis surfaces beyond the core pipeline.</p>
@@ -670,7 +709,7 @@ export function About() {
 
       <FadeSection className="about-section" id="trust">
         <div className="about-section-head">
-          <span>08</span>
+          <span>09</span>
           <div>
             <h2>Trust Boundaries</h2>
             <p>These points keep the project understandable and defensible.</p>
@@ -681,7 +720,7 @@ export function About() {
 
       <FadeSection className="about-section" id="architecture">
         <div className="about-section-head">
-          <span>09</span>
+          <span>10</span>
           <div>
             <h2>Under The Hood</h2>
             <p>A semi-technical summary of the stack layers.</p>
@@ -719,7 +758,7 @@ export function About() {
 
       <FadeSection className="about-section" id="tour">
         <div className="about-section-head">
-          <span>10</span>
+          <span>11</span>
           <div>
             <h2>Explore</h2>
             <p>Navigate to any section of the application.</p>

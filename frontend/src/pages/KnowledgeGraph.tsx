@@ -38,7 +38,7 @@ function LoadingFallback() {
       </div>
       <div className="kg-loading-text">
         <span className="kg-loading-title">Initializing Knowledge Graph</span>
-        <span className="kg-loading-sub">Loading 3D visualization engine...</span>
+        <span className="kg-loading-sub">Loading 3D visualization engine…</span>
       </div>
     </div>
   );
@@ -178,14 +178,22 @@ export function KnowledgeGraph() {
                 <input
                   className="kg-search-input"
                   type="text"
-                  placeholder="Search nodes..."
+                  name="graph_search"
+                  aria-label="Search graph nodes"
+                  autoComplete="off"
+                  placeholder="Search nodes…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                 />
                 {searchQuery && (
-                  <button className="kg-search-clear" onClick={() => setSearchQuery("")} aria-label="Clear graph search">
+                  <button
+                    type="button"
+                    className="kg-search-clear"
+                    onClick={() => setSearchQuery("")}
+                    aria-label="Clear graph search"
+                  >
                     clear
                   </button>
                 )}
@@ -194,6 +202,7 @@ export function KnowledgeGraph() {
                 <div className="kg-search-results">
                   {filteredNodes.slice(0, 8).map((n) => (
                     <button
+                      type="button"
                       key={n.id}
                       className="kg-search-result-item"
                       onClick={() => { handleNavigate(n); setSearchQuery(""); }}
@@ -241,7 +250,7 @@ export function KnowledgeGraph() {
                       </div>
                     </div>
                   </div>
-                  <button className="cg-detail-close" onClick={handleClose} aria-label="Close node details">
+                  <button type="button" className="cg-detail-close" onClick={handleClose} aria-label="Close node details">
                     <CloseIcon size={14} />
                   </button>
                 </div>
@@ -315,6 +324,7 @@ export function KnowledgeGraph() {
                           <div className="cg-face-card-items">
                             {items.slice(0, 6).map((conn) => (
                               <button
+                                type="button"
                                 key={conn.node.id}
                                 className="cg-face-chip"
                                 style={{ background: `${groupColor}15`, borderColor: `${groupColor}35`, color: groupColor }}

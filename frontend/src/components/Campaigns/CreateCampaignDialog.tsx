@@ -76,6 +76,7 @@ export function CreateCampaignDialog({
             className="btn btn-icon btn-ghost"
             style={{ marginLeft: "auto" }}
             onClick={onClose}
+            aria-label="Close campaign dialog"
           >
             <CloseIcon size={12} />
           </button>
@@ -85,6 +86,8 @@ export function CreateCampaignDialog({
             <span>Name</span>
             <input
               className="input"
+              name="campaign_name"
+              autoComplete="off"
               value={name}
               onChange={(event) => setName(event.target.value)}
               autoFocus
@@ -94,6 +97,8 @@ export function CreateCampaignDialog({
             <span>Brand</span>
             <input
               className="input"
+              name="campaign_brand"
+              autoComplete="off"
               value={brand}
               onChange={(event) => setBrand(event.target.value)}
             />
@@ -102,6 +107,8 @@ export function CreateCampaignDialog({
             <span>Advertiser</span>
             <input
               className="input"
+              name="campaign_advertiser"
+              autoComplete="off"
               value={advertiser}
               onChange={(event) => setAdvertiser(event.target.value)}
             />
@@ -110,6 +117,8 @@ export function CreateCampaignDialog({
             <span>Theme</span>
             <input
               className="input"
+              name="campaign_theme"
+              autoComplete="off"
               value={theme}
               onChange={(event) => setTheme(event.target.value)}
             />
@@ -120,6 +129,8 @@ export function CreateCampaignDialog({
               <input
                 className="input"
                 type="date"
+                name="campaign_start_date"
+                autoComplete="off"
                 value={startDate}
                 onChange={(event) => setStartDate(event.target.value)}
               />
@@ -129,6 +140,8 @@ export function CreateCampaignDialog({
               <input
                 className="input"
                 type="date"
+                name="campaign_end_date"
+                autoComplete="off"
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
               />
@@ -138,6 +151,8 @@ export function CreateCampaignDialog({
             <span>Description</span>
             <textarea
               className="input"
+              name="campaign_description"
+              autoComplete="off"
               rows={3}
               value={description}
               onChange={(event) => setDescription(event.target.value)}

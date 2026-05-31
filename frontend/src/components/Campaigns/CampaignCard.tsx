@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 
 import type { Campaign } from "../../lib/types";
 import { deriveSeed } from "../../lib/style-helpers";
@@ -26,8 +26,23 @@ export function CampaignCard({
     "--seed-a": shift(seeds.seedA, i),
     "--seed-b": shift(seeds.seedB, i)
   }) as CSSProperties);
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!onSelect) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
-    <article className={`cam-card ${selected ? "selected" : ""}`} onClick={onSelect}>
+    <article
+      className={`cam-card ${selected ? "selected" : ""}`}
+      onClick={onSelect}
+      onKeyDown={handleKeyDown}
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      aria-pressed={selected}
+    >
       <div className="cam-card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <span className="name">{campaign.name}</span>

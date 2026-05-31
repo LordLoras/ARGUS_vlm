@@ -224,7 +224,7 @@ export function Campaigns() {
         </div>
 
         {campaigns.isLoading ? (
-          <div className="obs-empty" style={{ padding: 32 }}>Loading campaigns...</div>
+          <div className="obs-empty" style={{ padding: 32 }}>Loading campaigns…</div>
         ) : items.length === 0 ? (
           <div style={{ padding: 32 }}>
             <EmptyState

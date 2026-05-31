@@ -60,7 +60,7 @@ function LoadingFallback() {
       </div>
       <div className="kg-loading-text">
         <span className="kg-loading-title">Computing Embedding Space</span>
-        <span className="kg-loading-sub">Projecting MiniLM / SigLIP vectors...</span>
+        <span className="kg-loading-sub">Projecting MiniLM / SigLIP vectors…</span>
       </div>
     </div>
   );
@@ -424,6 +424,7 @@ export function Embeddings() {
               <span className="es-error-title">Failed to load embeddings</span>
               <span className="es-error-msg">{activeError}</span>
               <button
+                type="button"
                 className="es-error-retry"
                 onClick={() => setReloadKey((key) => key + 1)}
               >
@@ -438,12 +439,14 @@ export function Embeddings() {
                 <div className="es-toolbar-left">
                   <div className="es-mode-toggle">
                     <button
+                      type="button"
                       className={`es-mode-btn ${viewMode === "single" ? "is-active" : ""}`}
                       onClick={() => setViewMode("single")}
                     >
                       Explore
                     </button>
                     <button
+                      type="button"
                       className={`es-mode-btn ${viewMode === "real3d" ? "is-active" : ""}`}
                       onClick={() => setViewMode("real3d")}
                     >
@@ -454,6 +457,7 @@ export function Embeddings() {
                   {viewMode === "single" ? (
                     <div className="es-type-toggle">
                       <button
+                        type="button"
                         className={`es-type-btn ${embedType === "text" ? "is-active" : ""}`}
                         onClick={() => setEmbedType("text")}
                       >
@@ -462,6 +466,7 @@ export function Embeddings() {
                         <span className="es-type-dim">384d</span>
                       </button>
                       <button
+                        type="button"
                         className={`es-type-btn ${embedType === "visual" ? "is-active" : ""}`}
                         onClick={() => setEmbedType("visual")}
                       >
@@ -486,12 +491,20 @@ export function Embeddings() {
                     <input
                       className="kg-search-input"
                       type="text"
-                      placeholder="Filter points..."
+                      name="embedding_search"
+                      aria-label="Filter embedding points"
+                      autoComplete="off"
+                      placeholder="Filter points…"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     {searchQuery && (
-                      <button className="kg-search-clear" onClick={() => setSearchQuery("")}>
+                      <button
+                        type="button"
+                        className="kg-search-clear"
+                        onClick={() => setSearchQuery("")}
+                        aria-label="Clear embedding search"
+                      >
                         clear
                       </button>
                     )}
@@ -502,6 +515,7 @@ export function Embeddings() {
               <div className="kg-type-filters es-filter-row">
                 {categoriesForFilters.map((cat) => (
                   <button
+                    type="button"
                     key={cat}
                     className={`kg-type-filter ${activeCategories.has(cat) ? "is-active" : ""}`}
                     onClick={() => toggleCategory(cat)}
@@ -612,7 +626,7 @@ export function Embeddings() {
                             <strong>{selectedPoint.brand || selectedPoint.label}</strong>
                             <span>{selectedPoint.category.replace(/_/g, " ")}</span>
                           </div>
-                          <button className="es-detail-close" onClick={handleClose} aria-label="Close">
+                          <button type="button" className="es-detail-close" onClick={handleClose} aria-label="Close embedding detail">
                             <CloseIcon size={12} />
                           </button>
                         </div>
@@ -652,6 +666,7 @@ export function Embeddings() {
                             <div className="es-mirror-cluster-chips">
                               {clusterAds.slice(0, 6).map((p) => (
                                 <button
+                                  type="button"
                                   key={p.id}
                                   onClick={() => handleReal3dPointClick(p, selectedSpace)}
                                   style={{ "--chip": categoryColors[p.category] || "#7c3aed" } as CSSProperties}
@@ -763,7 +778,7 @@ export function Embeddings() {
                       </div>
                     </div>
                   </div>
-                  <button className="es-detail-close" onClick={handleClose} aria-label="Close">
+                  <button type="button" className="es-detail-close" onClick={handleClose} aria-label="Close embedding detail">
                     <CloseIcon size={14} />
                   </button>
                 </div>
@@ -855,6 +870,7 @@ export function Embeddings() {
                     <div className="es-cluster-items">
                       {clusterAds.slice(0, 10).map((p) => (
                         <button
+                          type="button"
                           key={p.id}
                           className="es-cluster-chip"
                           style={{

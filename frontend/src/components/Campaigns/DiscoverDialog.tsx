@@ -46,9 +46,11 @@ export function DiscoverDialog({
           </span>
           <h3>Discovered campaign candidates</h3>
           <button
+            type="button"
             className="btn btn-icon btn-ghost"
             style={{ marginLeft: "auto" }}
             onClick={onClose}
+            aria-label="Close campaign discovery"
           >
             <CloseIcon size={12} />
           </button>
@@ -60,9 +62,11 @@ export function DiscoverDialog({
             </div>
           ) : (
             proposals.map((p) => (
-              <div
+              <button
+                type="button"
                 key={p.id}
                 className="proposal"
+                aria-pressed={selected.has(p.id)}
                 onClick={() => toggle(p.id)}
               >
                 <span className={`check ${selected.has(p.id) ? "on" : ""}`} />
@@ -76,7 +80,7 @@ export function DiscoverDialog({
                 <span className="pscore">
                   {p.mean_similarity != null ? p.mean_similarity.toFixed(2) : "—"}
                 </span>
-              </div>
+              </button>
             ))
           )}
         </div>

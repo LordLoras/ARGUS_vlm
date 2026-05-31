@@ -51,7 +51,7 @@ export function Taxonomy() {
           ))}
         </div>
         {loading && !stats ? (
-          <div style={{ padding: 32, color: "var(--fg-mute)" }}>Loading...</div>
+          <div style={{ padding: 32, color: "var(--fg-mute)" }}>Loading…</div>
         ) : tab === "overview" ? (
           <OverviewTab stats={stats} onRefresh={refresh} />
         ) : tab === "product" ? (
@@ -71,7 +71,6 @@ export function Taxonomy() {
     </>
   );
 }
-
 // ── Overview Tab ────────────────────────────────────────────
 
 function OverviewTab({ stats, onRefresh }: { stats: KnowledgeStats | null; onRefresh: () => void }) {
@@ -103,7 +102,7 @@ function OverviewTab({ stats, onRefresh }: { stats: KnowledgeStats | null; onRef
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <button className="btn btn-primary" disabled={loading} onClick={loadTaxonomies}>
-          {loading ? "Loading..." : "Reload IAB Taxonomies from TSV"}
+          {loading ? "Loading…" : "Reload IAB Taxonomies from TSV"}
         </button>
         <span style={{ color: "var(--fg-mute)", fontSize: 12 }}>
           Ingests the latest TSV files into the knowledge DB
@@ -127,7 +126,6 @@ function OverviewTab({ stats, onRefresh }: { stats: KnowledgeStats | null; onRef
     </div>
   );
 }
-
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="dcard" style={{ padding: "12px 16px" }}>
@@ -186,7 +184,7 @@ function TaxonomyTab({ type }: { type: "product" | "content" }) {
         <input
           className="input"
           style={{ flex: 1 }}
-          placeholder={`Search ${type} taxonomy...`}
+          placeholder={`Search ${type} taxonomy…`}
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
           onKeyDown={e => e.key === "Enter" && doSearch()}
@@ -210,7 +208,7 @@ function TaxonomyTab({ type }: { type: "product" | "content" }) {
         </div>
       )}
 
-      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading...</div> : (
+      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading…</div> : (
         <div className="dcard">
           <div className="dcard-head"><span>{type === "product" ? "IAB Product" : "IAB Content"} Taxonomy ({roots.length} roots)</span></div>
           <div style={{ maxHeight: 600, overflow: "auto" }}>
@@ -341,7 +339,7 @@ function BrandRulesTab() {
         </div>
       </div>
 
-      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading...</div> : (
+      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading…</div> : (
         <div className="dcard">
           <div className="dcard-head"><span>Brand Rules ({rules.length})</span></div>
           <table style={{ width: "100%", fontSize: 12 }}>
@@ -421,7 +419,7 @@ function OverridesTab() {
         </div>
       </div>
 
-      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading...</div> : (
+      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading…</div> : (
         <div className="dcard">
           <div className="dcard-head"><span>Overrides ({overrides.length})</span></div>
           <table style={{ width: "100%", fontSize: 12 }}>
@@ -520,7 +518,7 @@ function InferenceRulesTab() {
         </div>
       </div>
 
-      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading...</div> : (
+      {loading ? <div style={{ color: "var(--fg-mute)" }}>Loading…</div> : (
         <div className="dcard">
           <div className="dcard-head"><span>Inference Rules ({rules.length})</span></div>
           <div style={{ display: "grid", gap: 8, padding: 8 }}>
@@ -637,7 +635,7 @@ function BackfillTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <button className="btn btn-primary" disabled={loading} onClick={analyze}>
-          {loading ? "Analyzing..." : "Run Backfill Analysis"}
+          {loading ? "Analyzing…" : "Run Backfill Analysis"}
         </button>
         <span style={{ color: "var(--fg-mute)", fontSize: 12 }}>
           Compare existing ads against current knowledge base rules

@@ -47,12 +47,12 @@ export function CreativePanelTab({
   return (
     <div className="dcard">
       <div className="dcard-head">
-        <span>Synthetic Creative Review Panel</span>
+        <span>Synthetic Creative Analysis Panel</span>
         {report ? <span className="count-pill">{report.personas.length}</span> : null}
       </div>
       <div className="dcard-body">
         <div className="panel-caveat">
-          Simulated creative review grounded in stored ARGUS evidence. Not a focus group,
+          Simulated creative analysis grounded in stored ARGUS evidence. Not a focus group,
           demographic sample, or market forecast.
         </div>
 
@@ -82,7 +82,7 @@ export function CreativePanelTab({
             onClick={() => mutation.mutate()}
           >
             <SparkleIcon size={12} />
-            <span>{mutation.isPending ? "Reviewing" : report ? "Run again" : "Run panel"}</span>
+            <span>{mutation.isPending ? "Analyzing" : report ? "Run again" : "Run panel"}</span>
           </button>
           <span className="mono panel-meta">
             {report

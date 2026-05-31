@@ -148,6 +148,7 @@ export function DebatePanel() {
         crumbs={["Intelligence", "Debate Panel", selectedAd?.brand_name || "Ad"]}
         actions={
           <button
+            type="button"
             className="btn btn-ghost btn-sm"
             disabled={!selectedAd}
             onClick={() => selectedAd && navigate(`/library?ad=${encodeURIComponent(selectedAd.id)}&tab=panel`)}
@@ -176,7 +177,9 @@ export function DebatePanel() {
                 <Search size={13} />
                 <input
                   className="input"
-                  placeholder="Brand, offer, product..."
+                  name="debate_search"
+                  autoComplete="off"
+                  placeholder="Brand, offer, product…"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -186,6 +189,8 @@ export function DebatePanel() {
               <span className="search-label">Brand</span>
               <input
                 className="input"
+                name="debate_brand"
+                autoComplete="off"
                 placeholder="Any brand"
                 value={brand}
                 onChange={(event) => setBrand(event.target.value)}
@@ -195,7 +200,7 @@ export function DebatePanel() {
 
           <div className="debate-ad-list">
             {adsQuery.isLoading ? (
-              <div className="obs-empty">Loading ads...</div>
+              <div className="obs-empty">Loading ads…</div>
             ) : ads.length === 0 ? (
               <div className="obs-empty">No completed ads.</div>
             ) : (
@@ -225,7 +230,7 @@ export function DebatePanel() {
                 <span className="eyebrow">Selected ad</span>
                 <h1>{selectedAd?.brand_name || selectedAd?.advertiser_name || selectedAd?.id || "No ad selected"}</h1>
                 <div className="debate-selected-meta">
-                  <span>{selectedAd?.id ?? "ad_..."}</span>
+                  <span>{selectedAd?.id ?? "ad_…"}</span>
                   <span>{formatDuration(selectedAd?.duration_ms)}</span>
                   {selectedAd?.primary_category ? <CategoryBadge category={selectedAd.primary_category} /> : null}
                 </div>
@@ -237,11 +242,14 @@ export function DebatePanel() {
                 <span className="search-label">Debate topic</span>
                 <input
                   className="input debate-topic"
+                  name="debate_topic"
+                  autoComplete="off"
                   value={topic}
                   onChange={(event) => setTopic(event.target.value)}
                 />
               </label>
               <button
+                type="button"
                 className="btn btn-primary debate-run"
                 disabled={!selectedAdId || selectedPersonaIds.length === 0 || mutation.isPending}
                 onClick={runDebate}
@@ -324,7 +332,7 @@ export function DebatePanel() {
               <EmptyState
                 icon={<Swords size={20} />}
                 title="No debate run yet"
-                hint="Select the combatants, choose the argument, then run a grounded synthetic debate."
+                hint="Select the personas, choose the argument, then run a grounded synthetic debate."
               />
             </div>
           )}

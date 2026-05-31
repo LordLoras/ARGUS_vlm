@@ -108,7 +108,7 @@ export function AdDetailDrawer({
   return (
     <>
       <div className="drawer-overlay open" onClick={onClose} />
-      <aside className="drawer open" onClick={(e) => e.stopPropagation()}>
+      <aside className="drawer open" role="dialog" aria-modal="true" aria-label="Ad details" onClick={(e) => e.stopPropagation()}>
         <header className="drawer-head">
           <span className="ad-id" title={detail.ad.id}>
             {detail.ad.id}
@@ -116,6 +116,7 @@ export function AdDetailDrawer({
               className="btn-ghost"
               style={{ background: "transparent", border: 0, color: "var(--fg-quiet)", cursor: "pointer" }}
               onClick={() => navigator.clipboard.writeText(detail.ad.id)}
+              aria-label="Copy ad id"
               title="Copy id"
             >
               <CopyIcon size={11} />
@@ -141,10 +142,10 @@ export function AdDetailDrawer({
               <PlusIcon size={11} />
               <span>Add to campaign</span>
             </button>
-            <button className="btn btn-sm btn-icon btn-danger" onClick={onDelete} title="Delete">
+            <button className="btn btn-sm btn-icon btn-danger" onClick={onDelete} aria-label="Delete ad" title="Delete">
               <TrashIcon size={11} />
             </button>
-            <button className="btn btn-sm btn-icon btn-ghost" onClick={onClose} title="Close (Esc)">
+            <button className="btn btn-sm btn-icon btn-ghost" onClick={onClose} aria-label="Close ad details" title="Close (Esc)">
               <CloseIcon size={12} />
             </button>
           </div>
@@ -182,17 +183,20 @@ export function AdDetailDrawer({
             )}
           </div>
 
-          <div className="tabs">
+          <div className="tabs" role="tablist" aria-label="Ad detail sections">
             {TABS.map((label) => (
-              <span
+              <button
+                type="button"
                 key={label}
                 className={`tab ${tab === label ? "active" : ""}`}
+                role="tab"
+                aria-selected={tab === label}
                 onClick={() => setTab(label)}
               >
                 {label}
                 {label === "Evidence" ? <span className="count">{evidenceCount}</span> : null}
                 {label === "Related" ? <span className="count">{relatedCount}</span> : null}
-              </span>
+              </button>
             ))}
           </div>
 

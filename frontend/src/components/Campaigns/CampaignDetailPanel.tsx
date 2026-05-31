@@ -47,7 +47,7 @@ export function CampaignDetailPanel({
   const [adIdsText, setAdIdsText] = useState("");
 
   if (loading) {
-    return <div className="campaign-detail-shell obs-empty">Loading campaign detail...</div>;
+    return <div className="campaign-detail-shell obs-empty">Loading campaign detail…</div>;
   }
 
   if (!detail) {

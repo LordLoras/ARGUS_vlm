@@ -18,7 +18,12 @@ export function ToolCallCard({ tool }: { tool: ToolCard }) {
   const status = tool.status ?? (tool.result != null ? "done" : "running");
   return (
     <div className={`tool-call ${open ? "open" : ""}`}>
-      <div className="tc-head" onClick={() => setOpen((o) => !o)}>
+      <button
+        type="button"
+        className="tc-head"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
         <span className="chev">
           <ChevronRightIcon size={11} />
         </span>
@@ -29,7 +34,7 @@ export function ToolCallCard({ tool }: { tool: ToolCard }) {
         </span>
         <span className="tc-time">{tool.durationMs != null ? `${tool.durationMs}ms` : ""}</span>
         <span className={`tc-status ${status}`}>{status}</span>
-      </div>
+      </button>
       <div className="tc-body">
         <Section label="Arguments" value={tool.args} />
         <Section label="Result" value={tool.result ?? null} truncated={tool.truncated} />
@@ -44,7 +49,7 @@ function Section({ label, value, truncated }: { label: string; value: unknown; t
       <div className="tc-section-label">
         {label}
         {truncated ? (
-          <span className="badge badge-flag" style={{ marginLeft: 6 }}>
+          <span className="badge badge-amber" style={{ marginLeft: 6 }}>
             truncated
           </span>
         ) : null}

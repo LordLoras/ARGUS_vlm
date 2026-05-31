@@ -404,7 +404,7 @@ function renderLoginPage(redirectTo: string, error?: string) {
           <input name="password" type="password" autocomplete="current-password" required />
         </label>
         <button type="submit">Enter ARGUS</button>
-        <div class="foot">Authentication gate. Keep the API port private.</div>
+        <div class="foot">Protected ARGUS demo. Sign in to continue.</div>
       </form>
     </main>
   </body>
@@ -572,6 +572,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [demoAuthPlugin(auth), react()],
     build: {
+      // The Three.js graph payload is isolated behind the /graph route; keep warnings for chunks above that known lazy bundle.
+      chunkSizeWarningLimit: 1400,
       rollupOptions: {
         output: {
           manualChunks: {

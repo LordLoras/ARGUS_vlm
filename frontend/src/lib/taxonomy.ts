@@ -33,12 +33,20 @@ export const categories = [
 ];
 
 export const riskLabels = [
+  "urgency_pressure",
+  "deceptive_imagery",
+  "health_claim",
+  "unsubstantiated_claim",
+  "misleading_claim",
+  "predatory_lending",
+  "speculative_asset",
   "deceptive_urgency",
   "unverified_health_claim",
   "guaranteed_returns",
   "before_after",
   "targeting_minors",
   "regulated_substance",
+  "regulated_substances",
   "brand_impersonation",
   "price_manipulation",
   "false_scarcity"
