@@ -78,7 +78,15 @@ export function SearchPage() {
           </div>
         </div>
 
-        <div className="search-panel">
+<div className="search-panel">
+        <form
+          className="search-panel-inner"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!canSubmit) return;
+            setSubmitted({ q, ad_id: adId, brand, promotion, category, status, mode, rerank: true });
+          }}
+        >
           <div className="search-primary-row">
             <label className="search-field search-field-query">
               <span className="search-label">Query</span>
@@ -104,19 +112,8 @@ export function SearchPage() {
             </label>
             <button
               className="btn btn-primary search-submit"
+              type="submit"
               disabled={!canSubmit}
-              onClick={() =>
-                setSubmitted({
-                  q,
-                  ad_id: adId,
-                  brand,
-                  promotion,
-                  category,
-                  status,
-                  mode,
-                  rerank: true
-                })
-              }
             >
               <SearchIcon size={13} />
               <span>Search</span>
@@ -185,7 +182,8 @@ export function SearchPage() {
               </div>
             </div>
           </div>
-        </div>
+        </form>
+      </div>
 
         <div style={{ padding: 24, flex: 1, overflow: "auto" }}>
           {!submitted ? (

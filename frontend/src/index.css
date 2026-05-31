@@ -1161,20 +1161,28 @@ input, textarea, select { font: inherit; color: inherit; }
 
 /* Search form */
 .search-panel {
-  padding: 16px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 94%, transparent), var(--bg));
+  display: flex;
+  justify-content: center;
+}
+.search-panel-inner {
+  width: min(780px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 .search-primary-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(180px, 240px) auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 200px) auto;
+  gap: 10px;
   align-items: end;
 }
 .search-secondary-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(360px, 0.9fr);
+  grid-template-columns: auto 1fr;
   gap: 16px;
   align-items: start;
   margin-top: 14px;
@@ -1200,6 +1208,16 @@ input, textarea, select { font: inherit; color: inherit; }
 .search-filter {
   min-width: 0;
   width: 100%;
+}
+.search-filter[type="select"],
+select.search-filter {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a4f5a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
 }
 .search-submit {
   height: 38px;
@@ -1320,8 +1338,7 @@ input, textarea, select { font: inherit; color: inherit; }
 }
 @media (max-width: 760px) {
   .search-primary-row,
-  .search-secondary-row,
-  .search-filter-grid {
+  .search-secondary-row {
     grid-template-columns: minmax(0, 1fr);
   }
   .search-panel {
