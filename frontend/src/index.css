@@ -1165,11 +1165,10 @@ input, textarea, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--bg-elev) 94%, transparent), var(--bg));
-  display: flex;
-  justify-content: center;
 }
 .search-panel-inner {
-  width: min(780px, 100%);
+  width: min(960px, 100%);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1188,6 +1187,11 @@ input, textarea, select { font: inherit; color: inherit; }
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border-soft);
+}
+.search-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 .search-field {
   display: flex;
@@ -1337,8 +1341,14 @@ select.search-filter {
   gap: 6px;
 }
 @media (max-width: 760px) {
+  .search-panel-inner {
+    width: 100%;
+  }
   .search-primary-row,
   .search-secondary-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .search-filter-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .search-panel {
