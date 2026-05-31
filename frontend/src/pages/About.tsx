@@ -61,7 +61,7 @@ const DEMO_STEPS: DemoStep[] = [
     label: "Read",
     title: "The system collects evidence",
     plain: "It reads on-screen text, listens to voiceover, keeps timestamps, and preserves raw extraction output.",
-    tech: "PaddleOCR, optional document OCR, Whisper",
+    tech: "PaddleOCR, PaddleOCR-VL (conditional), Whisper",
     icon: ScanLine,
     color: "var(--emerald)",
   },
@@ -142,7 +142,7 @@ const OUTPUT_CARDS: CardItem[] = [
   },
   {
     title: "Observation tags",
-    body: "Descriptive labels like deceptive urgency, before-after claims, unverified health claims, and false scarcity. These surface in search and the UI for analyst filtering — they never block or escalate.",
+    body: "Descriptive labels like urgency pressure, deceptive imagery, health claims, and unsubstantiated claims. These surface in search and the UI for analyst filtering — they never block or escalate.",
     icon: Tags,
     color: "var(--amber)",
   },
@@ -160,7 +160,7 @@ const OUTPUT_CARDS: CardItem[] = [
   },
   {
     title: "Brand enrichment",
-    body: "Enrich any brand or advertiser with a Wikipedia-sourced profile on demand — logo, description, industry, and linked entities. Additional search integrations can be added later.",
+    body: "Enrich any brand or advertiser with a Wikipedia and Wikidata profile on demand — logo, description, industry, and linked entities. Additional search integrations can be added later.",
     icon: BadgeInfo,
     color: "var(--accent-2)",
   },
@@ -604,9 +604,9 @@ export function About() {
         <div className="about-stack-table" style={{ marginTop: 16 }}>
           {[
             ["Category", "primary_category + confidence + IAB code", "e.g. automotive, healthcare_pharma, gambling"],
-            ["Risk labels", "observation tags from rule engine + VLM", "e.g. deceptive_urgency, before_after, false_scarcity"],
+            ["Risk labels", "observation tags from the rules engine", "e.g. urgency_pressure, deceptive_imagery, health_claim"],
             ["Marketing entities", "brand, products, prices, offers, CTAs, social proof, disclaimers", "each grounded to frame index + time_ms"],
-            ["Brand profile", "on-demand Wikipedia enrichment for brand/advertiser", "logo, description, industry, wikidata"],
+            ["Brand profile", "on-demand Wikipedia + Wikidata enrichment for brand/advertiser", "logo, description, industry, wikidata"],
             ["Campaigns", "auto-clustered or user-curated groups", "same brand, variants, different SKUs"],
             ["Embeddings", "384-d text + 768-d visual per keyframe", "MiniLM + SigLIP 2, stored in sqlite-vec"],
           ].map(([label, detail, example]) => (

@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ChevronRightIcon } from "../lib/icons";
+import { ChevronRightIcon } from "../lib/icons";
 import { formatDuration, relativeTime } from "../lib/format";
 import { aspectFromDims, deriveSeed } from "../lib/style-helpers";
 import type { AdDetail, AdRecord } from "../lib/types";
@@ -45,14 +45,10 @@ export function AdTable({
             <th style={{ width: 120 }}>Frame</th>
             <th>Brand</th>
             <th>Category</th>
-            <th className="sortable">
-              Confidence <ChevronDownIcon size={9} className="sort-arrow" />
-            </th>
+            <th>Confidence</th>
             <th>Risk tags</th>
             <th className="num">Duration</th>
-            <th className="sortable">
-              Ingested <ChevronDownIcon size={9} className="sort-arrow" />
-            </th>
+            <th>Ingested</th>
             <th style={{ width: 32 }} />
           </tr>
         </thead>
