@@ -1002,12 +1002,13 @@
           <p>
             Torch is installed separately because NVIDIA, AMD, and CPU wheels
             differ. The safe order is: ARGUS core dependencies, hardware-specific
-            torch, embedding libraries with <code>--no-deps</code>, OCR
-            packages, frontend packages.
+            torch, top-level embedding libraries with <code>--no-deps</code>,
+            non-torch embedding dependencies, OCR packages, frontend packages.
           </p>
           <pre><code>python -m pip install -e ".[dev]"
 # Install torch for NVIDIA, AMD, or CPU using the hardware-specific official command.
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0 scikit-learn==1.8.0
 python -m pip install paddlepaddle==2.6.2 paddleocr==2.7.3
 cd frontend
 npm ci</code></pre>

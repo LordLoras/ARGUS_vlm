@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ad_classifier.embeddings.dependencies import embedding_import_error
 from ad_classifier.embeddings.image.base import ImageEmbedder
 
 
@@ -24,9 +25,10 @@ class SigLIP2ImageEmbedder(ImageEmbedder):
                 import torch  # noqa: PLC0415
                 from transformers import AutoModel, AutoProcessor  # noqa: PLC0415
             except ImportError as exc:
-                raise ImportError(
-                    "transformers and torch are required for SigLIP2ImageEmbedder. "
-                    "Install with: pip install --no-deps transformers"
+                raise embedding_import_error(
+                    display_name="SigLIP 2 image embeddings",
+                    root_modules={"torch", "transformers"},
+                    exc=exc,
                 ) from exc
             self._processor = AutoProcessor.from_pretrained(self._model_name, use_fast=True)
             self._model = AutoModel.from_pretrained(self._model_name).to(self._device)

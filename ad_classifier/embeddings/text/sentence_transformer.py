@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ad_classifier.embeddings.dependencies import embedding_import_error
 from ad_classifier.embeddings.text.base import TextEmbedder
 
 
@@ -18,11 +19,10 @@ class SentenceTransformerEmbedder(TextEmbedder):
             try:
                 from sentence_transformers import SentenceTransformer  # noqa: PLC0415
             except ImportError as exc:
-                raise ImportError(
-                    "sentence-transformers is not installed in the active "
-                    "environment. Run: python -m pip install --no-deps "
-                    "sentence-transformers==3.0.1 transformers==4.57.6 "
-                    "tokenizers==0.22.1"
+                raise embedding_import_error(
+                    display_name="sentence-transformers",
+                    root_modules={"sentence_transformers"},
+                    exc=exc,
                 ) from exc
             self._model = SentenceTransformer(self._model_name, device=self._device)
         return self._model

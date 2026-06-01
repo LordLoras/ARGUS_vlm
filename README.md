@@ -165,6 +165,7 @@ For a normal local setup, use this order:
 
    ```powershell
    python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+   python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0 scikit-learn==1.8.0
    ```
 
 4. Install local OCR:
@@ -179,6 +180,7 @@ Same commands as a compact copy/paste block:
 ```powershell
 python -m pip install -e ".[dev]"
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0 scikit-learn==1.8.0
 python -m pip install paddlepaddle==2.6.2
 python -m pip install paddleocr==2.7.3
 ```
@@ -188,7 +190,7 @@ Optional extras are available, but do not install them by default:
 | Extra | Install when |
 |---|---|
 | `.[ocr]` | You want pip to install the pinned Paddle stack (`paddlepaddle==2.6.2`, `paddleocr==2.7.3`) instead of running the two manual OCR commands. Manual install is usually clearer on Windows. |
-| `.[embeddings]` | You are not preserving a custom GPU torch wheel. For this project, prefer the `--no-deps` embedding command above. |
+| `.[embeddings]` | Torch is already installed and you want pip to resolve the full embedding stack. For custom AMD/NVIDIA torch wheels, prefer the two manual embedding commands above. |
 | `.[clustering]` | You are actively running campaign discovery experiments. |
 | `.[qdrant]` | You are testing a future Qdrant vector backend. The default backend is `sqlite-vec`. |
 | `.[whisper]` | You are switching from bundled whisper.cpp to `faster-whisper`. |
@@ -238,13 +240,17 @@ ARGUS uses two embedding models that both depend on PyTorch:
 | `sentence-transformers/all-MiniLM-L6-v2` | Text vectors from transcript + OCR | 384 |
 | `google/siglip2-base-patch16-224` | Visual vectors from keyframes and text-to-image search | 768 |
 
-The `embeddings` extra in `pyproject.toml` records the pinned versions, but a
-base/dev install does not include it. On Windows, install the embedding packages
+The `embeddings` extra in `pyproject.toml` records the pinned versions and
+non-torch dependency constraints, but a base/dev install does not include it.
+On Windows, install the embedding packages
 explicitly in the active venv after torch is installed, without letting pip
-resolve and replace the GPU torch build:
+resolve and replace the GPU torch build. The first command installs the packages
+that can otherwise pull torch. The second command installs their non-torch
+runtime dependencies:
 
 ```powershell
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0 scikit-learn==1.8.0
 ```
 
 `sentence-transformers` downloads MiniLM on first use. SigLIP 2 is loaded
@@ -992,11 +998,13 @@ per-frame index existed.
 
 **`sentence-transformers is not installed`.** Install the embedding libraries in
 the same active venv that runs ARGUS:
-`python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1`.
+`python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1`,
+then install the non-torch dependencies:
+`python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0 scikit-learn==1.8.0`.
 
 **SigLIP or sentence-transformers tries to change torch.** Reinstall those
-packages with `--no-deps` and verify the existing torch build before running the
-worker.
+packages using the two embedding commands above, then verify the existing torch
+build before running the worker.
 
 **Visual search fails when the rest of the app works.** Typed visual queries load
 the SigLIP 2 model through transformers and torch. Confirm the embedding

@@ -1,3 +1,4 @@
+from ad_classifier.embeddings.dependencies import embedding_import_error
 from ad_classifier.embeddings.image.base import ImageEmbedder
 from ad_classifier.embeddings.image.mock import MockImageEmbedder
 
@@ -9,9 +10,8 @@ def SigLIP2ImageEmbedder(*args, **kwargs):
         from ad_classifier.embeddings.image.siglip2 import SigLIP2ImageEmbedder as _SigLIP2
         return _SigLIP2(*args, **kwargs)
     except ImportError as exc:
-        raise ImportError(
-            "SigLIP 2 image embedder requires torch and transformers. "
-            "Install with: python -m pip install --no-deps "
-            "sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1\n"
-            "Or disable visual embeddings in config: image_embedder.enabled = false"
+        raise embedding_import_error(
+            display_name="SigLIP 2 image embeddings",
+            root_modules={"torch", "transformers"},
+            exc=exc,
         ) from exc

@@ -50,12 +50,17 @@ ocr = [
     "paddleocr==2.7.3",
 ]
 embeddings = [
-    # Install with --no-deps to preserve pre-installed torch GPU wheel.
-    # Run: pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+    # Torch is intentionally not listed here; install the hardware-specific
+    # torch wheel first. The docs use --no-deps for the three packages that can
+    # otherwise pull torch, then install these non-torch runtime dependencies.
     # This stack was smoke-tested with torch 2.9.1+rocm7.2.1 and SigLIP 2 imports.
     "sentence-transformers==3.0.1",
     "transformers==4.57.6",
     "tokenizers==0.22.1",
+    "huggingface-hub==0.36.2",
+    "regex==2026.5.9",
+    "safetensors==0.7.0",
+    "scikit-learn==1.8.0",
 ]
 qdrant = [
     "qdrant-client>=1.9",
