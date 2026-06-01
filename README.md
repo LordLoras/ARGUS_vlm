@@ -257,6 +257,32 @@ python -m pip install huggingface-hub==0.36.2 regex==2026.5.9 safetensors==0.7.0
 through `transformers` the first time a visual query runs. Both models cache to
 `~/.cache/huggingface/` by default.
 
+`google/siglip2-base-patch16-224` is a public Hugging Face model under
+Apache-2.0, so the default SigLIP download does not require a Hugging Face API
+key. A token is only needed for private or gated model repositories, or for a
+custom Hugging Face Hub mirror that requires authentication.
+
+To pre-download SigLIP 2 and catch network/auth problems before running the
+worker:
+
+```powershell
+@'
+from transformers import AutoModel, AutoProcessor
+
+model = "google/siglip2-base-patch16-224"
+AutoProcessor.from_pretrained(model)
+AutoModel.from_pretrained(model)
+print("SigLIP 2 downloaded")
+'@ | python -
+```
+
+If that command returns `401`, `403`, or a gated-repo message, authenticate with
+a read token that has access to the selected model:
+
+```powershell
+huggingface-cli login
+```
+
 When torch is not installed yet, mock embeddings can be used for tests or
 `image_embedder.enabled: false` can be set in `config.yaml` until the GPU stack
 is ready. Typed visual search still loads SigLIP 2, so `visual` and
