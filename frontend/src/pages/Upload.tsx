@@ -408,6 +408,17 @@ export function Upload() {
   const batchUploading = batchUploadMutation.isPending;
   const processing = adId && (!isDone || job?.state === "failed" || job?.state === "cancelled");
   const displayFileName = file?.name ?? restoredFileName ?? "clip";
+  const showUploading = uploading && !adId;
+  const showBatchQueue = batchItems.length > 0;
+  const showProcessing = Boolean(processing && adId);
+  const showResult = Boolean(isDone && detailQuery.data);
+  const showResultLoading = Boolean(isDone && adId && !detailQuery.data && detailQuery.isFetching);
+  const showDropzone =
+    !showUploading &&
+    !showBatchQueue &&
+    !showProcessing &&
+    !showResult &&
+    !showResultLoading;
 
   return (
     <>
@@ -428,7 +439,7 @@ export function Upload() {
         <div className="upload-layout">
           {/* ── left: input area ── */}
           <div className="upload-main">
-            {!adId && !uploading && !batchUploading ? (
+            {showDropzone ? (
               <>
                 <Dropzone onFiles={handleFiles} />
 
@@ -487,7 +498,7 @@ export function Upload() {
               </>
             ) : null}
 
-            {uploading && !adId ? (
+            {showUploading ? (
               <div className="upload-queued" style={{ justifyContent: "space-between" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                   <span className="upload-queued-dot" />
@@ -499,7 +510,7 @@ export function Upload() {
               </div>
             ) : null}
 
-            {batchItems.length ? (
+            {showBatchQueue ? (
               <div className="upload-confirm" style={{ gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <div>
@@ -559,7 +570,7 @@ export function Upload() {
               </div>
             ) : null}
 
-            {processing && adId && (
+            {showProcessing && adId && (
               <PipelineProgress
                 filename={displayFileName}
                 adId={adId}
@@ -572,7 +583,14 @@ export function Upload() {
               />
             )}
 
-            {isDone && detailQuery.data ? (
+            {showResultLoading ? (
+              <div className="upload-queued">
+                <span className="upload-queued-dot" />
+                <span>Loading classification result...</span>
+              </div>
+            ) : null}
+
+            {showResult && detailQuery.data ? (
               <ResultPanel
                 detail={detailQuery.data}
                 elapsedMs={elapsed}
