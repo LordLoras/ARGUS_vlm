@@ -1,6 +1,6 @@
 <div align="center">
 
-![ARGUS banner](frontend/banner.png)
+![ARGUS banner](frontend/banner.jpg)
 
 # ARGUS
 
@@ -38,6 +38,12 @@ ARGUS is categorization-only. It does not gate, approve, block, escalate, or
 route ads for review. Risk labels are descriptive observation tags for analysis
 and search.
 
+The repository also includes a measured model benchmark page at
+`/benchmark`. The visible rows are actual OpenRouter or OpenAI-compatible
+endpoint calls against five existing ad artifacts, with aggregate scores,
+latency, token counts, provider cost, and per-ad score breakdowns. Projection
+rows and unrun models are intentionally not shown as benchmarked results.
+
 ---
 
 ## Architecture
@@ -73,8 +79,8 @@ Data lives in one SQLite database plus local artifact directories under `data/`.
 | Text embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Visual embeddings | `google/siglip2-base-patch16-224` |
 | OCR | PaddleOCR by default |
-| Transcript | bundled whisper.cpp CLI, faster-whisper, or mock backend |
-| VLM | OpenAI-compatible inference engine endpoint |
+| Transcript | bundled whisper.cpp CLI + tiny model, faster-whisper, or mock backend |
+| VLM | OpenAI-compatible local, hosted remote, or OpenRouter frontier endpoint |
 | Frontend | Vite, React, TypeScript, Tailwind-style CSS |
 
 ---
@@ -375,9 +381,9 @@ ARGUS is primarily developed for Windows 11.
 
 Install or verify:
 
-- Git
+- Git with Git LFS enabled
 - Python 3.11+ (`python --version`)
-- Node.js 18+ (`node --version`)
+- Node.js 20.19+ (`node --version`)
 - ffmpeg and ffprobe on `PATH` (`ffmpeg -version`)
 - an inference engine that exposes an OpenAI-compatible chat completions
   endpoint for the VLM
@@ -387,7 +393,13 @@ Install or verify:
 ```powershell
 git clone https://github.com/LordLoras/ARGUS_vlm.git
 cd ARGUS_vlm
+git lfs pull
 ```
+
+`git lfs pull` downloads the bundled Windows whisper.cpp runtime and
+`models/whisper/ggml-tiny.en.bin`. Large production models such as
+`ggml-large-v3-turbo.bin` and GLM-OCR GGUF files are intentionally not tracked
+in GitHub because they are hundreds of megabytes to multiple gigabytes.
 
 ### 3. Create the Python environment
 
@@ -500,16 +512,11 @@ because PyTorch exposes the ROCm backend through the CUDA API surface.
 
 ### 6. Whisper Setup
 
-`tools/whisper.cpp/whisper-cli.exe` is included in the repository. The Whisper
-model file is not included.
+`tools/whisper.cpp/whisper-cli.exe` and `models\whisper\ggml-tiny.en.bin` are
+included through Git LFS for a working first run after clone.
 
-Create the model directory:
-
-```powershell
-New-Item -ItemType Directory -Force .\models\whisper
-```
-
-Download a whisper.cpp GGML model from:
+For production transcription quality, download a larger whisper.cpp GGML model
+from:
 
 <https://huggingface.co/ggerganov/whisper.cpp>
 
@@ -526,7 +533,7 @@ whisper:
   backend: whisper_cpp
   whisper_cpp:
     command: ./tools/whisper.cpp/whisper-cli.exe
-    model_path: ./models/whisper/ggml-large-v3-turbo.bin
+    model_path: ./models/whisper/ggml-tiny.en.bin
     use_gpu: true
 ```
 
@@ -558,15 +565,45 @@ the values there.
 
 ```yaml
 vlm:
-  mode: local
-  local:
-    endpoint: "http://127.0.0.1:1234/v1"
-    model: "your-vision-model"
-    response_format: json_object
+  mode: frontier
+  remote:
+    endpoint: "https://ai.ipdy.io/llm/v1"
+    model: "model"
+    api_key_env: "VLM_API_KEY"
+  frontier:
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    model: "moonshotai/kimi-k2.5"
+    api_key_env: "OPENROUTER_API_KEY"
 ```
 
 When `agent.inherit_vlm` is enabled, the NL agent uses the same active
 OpenAI-compatible endpoint as the classifier.
+
+Put real key values in `.env.local`, not in `config.yaml`:
+
+```powershell
+Copy-Item .\.env.local.example .\.env.local
+notepad .\.env.local
+```
+
+For handoff to another operator, do not email raw API keys or a plaintext
+`.env.local` file. Use a password manager share, 1Password/Bitwarden secure
+send, age/GPG-encrypted file, or another expiring encrypted transfer. Give the
+recipient the decryption password through a different channel and rotate the
+keys after the demo or handoff window.
+
+Local fallback handoff should be:
+
+```powershell
+git clone https://github.com/LordLoras/ARGUS_vlm.git
+cd ARGUS_vlm
+git lfs pull
+Copy-Item .\.env.local.example .\.env.local
+Copy-Item .\config.example.yaml .\config.yaml
+```
+
+Then paste the shared keys into `.env.local`, install dependencies, initialize
+SQLite, and run `.\start.bat`.
 
 ### Optional GLM-OCR
 
@@ -582,9 +619,10 @@ by the gating rules. It is stored separately with engine `glm_ocr` in
 It is not included in the classifier VLM bundle unless
 `glm_ocr.include_in_vlm_bundle: true`.
 
-The template leaves `glm_ocr.enabled: false` so a fresh install does not depend
-on a second inference endpoint. If an OpenAI-compatible GLM-OCR engine is
-listening on port `5050`, use:
+The example config mirrors the current production-style setup and enables the
+local GLM-OCR hard-frame pass. If no OpenAI-compatible GLM-OCR engine is
+listening on port `5050`, set `glm_ocr.enabled: false`; the main PaddleOCR path
+will still run.
 
 ```yaml
 glm_ocr:
@@ -607,7 +645,7 @@ Install the frontend dependencies once:
 
 ```powershell
 cd frontend
-npm install
+npm ci
 cd ..
 ```
 
@@ -629,6 +667,11 @@ Default local services:
 | API | `http://localhost:8000` |
 | API docs | `http://localhost:8000/docs` |
 | Frontend | `http://localhost:5173` |
+
+The frontend toolchain is pinned to Vite 7 and `@vitejs/plugin-react` 5. If a
+fresh install prints Vite 8 warnings such as `Invalid key: jsx`, delete
+`frontend\node_modules` and rerun `npm ci`; that warning means the local install
+resolved an incompatible Vite 8 toolchain, not that ARGUS data is at risk.
 
 ### Authentication
 
@@ -755,6 +798,9 @@ api:
     api_key: "your-secret-key"
 ```
 
+Committed examples keep `api_key: null`; in that state `/api/public/*` routes
+return 403 until a local `config.yaml` sets a real key.
+
 Public endpoints:
 
 | Method | Endpoint | Purpose |
@@ -777,7 +823,7 @@ model metadata.
 
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -791,6 +837,7 @@ Primary pages:
 | Campaigns | `/campaigns` |
 | Agent | `/agent` |
 | Embeddings | `/embeddings` |
+| Benchmark | `/benchmark` |
 | About | `/about` |
 
 ---
@@ -830,7 +877,7 @@ ad_classifier/
 frontend/
   src/            React application
   logo.png        ARGUS icon asset
-  banner.png      ARGUS banner asset
+  banner.jpg      ARGUS banner asset
 ```
 
 ---
@@ -859,3 +906,11 @@ embedder to CPU.
 
 **The agent cannot answer a search question.** Confirm the API has initialized
 sqlite-vec tables and the agent is using the configured vector store factory.
+
+**Vite prints `Invalid key: jsx`.** This is a dev toolchain mismatch, not a
+data warning. Stop Vite, delete `frontend\node_modules`, and run `npm ci` so the
+lockfile installs the pinned Vite 7 toolchain.
+
+**Whisper is missing after clone.** Run `git lfs pull` and confirm
+`tools\whisper.cpp\whisper-cli.exe` and
+`models\whisper\ggml-tiny.en.bin` exist.

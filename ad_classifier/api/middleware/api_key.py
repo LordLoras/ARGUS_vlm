@@ -84,7 +84,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if not self._public_key:
             return JSONResponse(
-                {"detail": "public api is not enabled"},
+                {"detail": "public api key is not configured"},
                 status_code=403,
             )
 

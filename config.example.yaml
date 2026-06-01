@@ -103,8 +103,10 @@ glm_ocr:
   # when include_in_search is true. It is not used as grounded OCR evidence
   # for rules/marketing unless you explicitly wire that downstream. Keep false
   # so fresh installs do not require a GLM-OCR endpoint; enable when an
-  # OpenAI-compatible GLM-OCR engine is available.
-  enabled: false
+  # OpenAI-compatible GLM-OCR engine is available. Production ARGUS enables
+  # this local hard-frame pass, but it is optional; set false if port 5050 is
+  # not serving GLM-OCR.
+  enabled: true
   # Choices: local | remote. The selected preset is copied to glm_ocr.endpoint at runtime.
   mode: local
   prompt: "Transcribe all visible text exactly. Preserve line breaks and reading order. Do not summarize or infer."
@@ -166,18 +168,21 @@ vlm:
   #   "frontier" → vlm.frontier is used (OpenRouter/frontier-model route)
   # The agent can inherit the active preset or pin itself to local/remote/frontier
   # with agent.inherit_vlm_mode.
-  mode: local
-  # auto uses frontier_strict for Frontier routing and standard elsewhere.
+  mode: frontier
+  # standard is the production prompt profile. Use frontier_strict only when a
+  # strong frontier route should behave as a compact evidence-only extractor.
   # Use frontier_strict explicitly when a strong remote/frontier model should
   # behave as a compact evidence-only extractor.
-  prompt_profile: auto            # auto | standard | frontier_strict
+  prompt_profile: standard        # auto | standard | frontier_strict
   # Max selected frames in the classifier evidence bundle. More frames improve
   # recall but increase latency/token pressure.
   max_frames_in_bundle: 12
   image_max_dim: 512       # max pixel dimension for VLM frames; bump to 768 for text-heavy ads
-  # Reliability passes. Disable only when debugging latency or endpoint issues.
-  enable_ocr_cleanup_pass: true       # text-only VLM pass to clean garbled OCR before classification
-  enable_self_correction: true        # lightweight text-only consistency check after VLM output
+  # Production defaults favor one strong verification call plus deterministic
+  # post-validation. Enable cleanup/self-correction if your endpoint regularly
+  # struggles with dense or noisy OCR.
+  enable_ocr_cleanup_pass: false      # text-only VLM pass to clean garbled OCR before classification
+  enable_self_correction: false       # lightweight text-only consistency check after VLM output
   enable_post_validation: true        # deterministic validation of prices, offers, brands
   enable_visual_verify: false         # second VLM pass: verify brand/logo claims against frames
   complexity:
@@ -212,10 +217,10 @@ vlm:
   remote:
     # Any hosted OpenAI-compatible endpoint. Set api_key_env to the environment
     # variable that holds the key; do not put secrets directly in config.yaml.
-    endpoint: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
-    api_key_env: "OPENAI_API_KEY"
-    timeout_s: 120
+    endpoint: "https://ai.ipdy.io/llm/v1"
+    model: "model"
+    api_key_env: "VLM_API_KEY"
+    timeout_s: 600
     max_retries: 2
     retry_delay_s: 2
     temperature: 0.3
@@ -228,8 +233,8 @@ vlm:
   frontier:
     # OpenRouter-compatible frontier model route. Put the actual key in
     # .env.local as OPENROUTER_API_KEY or add it through the Settings UI.
-    endpoint: "https://openrouter.ai/api/v1"
-    model: "openrouter/auto"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    model: "moonshotai/kimi-k2.5"
     api_key_env: "OPENROUTER_API_KEY"
     timeout_s: 180
     max_retries: 2
@@ -258,7 +263,7 @@ image_embedder:
   model: google/siglip2-base-patch16-224
   # Choices commonly used by torch stacks: cpu or cuda. For AMD ROCm builds,
   # torch still usually exposes the backend through cuda.
-  device: cpu
+  device: cuda
   batch_size: 8
   dim: 768
 
@@ -303,6 +308,7 @@ api:
   # Browser CORS allowlist. Add additional origins for remote deployments.
   cors_origins:
     - http://localhost:5173
+    - https://argus.rest
   upload:
     max_bytes: 209715200          # 200 MB
     allowed_mime:
@@ -311,8 +317,9 @@ api:
       - video/webm
   # Public read-only API under /api/public/*. Requires an API key.
   # Set enabled: true and api_key to a secret string to activate.
+  # With api_key: null, /api/public routes stay mounted but return 403.
   public:
-    enabled: false
+    enabled: true
     api_key: null
 
 worker:
@@ -327,7 +334,7 @@ agent:
   # remote, and frontier pin the agent to that preset while ingest can use
   # a different VLM mode.
   inherit_vlm: true
-  inherit_vlm_mode: active      # active | local | remote | frontier
+  inherit_vlm_mode: remote      # active | local | remote | frontier
   # endpoint: leave {} to inherit from vlm when inherit_vlm is true. Fill
   # endpoint/model/api_key_env here only to pin the agent to a different model.
   endpoint: {}
@@ -341,10 +348,17 @@ agent:
 
 creative_panel:
   # Creative Panel and Debate are user-triggered synthetic analysis calls.
-  # Keep inherit_vlm: true to reuse the active VLM endpoint. Set false and
-  # fill endpoint to pin these calls to a specific endpoint.
-  inherit_vlm: true
-  endpoint: {}
+  # Production pins these calls to the hosted remote endpoint. Set
+  # inherit_vlm: true to reuse the active VLM endpoint instead.
+  inherit_vlm: false
+  endpoint:
+    endpoint: "https://ai.ipdy.io/llm/v1"
+    model: "model"
+    api_key_env: "VLM_API_KEY"
+    timeout_s: 120
+    max_retries: 2
+    retry_delay_s: 2
+    stream: true
   temperature: 0.1
   max_tokens: 8192
 

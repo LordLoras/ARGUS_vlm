@@ -120,7 +120,7 @@
       align-items: end;
       overflow: hidden;
       border-bottom: 1px solid var(--border);
-      background: #050608 url("frontend/banner.png") center / cover no-repeat;
+      background: #050608 url("frontend/banner.jpg") center / cover no-repeat;
     }
 
     .hero::before {
@@ -175,7 +175,7 @@
 
     .metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       margin-top: 30px;
       max-width: 980px;
@@ -472,6 +472,7 @@
         <div class="metric"><span>Storage</span><strong>SQLite + FTS5 + sqlite-vec</strong></div>
         <div class="metric"><span>Visual</span><strong>SigLIP 2 frame vectors</strong></div>
         <div class="metric"><span>Language</span><strong>OpenAI-compatible engine</strong></div>
+        <div class="metric"><span>Benchmark</span><strong>Real calls on 5 ads</strong></div>
         <div class="metric"><span>Runtime</span><strong>Local API + worker + React</strong></div>
       </div>
     </div>
@@ -607,8 +608,11 @@
               <p>
                 ffmpeg/ffprobe probe duration, dimensions, frame rate, sample
                 frames at the configured interval, and extract mono 16 kHz
-                audio. Whisper produces transcript segments. The manifest is
-                sorted by explicit frame index and timestamp, never filesystem order.
+                audio. Whisper produces transcript segments. The GitHub clone
+                includes a Windows whisper.cpp CLI and
+                <code>ggml-tiny.en.bin</code> through Git LFS for smoke tests.
+                The manifest is sorted by explicit frame index and timestamp,
+                never filesystem order.
               </p>
             </div>
           </div>
@@ -658,8 +662,8 @@
               <h3>Evidence Bundle</h3>
               <p>
                 The worker builds a compact chronological bundle from selected
-                frames, OCR, GLM-OCR corrections, transcript excerpts, metadata,
-                and rule triggers. Frame selection is deterministic and favors
+                frames, OCR, optional GLM-OCR text, transcript excerpts,
+                metadata, and rule triggers. Frame selection is deterministic and favors
                 first/last frames, rule-trigger frames, dense OCR frames, and
                 time-distributed coverage.
               </p>
@@ -734,7 +738,7 @@
             <tbody>
               <tr><td>PaddleOCR</td><td>Raw visible text, boxes, confidence, frame timestamps.</td><td>Preserved exactly as extracted.</td></tr>
               <tr><td>GLM-OCR</td><td>Optional hard-frame text parser for dense layouts and fine print.</td><td>Stored separately; advisory for numeric/legal claims unless corroborated.</td></tr>
-              <tr><td>Whisper</td><td>Transcript segments from extracted audio.</td><td>Aligned to frames but retained as full transcript evidence.</td></tr>
+              <tr><td>Whisper</td><td>Transcript segments from extracted audio. The repo bundles whisper.cpp plus the tiny English model for fallback runs.</td><td>Aligned to frames but retained as full transcript evidence.</td></tr>
               <tr><td>Rules engine</td><td>Deterministic triggers for categories and observation tags.</td><td>Audit-friendly evidence, never gating.</td></tr>
               <tr><td>VLM verifier</td><td>Classification, OCR review, conflict resolution, marketing entities.</td><td>Must cite evidence by timestamp and use taxonomy labels.</td></tr>
               <tr><td>MiniLM</td><td>Ad-level text embeddings.</td><td>Uses transcript plus searchable OCR text.</td></tr>
@@ -742,6 +746,15 @@
               <tr><td>Agent LLM</td><td>Tool routing, campaign research, local analytical answers.</td><td>Read-only tools; no fabricated ad or campaign IDs.</td></tr>
             </tbody>
           </table>
+          <div class="note">
+            <strong>Benchmark inputs are intentionally real-world.</strong>
+            The benchmark page sends selected frames plus persisted OCR,
+            transcript, and metadata from existing ad artifacts. OCR text is not
+            hand-cleaned first; imperfect or garbled OCR is part of the test
+            because it measures model robustness on the evidence ARGUS actually
+            stores. Local GLM-OCR is not live-called by the benchmark unless its
+            output already exists in the persisted artifact data.
+          </div>
         </div>
       </section>
 
@@ -918,6 +931,8 @@
               <tr><td>Slow inference</td><td>Streaming chat completions keep remote HTTP connections alive; endpoint timeouts are configurable.</td></tr>
               <tr><td>Complex ads</td><td>OCR-heavy ads auto-raise token budgets for cleanup, VLM verification, and self-correction.</td></tr>
               <tr><td>GPU use</td><td>Inference engines, Whisper, MiniLM, and SigLIP use GPU only when configured and available.</td></tr>
+              <tr><td>Frontend toolchain</td><td>Vite and the React plugin are pinned in the lockfile; use <code>npm ci</code> for repeatable installs.</td></tr>
+              <tr><td>Secrets</td><td>Endpoint URLs can be documented, but API key values stay in ignored local env files or a secure key manager.</td></tr>
             </tbody>
           </table>
         </div>
@@ -942,7 +957,7 @@
             <tbody>
               <tr><td><code>paths</code></td><td><code>data_root</code>, <code>uploads</code>, <code>frames</code>, <code>audio</code>, <code>whisper</code>, <code>out</code>, <code>sqlite_path</code></td><td>Controls local artifact directories and the SQLite database location.</td></tr>
               <tr><td><code>ingest</code></td><td><code>ffmpeg_path</code>, <code>ffprobe_path</code>, <code>frame_interval_ms</code>, <code>audio_sample_rate</code></td><td>Controls video probing, frame cadence, and audio extraction.</td></tr>
-              <tr><td><code>whisper</code></td><td><code>backend</code>, <code>model</code>, <code>compute_type</code>, <code>language</code>, <code>whisper_cpp.model_path</code>, <code>use_gpu</code>, <code>threads</code></td><td>Selects transcript backend and model path.</td></tr>
+              <tr><td><code>whisper</code></td><td><code>backend</code>, <code>model</code>, <code>compute_type</code>, <code>language</code>, <code>whisper_cpp.model_path</code>, <code>use_gpu</code>, <code>threads</code></td><td>Selects transcript backend and model path. The example points at the bundled tiny model.</td></tr>
               <tr><td><code>dedup</code></td><td><code>skip_on_exact</code>, <code>skip_on_near_duplicate</code>, <code>phash_distance_threshold</code>, <code>post_ocr.*</code></td><td>Controls exact byte dedup, pHash similarity, and post-OCR re-encode detection.</td></tr>
               <tr><td><code>ocr</code></td><td><code>enabled</code>, <code>backend</code>, <code>device</code>, <code>lang</code></td><td>Configures raw local PaddleOCR.</td></tr>
               <tr><td><code>paddlevl</code></td><td><code>enabled</code>, command, timeout, gating thresholds</td><td>Legacy optional document OCR path; currently kept local.</td></tr>
@@ -994,7 +1009,7 @@
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 python -m pip install paddlepaddle paddleocr
 cd frontend
-npm install</code></pre>
+npm ci</code></pre>
         </div>
       </section>
 
@@ -1048,7 +1063,7 @@ npm install</code></pre>
   </div>
 
   <footer>
-    ARGUS technical detail. Open getting_started.html for the delivered-folder setup path.
+    ARGUS technical detail. Open getting_started.html for the local setup path.
   </footer>
 </body>
 </html>

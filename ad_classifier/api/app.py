@@ -105,7 +105,7 @@ def create_app(
         allow_headers=["*"],
     )
 
-    if config.api.public.enabled and config.api.public.api_key:
+    if config.api.public.enabled:
         from ad_classifier.api.middleware import ApiKeyMiddleware
 
         app.add_middleware(
@@ -125,7 +125,8 @@ def create_app(
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(embeddings_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
-    app.include_router(public_router, prefix="/api")
+    if config.api.public.enabled:
+        app.include_router(public_router, prefix="/api")
 
     data_root = resolve_config_path(config.paths.data_root, config_file)
     data_root.mkdir(parents=True, exist_ok=True)

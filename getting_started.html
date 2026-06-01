@@ -126,7 +126,7 @@
       align-items: end;
       overflow: hidden;
       border-bottom: 1px solid var(--border);
-      background: #050608 url("frontend/banner.png") center / cover no-repeat;
+      background: #050608 url("frontend/banner.jpg") center / cover no-repeat;
     }
 
     .hero::before {
@@ -441,9 +441,9 @@
         <div class="eyebrow">Standalone setup guide</div>
         <h1>ARGUS Getting Started</h1>
         <p>
-          Use this when you received the ARGUS project folder directly. It walks
-          through the local Windows setup without requiring access to the
-          private repository.
+          Use this when cloning ARGUS from GitHub or operating a delivered
+          fallback copy. It covers the Windows local run path, bundled model
+          assets, endpoint configuration, and key handoff expectations.
         </p>
         <div class="hero-actions">
           <a class="button primary" href="#quick-start">Start Setup</a>
@@ -460,6 +460,7 @@
         <a href="#python-env">Python Environment</a>
         <a href="#torch">Torch for NVIDIA / AMD</a>
         <a href="#inference-engine">Inference Engine</a>
+        <a href="#secrets">Secrets</a>
         <a href="#ocr-whisper">OCR and Whisper</a>
         <a href="#run">Run ARGUS</a>
         <a href="#sanity-checks">Sanity Checks</a>
@@ -470,30 +471,39 @@
         <section id="quick-start">
           <div class="section-head">
             <span>01</span>
-            <h2>Quick Start for a Delivered Folder</h2>
+            <h2>Quick Start from GitHub or a Delivered Folder</h2>
           </div>
           <div class="content">
             <p>
-              Extract or copy the ARGUS folder to a local path such as
-              <code>C:\Users\you\Desktop\ads_classification</code>. Open
-              PowerShell inside that folder. You should see
-              <code>pyproject.toml</code>, <code>config.example.yaml</code>,
-              <code>start.bat</code>, <code>frontend\</code>, and
+              The preferred fallback path is to clone from GitHub, pull Git LFS
+              assets, then configure local secrets. If you received a delivered
+              folder instead, copy it to a local path such as
+              <code>C:\Users\you\Desktop\ads_classification</code> and open
+              PowerShell inside that folder.
+            </p>
+            <pre><code>git clone https://github.com/LordLoras/ARGUS_vlm.git
+cd ARGUS_vlm
+git lfs pull</code></pre>
+            <p>
+              You should see <code>pyproject.toml</code>,
+              <code>config.example.yaml</code>, <code>start.bat</code>,
+              <code>frontend\</code>, <code>tools\whisper.cpp\</code>, and
               <code>ad_classifier\</code>.
             </p>
             <div class="callout">
-              <strong>Assumption for this guide:</strong> the delivered folder
-              does not include a working <code>.venv</code>. You will create a
+              <strong>Assumption for this guide:</strong> the clone or delivered
+              folder does not include a working <code>.venv</code>. You will create a
               fresh environment and install the correct torch build for your
               GPU before installing the embedding packages.
             </div>
             <ol>
-              <li>Install or verify Python, Node.js, ffmpeg, and an OpenAI-compatible inference engine.</li>
+              <li>Install or verify Git LFS, Python, Node.js, ffmpeg, and an OpenAI-compatible inference engine.</li>
               <li>Create and activate <code>.venv</code>.</li>
               <li>Install ARGUS core dependencies.</li>
               <li>Install the correct torch build for NVIDIA, AMD, or CPU.</li>
               <li>Install embedding libraries without asking pip to replace torch.</li>
-              <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code> and set endpoints.</li>
+              <li>Copy <code>.env.local.example</code> to <code>.env.local</code> and add keys locally.</li>
+              <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code> and confirm endpoints.</li>
               <li>Install OCR and frontend dependencies.</li>
               <li>Initialize SQLite and run <code>start.bat</code>.</li>
             </ol>
@@ -512,7 +522,7 @@
                 <p>Runs the FastAPI backend, worker, pipeline, CLI, tests, OCR, and vector code.</p>
               </div>
               <div class="card">
-                <strong>Node.js 18 or newer</strong>
+                <strong>Node.js 20.19 or newer</strong>
                 <p>Runs the Vite React frontend at <code>http://127.0.0.1:5173</code>.</p>
               </div>
               <div class="card">
@@ -524,15 +534,16 @@
                 <p>Provides <code>/v1/chat/completions</code> for the VLM, agent, and optional GLM-OCR.</p>
               </div>
               <div class="card">
-                <strong>Git is optional for delivered folders</strong>
-                <p>Only needed if you will pull updates from a remote repository. It is not required to run a copied project folder.</p>
+                <strong>Git with Git LFS</strong>
+                <p>Required for GitHub clones because the whisper.cpp runtime and tiny Whisper model are stored through LFS.</p>
               </div>
               <div class="card">
-                <strong>Python build tools</strong>
-                <p><code>pip</code>, <code>setuptools</code>, and <code>wheel</code> are upgraded inside the venv before package install.</p>
+                <strong>Measured benchmark page</strong>
+                <p>The frontend includes <code>/benchmark</code> with real model calls against existing ad artifacts.</p>
               </div>
             </div>
-            <pre><code>python --version
+            <pre><code>git lfs version
+python --version
 node --version
 ffmpeg -version
 ffprobe -version</code></pre>
@@ -655,7 +666,7 @@ print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else
               <li>Load or select a vision-capable model.</li>
               <li>Confirm the endpoint accepts <code>POST /v1/chat/completions</code>.</li>
               <li>Copy <code>config.example.yaml</code> to <code>config.yaml</code>.</li>
-              <li>Set <code>vlm.local.endpoint</code> and <code>vlm.local.model</code>.</li>
+              <li>Confirm <code>vlm.remote</code>, <code>vlm.frontier</code>, and any local fallback endpoint.</li>
             </ol>
             <p>
               The copied config is intentionally commented with the selectable
@@ -664,11 +675,15 @@ print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else
             </p>
             <pre><code>Copy-Item .\config.example.yaml .\config.yaml</code></pre>
             <pre><code>vlm:
-  mode: local
-  local:
-    endpoint: "http://127.0.0.1:1234/v1"
-    model: "your-vision-model"
-    response_format: json_object</code></pre>
+  mode: frontier
+  remote:
+    endpoint: "https://ai.ipdy.io/llm/v1"
+    model: "model"
+    api_key_env: "VLM_API_KEY"
+  frontier:
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    model: "moonshotai/kimi-k2.5"
+    api_key_env: "OPENROUTER_API_KEY"</code></pre>
             <p>
               When <code>agent.inherit_vlm: true</code>, the campaign research
               agent and natural-language agent use the same active
@@ -695,9 +710,39 @@ print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else
           </div>
         </section>
 
-        <section id="ocr-whisper">
+        <section id="secrets">
           <div class="section-head">
             <span>06</span>
+            <h2>Secrets and Local Fallback Keys</h2>
+          </div>
+          <div class="content">
+            <p>
+              Endpoint URLs can live in <code>config.yaml</code>. Real key
+              values should live in <code>.env.local</code>, which is ignored by
+              git. The repository includes <code>.env.local.example</code> as a
+              safe template.
+            </p>
+            <pre><code>Copy-Item .\.env.local.example .\.env.local
+notepad .\.env.local</code></pre>
+            <div class="callout">
+              <strong>Do not send a plaintext .env.local file through email.</strong>
+              Use a password manager share, an expiring encrypted secret link,
+              or an age/GPG-encrypted file. Send the decryption password through
+              a different channel and rotate keys after the handoff window.
+            </div>
+            <p>
+              A local fallback operator should clone the repo, run
+              <code>git lfs pull</code>, copy <code>.env.local.example</code>,
+              paste the provided keys locally, copy
+              <code>config.example.yaml</code> to <code>config.yaml</code>, then
+              run the normal install steps below.
+            </p>
+          </div>
+        </section>
+
+        <section id="ocr-whisper">
+          <div class="section-head">
+            <span>07</span>
             <h2>OCR, GLM-OCR, and Whisper</h2>
           </div>
           <div class="content">
@@ -724,25 +769,39 @@ python -m pip install -e ".[ocr,dev]"</code></pre>
 
             <h3>Whisper</h3>
             <p>
-              The repository includes <code>tools\whisper.cpp\whisper-cli.exe</code>.
-              The model file is not included. Place a GGML model under
-              <code>models\whisper\</code> and point <code>config.yaml</code>
-              at it.
+              The repository includes <code>tools\whisper.cpp\whisper-cli.exe</code>
+              and <code>models\whisper\ggml-tiny.en.bin</code> through Git LFS.
+              The tiny model is enough for smoke tests and fallback runs. For
+              production transcription quality, download a larger whisper.cpp
+              GGML model and update <code>config.yaml</code>.
             </p>
-            <pre><code>New-Item -ItemType Directory -Force .\models\whisper</code></pre>
+            <pre><code>whisper:
+  backend: whisper_cpp
+  model: tiny.en
+  whisper_cpp:
+    command: ./tools/whisper.cpp/whisper-cli.exe
+    model_path: ./models/whisper/ggml-tiny.en.bin</code></pre>
           </div>
         </section>
 
         <section id="run">
           <div class="section-head">
-            <span>07</span>
+            <span>08</span>
             <h2>Initialize and Run</h2>
           </div>
           <div class="content">
             <p>Install frontend dependencies once:</p>
             <pre><code>cd frontend
-npm install
+npm ci
 cd ..</code></pre>
+            <p>
+              The frontend is pinned to Vite 7 and
+              <code>@vitejs/plugin-react</code> 5. Vite 8 warnings such as
+              <code>Invalid key: jsx</code> are not a data-risk warning; they
+              mean the local install resolved an incompatible dev toolchain.
+              Stop the dev server, delete <code>frontend\node_modules</code>,
+              and rerun <code>npm ci</code>.
+            </p>
             <p>Initialize SQLite, then start the API, worker, and frontend:</p>
             <pre><code>python -m ad_classifier init-db
 .\start.bat</code></pre>
@@ -808,7 +867,7 @@ npm run dev</code></pre>
 
         <section id="sanity-checks">
           <div class="section-head">
-            <span>08</span>
+            <span>09</span>
             <h2>First-Run Sanity Checks</h2>
           </div>
           <div class="content">
@@ -847,7 +906,7 @@ npm run dev</code></pre>
 
         <section id="troubleshooting">
           <div class="section-head">
-            <span>09</span>
+            <span>10</span>
             <h2>Troubleshooting</h2>
           </div>
           <div class="content">
@@ -867,6 +926,14 @@ npm run dev</code></pre>
               <div class="card">
                 <strong>Slow VLM responses</strong>
                 <p>Use streaming on the inference endpoint and raise endpoint timeouts for remote engines with long time-to-first-token.</p>
+              </div>
+              <div class="card">
+                <strong>Vite prints <code>Invalid key: jsx</code></strong>
+                <p>Stop Vite, remove <code>frontend\node_modules</code>, and run <code>npm ci</code>. The pinned lockfile installs the compatible Vite 7 toolchain.</p>
+              </div>
+              <div class="card">
+                <strong>Whisper model missing after clone</strong>
+                <p>Run <code>git lfs pull</code> from the repository root and confirm <code>models\whisper\ggml-tiny.en.bin</code> exists.</p>
               </div>
             </div>
           </div>

@@ -17,10 +17,17 @@ env/
 huggingface/
 ~/.cache/huggingface/
 /models/
+!/models/
+/models/*
+!/models/whisper/
+/models/whisper/*
 !/models/whisper/ggml-tiny.en.bin
 
 # Local native tool binaries
 /tools/whisper.cpp/
+!/tools/
+!/tools/whisper.cpp/
+!/tools/whisper.cpp/**
 
 # Python
 __pycache__/
@@ -70,6 +77,7 @@ Thumbs.db
 config.yaml
 .env
 .env.*
+!.env.local.example
 !frontend/.env.example
 
 # Generated prompt summaries

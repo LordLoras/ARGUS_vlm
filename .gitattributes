@@ -1,6 +1,5 @@
 * text=auto
 .gitattributes text eol=lf
-
 *.py text eol=lf
 *.md text eol=lf
 *.toml text eol=lf
@@ -9,3 +8,5 @@
 *.sql text eol=lf
 *.txt text eol=lf
 *.json text eol=lf
+tools/whisper.cpp/** filter=lfs diff=lfs merge=lfs -text
+models/whisper/ggml-tiny.en.bin filter=lfs diff=lfs merge=lfs -text
