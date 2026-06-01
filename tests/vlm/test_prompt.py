@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from ad_classifier.vlm.prompt import get_prompt_version, render_verifier_prompt, resolve_prompt_profile
+from ad_classifier.vlm.prompt import (
+    get_prompt_version,
+    prompt_template_options,
+    render_verifier_prompt,
+    resolve_prompt_profile,
+)
 
 
 def test_renders_without_error():
@@ -107,3 +112,29 @@ def test_prompt_profile_auto_resolution():
     assert resolve_prompt_profile("auto", mode="frontier") == "frontier_strict"
     assert resolve_prompt_profile("auto", mode="local") == "standard"
     assert get_prompt_version("frontier_strict").startswith("verifier-frontier-strict-")
+
+
+def test_prompt_override_still_gets_runtime_taxonomy():
+    prompt = render_verifier_prompt(
+        prompt_profile="standard",
+        prompt_text="# version: verifier-custom\nCategories:\n{ALLOWED_CATEGORIES}",
+    )
+
+    assert "automotive" in prompt
+    assert "{ALLOWED_CATEGORIES}" not in prompt
+
+
+def test_prompt_template_options_include_reset_defaults():
+    options = prompt_template_options()
+    profiles = {item["profile"] for item in options}
+
+    assert profiles == {"standard", "frontier_strict"}
+    assert all(item["default_text"] for item in options)
+    assert all(item["version"].startswith("verifier-") for item in options)
+
+
+def test_custom_prompt_version_is_marked_custom():
+    assert (
+        get_prompt_version("standard", prompt_text="# version: verifier-custom\nBody")
+        == "custom:verifier-custom"
+    )

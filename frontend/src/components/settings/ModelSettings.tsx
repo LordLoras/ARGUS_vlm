@@ -14,6 +14,7 @@ export function ModelSettings({
   apiKeys,
   modeOptions,
   promptProfiles = DEFAULT_PROMPT_PROFILES,
+  promptTemplates = [],
   responseFormats,
   updateDraft
 }: {
@@ -21,6 +22,7 @@ export function ModelSettings({
   apiKeys: ApiKeyRecord[];
   modeOptions: Array<{ value: string; label: string; description: string }>;
   promptProfiles?: Array<{ value: string; label: string; description: string }>;
+  promptTemplates?: PromptTemplate[];
   responseFormats: string[];
   updateDraft: UpdateSettingsDraft;
 }) {
@@ -144,6 +146,34 @@ export function ModelSettings({
           />
         </div>
       </section>
+
+      {promptTemplates.length ? (
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <div>
+              <h2>Verifier Prompts</h2>
+              <p>Saved overrides are used by ingest after the next settings save.</p>
+            </div>
+            <span className="badge badge-mono">
+              {Object.keys(config.vlm.prompt_overrides ?? {}).length} custom
+            </span>
+          </div>
+          <div className="settings-prompt-list">
+            {promptTemplates.map((template) => (
+              <PromptEditor
+                key={template.profile}
+                template={template}
+                value={config.vlm.prompt_overrides?.[template.profile] ?? template.default_text}
+                customized={Object.prototype.hasOwnProperty.call(
+                  config.vlm.prompt_overrides ?? {},
+                  template.profile
+                )}
+                updateDraft={updateDraft}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="settings-section">
         <div className="settings-section-head">
@@ -391,6 +421,62 @@ export function ModelSettings({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+type PromptTemplate = {
+  profile: string;
+  label: string;
+  description: string;
+  version: string;
+  default_text: string;
+};
+
+function PromptEditor({
+  template,
+  value,
+  customized,
+  updateDraft
+}: {
+  template: PromptTemplate;
+  value: string;
+  customized: boolean;
+  updateDraft: UpdateSettingsDraft;
+}) {
+  const updateValue = (nextValue: string) => {
+    updateDraft((current) => {
+      const prompt_overrides = { ...(current.vlm.prompt_overrides ?? {}) };
+      if (nextValue === template.default_text) {
+        delete prompt_overrides[template.profile];
+      } else {
+        prompt_overrides[template.profile] = nextValue;
+      }
+      return { ...current, vlm: { ...current.vlm, prompt_overrides } };
+    });
+  };
+
+  return (
+    <div className="settings-prompt-editor">
+      <div className="settings-prompt-editor-head">
+        <div>
+          <strong>{template.label}</strong>
+          <span>{template.version}</span>
+        </div>
+        <button
+          className="btn btn-sm"
+          disabled={!customized}
+          onClick={() => updateValue(template.default_text)}
+        >
+          Reset to default
+        </button>
+      </div>
+      <textarea
+        className="settings-prompt-textarea"
+        spellCheck={false}
+        value={value}
+        onChange={(event) => updateValue(event.target.value)}
+      />
     </div>
   );
 }

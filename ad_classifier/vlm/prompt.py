@@ -52,14 +52,39 @@ def _prompt_path_for_profile(profile: str) -> Path:
     return _PROMPT_PATHS[resolve_prompt_profile(profile)]
 
 
-def get_prompt_version(profile: str = "standard", *, prompt_path: Path | None = None) -> str:
-    path = prompt_path or _prompt_path_for_profile(profile)
-    first_line = path.read_text(encoding="utf-8").split("\n")[0]
+def _version_from_text(text: str) -> str:
+    first_line = text.split("\n", 1)[0]
     for part in first_line.split(":"):
         part = part.strip()
         if part.startswith("verifier-"):
             return part
     return "unknown"
+
+
+def get_prompt_version(
+    profile: str = "standard",
+    *,
+    prompt_path: Path | None = None,
+    prompt_text: str | None = None,
+) -> str:
+    if prompt_text is not None:
+        version = _version_from_text(prompt_text)
+        return f"custom:{version}" if version != "unknown" else f"custom:{resolve_prompt_profile(profile)}"
+    path = prompt_path or _prompt_path_for_profile(profile)
+    return _version_from_text(path.read_text(encoding="utf-8"))
+
+
+def prompt_template_options() -> list[dict[str, str]]:
+    return [
+        {
+            "profile": profile,
+            "label": PROMPT_PROFILE_OPTIONS[profile]["label"],
+            "description": PROMPT_PROFILE_OPTIONS[profile]["description"],
+            "version": get_prompt_version(profile),
+            "default_text": _PROMPT_PATHS[profile].read_text(encoding="utf-8"),
+        }
+        for profile in ("standard", "frontier_strict")
+    ]
 
 
 def _load_taxonomy(path: Path = _TAXONOMY_PATH) -> dict[str, Any]:
@@ -70,13 +95,14 @@ def render_verifier_prompt(
     *,
     prompt_profile: str = "standard",
     prompt_path: Path | None = None,
+    prompt_text: str | None = None,
     taxonomy_path: Path = _TAXONOMY_PATH,
     iab_taxonomy_path: Path = DEFAULT_IAB_TAXONOMY_PATH,
     iab_content_taxonomy_path: Path = DEFAULT_IAB_CONTENT_TAXONOMY_PATH,
     knowledge_manager: Any | None = None,
 ) -> str:
     template_path = prompt_path or _prompt_path_for_profile(prompt_profile)
-    template = template_path.read_text(encoding="utf-8")
+    template = prompt_text if prompt_text is not None else template_path.read_text(encoding="utf-8")
     taxonomy = _load_taxonomy(taxonomy_path)
 
     categories: list[dict] = taxonomy.get("categories", [])

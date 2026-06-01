@@ -90,6 +90,7 @@ export type SettingsConfig = {
   vlm: {
     mode: "local" | "remote" | "frontier" | string;
     prompt_profile: "auto" | "standard" | "frontier_strict" | string;
+    prompt_overrides?: Record<string, string>;
     max_frames_in_bundle: number;
     image_max_dim: number;
     enable_ocr_cleanup_pass: boolean;
@@ -179,6 +180,13 @@ export type SettingsSnapshot = {
   options: {
     vlm_modes: Array<{ value: "local" | "remote" | "frontier" | string; label: string; description: string }>;
     prompt_profiles: Array<{ value: "auto" | "standard" | "frontier_strict" | string; label: string; description: string }>;
+    prompt_templates?: Array<{
+      profile: "standard" | "frontier_strict" | string;
+      label: string;
+      description: string;
+      version: string;
+      default_text: string;
+    }>;
     response_formats: string[];
     glm_ocr_modes: string[];
     devices: string[];

@@ -13,9 +13,15 @@ const STEPS = [
   { key: "finalize", label: "Finalizing", sub: "persist + FTS refresh" }
 ];
 
+const STAGE_ALIASES: Record<string, string> = {
+  embeddings: "embed",
+  persist: "finalize",
+};
+
 function activeIndex(job?: JobRecord | null) {
   if (!job) return 0;
-  const rootStage = (job.stage ?? "").split(":")[0].toLowerCase();
+  const rawRootStage = (job.stage ?? "").split(":")[0].toLowerCase();
+  const rootStage = STAGE_ALIASES[rawRootStage] ?? rawRootStage;
   const haystack = `${rootStage} ${job.state ?? ""} ${job.message ?? ""}`.toLowerCase();
   const idx = STEPS.findIndex((s) => rootStage === s.key || haystack.includes(s.key));
   if (idx >= 0) return idx;

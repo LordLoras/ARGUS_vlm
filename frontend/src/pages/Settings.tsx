@@ -128,6 +128,7 @@ export function Settings() {
                   apiKeys={apiKeys}
                   modeOptions={settingsQuery.data.options.vlm_modes}
                   promptProfiles={settingsQuery.data.options.prompt_profiles}
+                  promptTemplates={settingsQuery.data.options.prompt_templates ?? []}
                   responseFormats={settingsQuery.data.options.response_formats}
                   updateDraft={updateDraft}
                 />

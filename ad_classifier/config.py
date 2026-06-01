@@ -344,6 +344,7 @@ class VLMConfig(BaseModel):
 
     mode: VLMMode = "local"
     prompt_profile: Literal["auto", "standard", "frontier_strict"] = "auto"
+    prompt_overrides: dict[str, str] = Field(default_factory=dict)
     max_frames_in_bundle: int = Field(default=12, ge=1)
     image_max_dim: int = Field(default=512, ge=128, le=2048)
     enable_ocr_cleanup_pass: bool = True
@@ -374,6 +375,10 @@ class VLMConfig(BaseModel):
         if self.prompt_profile == "auto":
             return "frontier_strict" if self.mode == "frontier" else "standard"
         return self.prompt_profile
+
+    def prompt_override_for(self, profile: str) -> str | None:
+        override = self.prompt_overrides.get(profile)
+        return override if isinstance(override, str) and override.strip() else None
 
 
 class AgentEndpointConfig(BaseModel):

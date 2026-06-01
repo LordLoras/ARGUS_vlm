@@ -531,8 +531,9 @@ class HTTPVLMVerifier(VLMVerifier):
         self._response_format = response_format
         self._image_max_dim = image_max_dim
         self._stream = stream
-        self._system_prompt = prompt_override or render_verifier_prompt(
+        self._system_prompt = render_verifier_prompt(
             prompt_profile=prompt_profile,
+            prompt_text=prompt_override,
             knowledge_manager=knowledge_manager,
         )
 

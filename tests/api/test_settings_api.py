@@ -44,7 +44,11 @@ def test_settings_api_redacts_and_manages_api_keys(tmp_path: Path):
     payload = initial.json()
     assert payload["config"]["vlm"]["frontier"]["api_key_env"] == "OPENROUTER_API_KEY"
     assert payload["config"]["vlm"]["prompt_profile"] == "auto"
+    assert payload["config"]["vlm"]["prompt_overrides"] == {}
     assert any(item["value"] == "frontier_strict" for item in payload["options"]["prompt_profiles"])
+    prompt_templates = payload["options"]["prompt_templates"]
+    assert {item["profile"] for item in prompt_templates} == {"standard", "frontier_strict"}
+    assert all(item["default_text"] for item in prompt_templates)
     assert any(item["name"] == "REMOTE_TEST_KEY" for item in payload["api_keys"])
 
     created = client.post(
@@ -77,6 +81,9 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     config["vlm"]["prompt_profile"] = "frontier_strict"
     config["vlm"]["frontier"]["model"] = "anthropic/claude-sonnet-4.5"
     config["vlm"]["frontier"]["api_key_env"] = "OPENROUTER_TEST_KEY"
+    config["vlm"]["prompt_overrides"] = {
+        "standard": "# version: verifier-custom\nCustom verifier prompt"
+    }
     config["agent"]["inherit_vlm_mode"] = "remote"
     config["worker"]["poll_interval_ms"] = 250
 
@@ -89,6 +96,7 @@ def test_settings_api_persists_config_updates(tmp_path: Path):
     assert saved["vlm"]["prompt_profile"] == "frontier_strict"
     assert saved["vlm"]["frontier"]["model"] == "anthropic/claude-sonnet-4.5"
     assert saved["vlm"]["frontier"]["api_key_env"] == "OPENROUTER_TEST_KEY"
+    assert saved["vlm"]["prompt_overrides"]["standard"].startswith("# version: verifier-custom")
     assert saved["agent"]["inherit_vlm_mode"] == "remote"
     assert saved["worker"]["poll_interval_ms"] == 250
     assert "endpoint" not in saved["vlm"]

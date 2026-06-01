@@ -408,6 +408,27 @@ def test_http_verifier_uses_generation_settings_from_constructor():
     assert call_kwargs["json"]["max_tokens"] == 2048
 
 
+def test_http_verifier_uses_prompt_override_template():
+    payload = {
+        "primary_category": "other",
+        "confidence": 0.8,
+        "summary": "ok",
+    }
+    bundle = _make_bundle()
+    with patch(
+        "ad_classifier.vlm.verifier.chat_completion", return_value=_mock_chat_data(payload)
+    ) as mock_cc:
+        verifier = _make_http_verifier(
+            prompt_override="# version: verifier-custom\nAllowed:\n{ALLOWED_CATEGORIES}",
+        )
+        verifier.verify(bundle)
+
+    system_prompt = mock_cc.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "verifier-custom" in system_prompt
+    assert "automotive" in system_prompt
+    assert "{ALLOWED_CATEGORIES}" not in system_prompt
+
+
 def test_parse_vlm_content_salvages_malformed_nested_json():
     raw = (
         '{"primary_category":"automotive","confidence":0.95,'

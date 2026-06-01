@@ -16,7 +16,7 @@ from ad_classifier._env import (
 )
 from ad_classifier.api.deps import get_config, get_config_file
 from ad_classifier.config import AppConfig, config_file_payload, save_config
-from ad_classifier.vlm.prompt import PROMPT_PROFILE_OPTIONS
+from ad_classifier.vlm.prompt import PROMPT_PROFILE_OPTIONS, prompt_template_options
 
 router = APIRouter(tags=["settings"])
 
@@ -101,6 +101,7 @@ def _settings_snapshot(request: Request) -> dict[str, Any]:
             "prompt_profiles": [
                 {"value": value, **meta} for value, meta in PROMPT_PROFILE_OPTIONS.items()
             ],
+            "prompt_templates": prompt_template_options(),
             "response_formats": ["json_object", "json_schema"],
             "glm_ocr_modes": ["local", "remote"],
             "devices": ["cpu", "cuda"],

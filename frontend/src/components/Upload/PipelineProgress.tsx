@@ -2,6 +2,28 @@ import type { JobRecord } from "../../lib/types";
 import { LiveLog, type LogLine } from "./LiveLog";
 import { Stepper } from "./Stepper";
 
+const STAGE_LABELS: Record<string, string> = {
+  upload: "Uploading file",
+  uploading: "Uploading file",
+  queued: "Waiting for worker",
+  ingest: "Extracting frames & audio",
+  whisper: "Transcribing with Whisper",
+  preprocess: "Preprocessing frames",
+  dedup: "Checking duplicates",
+  ocr: "Running OCR",
+  paddlevl: "Checking hard OCR frames",
+  glm_ocr: "Checking GLM-OCR frames",
+  rules: "Running rules",
+  vlm: "VLM classification",
+  embed: "Generating embeddings",
+  embeddings: "Generating embeddings",
+  finalize: "Persisting results",
+  persist: "Persisting results",
+  completed: "Pipeline complete",
+  cancelled: "Pipeline cancelled",
+  failed: "Pipeline failed",
+};
+
 export function PipelineProgress({
   filename,
   adId,
@@ -22,7 +44,8 @@ export function PipelineProgress({
   onClear: () => void;
 }) {
   const progress = Math.max(0, Math.min(1, job?.progress ?? 0));
-  const stage = job?.stage || job?.message || job?.state || "";
+  const stageRoot = job?.stage?.split(":")[0].toLowerCase() || "";
+  const stage = STAGE_LABELS[stageRoot] || job?.stage || job?.message || job?.state || "";
   const terminal = job?.state === "failed" || job?.state === "cancelled";
   const failed = job?.state === "failed";
   const statusText = failed

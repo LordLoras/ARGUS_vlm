@@ -30,6 +30,11 @@ const STAGE_LABELS: Record<string, string> = {
   failed: "Pipeline failed",
 };
 
+const STAGE_ALIASES: Record<string, string> = {
+  embeddings: "embed",
+  persist: "finalize",
+};
+
 const TERMINAL_JOB_STATES = new Set(["completed", "failed", "cancelled"]);
 
 const UPLOAD_SESSION_KEY = "argus:last-upload-job";
@@ -654,7 +659,8 @@ function stateBadge(state: string) {
 }
 
 function stageRoot(stage?: string | null) {
-  return stage?.split(":")[0] || null;
+  const root = stage?.split(":")[0] || null;
+  return root ? STAGE_ALIASES[root] ?? root : null;
 }
 
 function inferStageKey(message?: string | null) {

@@ -478,6 +478,11 @@ fresh install prints Vite 8 warnings such as `Invalid key: jsx`, delete
 `frontend\node_modules` and rerun `npm ci`; that warning means the local install
 resolved an incompatible Vite 8 toolchain, not that ARGUS data is at risk.
 
+Settings -> Models exposes the shipped verifier prompts for the `standard` and
+`frontier_strict` profiles. Edits are saved as `vlm.prompt_overrides` in
+`config.yaml`; `Reset to default` removes that override and returns to the
+prompt text shipped in `prompts/`.
+
 ### Authentication
 
 For deployments that need a login gate, configure authentication in
