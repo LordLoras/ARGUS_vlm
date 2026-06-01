@@ -8,8 +8,8 @@ const STEPS = [
   { key: "preprocess", label: "Preprocessing", sub: "blur / phash dedup" },
   { key: "dedup", label: "Dedup check", sub: "hash + phash" },
   { key: "ocr", label: "OCR", sub: "PaddleOCR + VL gating" },
-  { key: "embed", label: "Embedding", sub: "MiniLM + SigLIP 2" },
   { key: "vlm", label: "VLM analysis", sub: "ARGUS classification" },
+  { key: "embed", label: "Embedding", sub: "MiniLM + SigLIP 2" },
   { key: "finalize", label: "Finalizing", sub: "persist + FTS refresh" }
 ];
 
