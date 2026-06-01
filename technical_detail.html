@@ -464,9 +464,9 @@
       <div class="eyebrow">Pipeline and system detail</div>
       <h1>ARGUS Technical Detail</h1>
       <p>
-        A local-first multimodal ad-classification system with OCR,
-        VLM verification, marketing-entity extraction, vector search, campaign
-        research, duplicate detection, and a read-only natural-language agent.
+        Follow one ad from upload to searchable intelligence: frames, audio,
+        OCR, transcript, deterministic evidence, VLM verification, embeddings,
+        campaign context, and read-only analyst answers.
       </p>
       <div class="metrics">
         <div class="metric"><span>Storage</span><strong>SQLite + FTS5 + sqlite-vec</strong></div>
@@ -480,7 +480,7 @@
 
   <div class="layout">
     <aside aria-label="Page sections">
-      <a href="#mission">System Mission</a>
+      <a href="#mission">One-Pass Flow</a>
       <a href="#architecture">Architecture</a>
       <a href="#pipeline">Pipeline Stages</a>
       <a href="#models">Model Responsibilities</a>
@@ -498,28 +498,30 @@
       <section id="mission">
         <div class="section-head">
           <span>01</span>
-          <h2>System Mission</h2>
+          <h2>System in One Pass</h2>
         </div>
         <div class="content">
           <p>
-            ARGUS converts local video advertisements into structured,
-            searchable, analyst-ready records. It is categorization-only: the
-            system does not approve, block, gate, or escalate ads. Observation
-            tags such as urgency or before/after claims are
-            descriptive search fields, not policy decisions.
+            ARGUS starts with a local video ad and ends with an analyst-ready
+            record: what the ad shows, what it says, who or what it promotes,
+            which campaign it resembles, and why the system reached that
+            classification. The system is categorization-only: it does not
+            approve, block, gate, or escalate ads. Observation tags such as
+            urgency or before/after claims are descriptive search fields, not
+            policy decisions.
           </p>
           <div class="grid three">
             <div class="card">
-              <strong>Local first</strong>
-              <p>SQLite, local artifacts, local worker, local-first model endpoints. No Docker is required by default.</p>
+              <strong>1. Ground the evidence</strong>
+              <p>ffmpeg, Whisper, PaddleOCR, optional GLM-OCR, rules, and selected frames create auditable source material.</p>
             </div>
             <div class="card">
-              <strong>Evidence grounded</strong>
-              <p>OCR, transcripts, rules, frames, VLM evidence, and marketing entities retain source context.</p>
+              <strong>2. Verify the meaning</strong>
+              <p>A vision-capable OpenAI-compatible route checks the evidence, resolves conflicts, and extracts marketing entities.</p>
             </div>
             <div class="card">
-              <strong>Analyst usable</strong>
-              <p>Search, campaign grouping, research briefs, and the agent expose practical marketing analysis value.</p>
+              <strong>3. Make it usable</strong>
+              <p>SQLite, FTS5, sqlite-vec, campaign logic, public API routes, and the agent turn one ad into searchable intelligence.</p>
             </div>
           </div>
         </div>
