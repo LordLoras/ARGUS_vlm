@@ -330,13 +330,7 @@ Copy-Item .\.env.local.example .\.env.local
 notepad .\.env.local
 ```
 
-For handoff to another operator, do not email raw API keys or a plaintext
-`.env.local` file. Use a password manager share, 1Password/Bitwarden secure
-send, age/GPG-encrypted file, or another expiring encrypted transfer. Give the
-recipient the decryption password through a different channel and rotate the
-keys after the demo or handoff window.
-
-Local fallback handoff should be:
+Local fallback setup:
 
 ```powershell
 git clone https://github.com/LordLoras/ARGUS_vlm.git
