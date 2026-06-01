@@ -30,6 +30,10 @@ class VLMVerifier(ABC):
     def verify(self, bundle: EvidenceBundle) -> VLMVerificationResult: ...
 
 
+class VLMProviderError(RuntimeError):
+    """User-facing VLM transport/provider failure."""
+
+
 class MockVLMVerifier(VLMVerifier):
     def __init__(self, result: VLMVerificationResult | None = None) -> None:
         self._result = result or VLMVerificationResult(
@@ -330,6 +334,22 @@ def _looks_like_url_or_domain(value: object) -> bool:
     return _domain_candidate(value) is not None
 
 
+def _format_vlm_http_error(status: int | str, body: str) -> str:
+    body_preview = body.strip().replace("\n", " ")[:300]
+    suffix = f": {body_preview}" if body_preview else ""
+    if status == 401:
+        return f"VLM provider rejected request (HTTP 401: missing or invalid API key){suffix}"
+    if status == 402:
+        return f"VLM provider rejected request (HTTP 402: quota or credits exhausted){suffix}"
+    if status == 403:
+        return f"VLM provider rejected request (HTTP 403: model access denied){suffix}"
+    if status == 429:
+        return f"VLM provider rejected request (HTTP 429: rate limit or quota exceeded){suffix}"
+    if isinstance(status, int) and status >= 500:
+        return f"VLM provider is unavailable (HTTP {status}){suffix}"
+    return f"VLM provider rejected request (HTTP {status}){suffix}"
+
+
 def _encode_image(path: Path, max_dim: int = 512) -> str:
     try:
         from PIL import Image as _PILImage
@@ -593,22 +613,27 @@ class HTTPVLMVerifier(VLMVerifier):
                 return _parse_vlm_content(raw)
             except httpx.HTTPStatusError as exc:
                 body = exc.response.text[:1000] if exc.response is not None else ""
+                status = exc.response.status_code if exc.response is not None else "unknown"
                 last_error = (
-                    f"HTTP error on attempt {attempt + 1}: "
-                    f"status={exc.response.status_code if exc.response is not None else 'unknown'} "
-                    f"body={body!r}"
+                    f"{_format_vlm_http_error(status, body)} "
+                    f"(attempt {attempt + 1}/{self._max_retries + 1})"
                 )
                 _logger.warning(
                     "vlm_http_error",
                     attempt=attempt + 1,
-                    status=exc.response.status_code if exc.response is not None else None,
+                    status=status,
                     body=body[:200],
                 )
+                if status in {401, 402, 403}:
+                    break
             except httpx.RequestError as exc:
-                last_error = f"HTTP error on attempt {attempt + 1}: {exc}"
+                last_error = (
+                    f"VLM provider/network error: {exc} "
+                    f"(attempt {attempt + 1}/{self._max_retries + 1})"
+                )
                 _logger.warning("vlm_request_error", attempt=attempt + 1, error=str(exc)[:300])
             except (json.JSONDecodeError, KeyError, ValueError) as exc:
                 raw_text = raw if "raw" in dir() else ""
                 return VLMVerificationResult.parse_failure(raw_text, str(exc))
 
-        return VLMVerificationResult.parse_failure("", last_error)
+        raise VLMProviderError(last_error)

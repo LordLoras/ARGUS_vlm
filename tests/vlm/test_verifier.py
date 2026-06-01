@@ -10,6 +10,7 @@ from ad_classifier.vlm.models import VLMVerificationResult
 from ad_classifier.vlm.verifier import (
     HTTPVLMVerifier,
     MockVLMVerifier,
+    VLMProviderError,
     _build_content,
     _extract_json,
     _normalize_chat_endpoint,
@@ -325,9 +326,26 @@ def test_http_verifier_includes_error_body_on_http_failure():
         side_effect=httpx.HTTPStatusError("400", request=request, response=response),
     ):
         verifier = _make_http_verifier(endpoint="http://mock/v1", max_retries=0)
-        result = verifier.verify(bundle)
-    assert result.parse_ok is False
-    assert "Channel Error" in result.parse_error
+        with pytest.raises(VLMProviderError) as exc_info:
+            verifier.verify(bundle)
+    assert "VLM provider rejected request (HTTP 400)" in str(exc_info.value)
+    assert "Channel Error" in str(exc_info.value)
+
+
+def test_http_verifier_formats_quota_failure_as_provider_error():
+    request = httpx.Request("POST", "http://mock/v1/chat/completions")
+    response = httpx.Response(402, request=request, text="Insufficient credits")
+    bundle = _make_bundle()
+    with patch(
+        "ad_classifier.vlm.verifier.chat_completion",
+        side_effect=httpx.HTTPStatusError("402", request=request, response=response),
+    ):
+        verifier = _make_http_verifier(endpoint="http://mock/v1", max_retries=2)
+        with pytest.raises(VLMProviderError) as exc_info:
+            verifier.verify(bundle)
+    message = str(exc_info.value)
+    assert "quota or credits exhausted" in message
+    assert "Insufficient credits" in message
 
 
 def test_http_verifier_parses_fenced_json():
