@@ -151,6 +151,14 @@ python -m pip install -e ".[dev]"
 install OCR, torch, or the embedding libraries. Continue through section 4 for
 torch + MiniLM/SigLIP dependencies, then install OCR below if you want local OCR.
 
+This one-liner intentionally excludes torch. First install the correct NVIDIA
+or AMD torch wheel from section 4, then run this to install the rest of the
+local Python feature set without replacing torch:
+
+```powershell
+python -m pip install --upgrade pip setuptools wheel; python -m pip install -e ".[dev,clustering,qdrant,whisper]"; python -m pip install paddlepaddle; python -m pip install paddleocr; python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+```
+
 If PowerShell blocks activation for the current terminal session:
 
 ```powershell
