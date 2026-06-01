@@ -21,7 +21,7 @@ structured records. It samples frames, extracts audio and transcripts, runs OCR,
 collects deterministic rule evidence, asks a vision-language model to verify the
 ad, writes marketing entities, and indexes both text and visual embeddings.
 
-The system is designed for analyst workflows:
+Implemented surfaces:
 
 - classify ads against a configurable taxonomy
 - extract brands, products, prices, offers, CTAs, disclaimers, contact points,
@@ -32,29 +32,22 @@ The system is designed for analyst workflows:
 - group related ads into campaigns
 - ask a tool-calling natural-language agent questions over the local database
 
-ARGUS is categorization-only. It does not gate, approve, block, escalate, or
-route ads for review. Risk labels are descriptive observation tags for analysis
-and search.
+## Implemented Components
 
-## Proof Points
+The repository includes the following runnable surfaces and local assets:
 
-ARGUS is meant to be evaluated by what it can show, not by a long architecture
-claim at the top of the README.
-
-| Capability | What visitors can inspect |
+| Area | Implementation |
 |---|---|
-| Real multimodal evidence | Frame samples, transcript segments, raw OCR, optional GLM-OCR text, rule triggers, VLM evidence, and marketing entities. |
-| Measured model benchmark | `/benchmark` shows actual OpenRouter or OpenAI-compatible endpoint calls against five existing ad artifacts, with score, latency, token, cost, and per-ad breakdowns. |
-| Local fallback included | Git LFS carries the Windows whisper.cpp runtime and `ggml-tiny.en.bin` so a clone can transcribe immediately after setup. |
-| Analyst workflows | Library review, hybrid search, visual frame search, campaign grouping, campaign research, and a read-only natural-language agent. |
-| Categorization-only stance | ARGUS classifies and tags observations for analysis. It does not approve, block, gate, escalate, or route ads for review. |
+| Multimodal evidence records | Frame samples, transcript segments, raw OCR, optional GLM-OCR text, rule triggers, VLM evidence, and marketing entities. |
+| Model benchmark page | `/benchmark` renders measured OpenRouter or OpenAI-compatible endpoint calls against five existing ad artifacts, with score, latency, token, cost, and per-ad breakdowns. |
+| Local transcription fallback | Git LFS includes the Windows whisper.cpp runtime and `ggml-tiny.en.bin` for immediate local transcription after setup. |
+| Application workflows | Library review, hybrid search, visual frame search, campaign grouping, campaign research, and a read-only natural-language agent. |
 
 ---
 
 ## Quick Start
 
-Use this when someone needs to clone the repo and run ARGUS locally with the
-provided endpoint keys.
+Local setup commands:
 
 ```powershell
 git lfs install
@@ -99,18 +92,17 @@ bytes, Git LFS was not installed or `git lfs pull` was not run.
 
 ## Installation
 
-This is the recommended Windows path for a semi-technical local install. Do the
-steps in order; most setup problems come from replacing the preinstalled torch
-GPU wheel, missing ffmpeg on `PATH`, or starting ARGUS before `config.yaml` and
-frontend dependencies exist.
+Recommended Windows setup path. Order matters: most setup problems come from
+replacing the preinstalled torch GPU wheel, missing ffmpeg on `PATH`, or
+starting ARGUS before `config.yaml` and frontend dependencies exist.
 
-Quick checklist:
+Setup checklist:
 
 1. Install Git LFS, Python, Node.js, ffmpeg, and an OpenAI-compatible inference
    engine for the VLM.
 2. Create or activate `.venv`, then install ARGUS Python dependencies.
-3. Do not install or upgrade `torch` unless you are intentionally replacing the
-   hardware-specific GPU build.
+3. Do not install or upgrade `torch` unless replacing the hardware-specific GPU
+   build.
 4. Copy `.env.local.example` to `.env.local` and add keys locally.
 5. Copy `config.example.yaml` to `config.yaml` and confirm the endpoint/model.
 6. Run `python -m ad_classifier init-db`.
@@ -171,7 +163,7 @@ python -m pip install paddlepaddle
 python -m pip install paddleocr
 ```
 
-You can also install the OCR extra after that:
+Optional OCR extra:
 
 ```powershell
 python -m pip install -e ".[ocr,dev]"
@@ -179,11 +171,11 @@ python -m pip install -e ".[ocr,dev]"
 
 ### 4. PyTorch and Embeddings
 
-Important: if you received this project with a working `.venv`, treat that torch
-install as part of the machine setup.
+Important: a working `.venv` may contain a hardware-specific torch build that is
+part of the machine setup.
 
-Do not run this in a production ARGUS environment unless you intentionally want
-to replace the existing GPU build:
+Avoid this command in a production ARGUS environment unless the existing GPU
+build is being replaced:
 
 ```powershell
 pip install torch torchvision torchaudio
@@ -202,8 +194,8 @@ ARGUS uses two embedding models that both depend on PyTorch:
 | `sentence-transformers/all-MiniLM-L6-v2` | Text vectors from transcript + OCR | 384 |
 | `google/siglip2-base-patch16-224` | Visual vectors from keyframes and text-to-image search | 768 |
 
-After your torch build is already installed, add the embedding packages without
-letting pip resolve and replace torch:
+After torch is installed, add the embedding packages without letting pip resolve
+and replace torch:
 
 ```powershell
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
@@ -213,26 +205,26 @@ python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.
 through `transformers` the first time a visual query runs. Both models cache to
 `~/.cache/huggingface/` by default.
 
-If you do not have torch installed yet, use mock embeddings for tests or set
-`image_embedder.enabled: false` in `config.yaml` until the GPU stack is ready.
-Typed visual search still loads SigLIP 2, so avoid `visual` and `visual_hybrid`
-search modes until torch and transformers are installed.
+When torch is not installed yet, mock embeddings can be used for tests or
+`image_embedder.enabled: false` can be set in `config.yaml` until the GPU stack
+is ready. Typed visual search still loads SigLIP 2, so `visual` and
+`visual_hybrid` search modes require torch and transformers.
 
 ### 5. AMD ROCm on Windows
 
 For an AMD GPU on Windows, install PyTorch from AMD's official ROCm Windows
-instructions for your driver, GPU, and Python version:
+instructions for the target driver, GPU, and Python version:
 
 <https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html>
 
 Practical notes:
 
 - Python 3.12 is commonly used by current AMD Windows ROCm wheels. If the AMD
-  install page lists Python 3.12 for your wheel, create the venv with Python
-  3.12 instead of Python 3.11.
+  install page lists Python 3.12 for the target wheel, create the venv with
+  Python 3.12 instead of Python 3.11.
 - Install torch first, then install ARGUS dependencies.
-- Do not use `--upgrade` on packages that depend on torch unless you are ready
-  to reinstall the AMD wheel.
+- Do not use `--upgrade` on packages that depend on torch unless reinstalling
+  the AMD wheel is acceptable.
 - If torch imports but reports CPU only, ARGUS will still run CPU jobs, but
   MiniLM and SigLIP 2 will be slow and visual vector search may feel unusable.
 
@@ -279,7 +271,7 @@ whisper:
 ```
 
 The bundled whisper.cpp CLI can use GPU acceleration depending on the included
-build and your local driver stack. If transcription fails, set `use_gpu: false`
+build and local driver stack. If transcription fails, set `use_gpu: false`
 first to confirm the model path and audio extraction are correct.
 
 ### 7. VLM Setup
@@ -348,14 +340,14 @@ SQLite, and run `.\start.bat`.
 
 ### Optional GLM-OCR
 
-PaddleOCR remains the grounded raw OCR engine. You can turn it off with
+PaddleOCR remains the grounded raw OCR engine. It can be disabled with
 `ocr.enabled: false`, but the only raw OCR backend supported here is local
 PaddleOCR.
 
 GLM-OCR is intended for text-heavy frames, end cards, article graphics, and CTA
-screens. If you keep a local GLM-OCR inference endpoint running, enable it for
-normal local ingestion; the worker calls it on demand only for frames selected
-by the gating rules. It is stored separately with engine `glm_ocr` in
+screens. When a local GLM-OCR inference endpoint is running, it can be enabled
+for normal local ingestion; the worker calls it on demand only for selected frames.
+It is stored separately with engine `glm_ocr` in
 `ocr_items` and included in search text when `glm_ocr.include_in_search: true`.
 It is not included in the classifier VLM bundle unless
 `glm_ocr.include_in_vlm_bundle: true`.
@@ -398,8 +390,8 @@ python -m ad_classifier init-db
 ```
 
 `start.bat` opens separate command windows for the API, worker, and Vite
-frontend. It also frees the default API/frontend ports first, so do not run it if
-you need to preserve another process on ports `8000` or `5173`.
+frontend. It also frees the default API/frontend ports first, so avoid it when
+another process must remain on ports `8000` or `5173`.
 
 Default local services:
 
@@ -440,10 +432,9 @@ themed login page. Authentication is disabled by default.
 - `http://127.0.0.1:8000/docs` loads the FastAPI docs.
 - `http://127.0.0.1:5173` loads the ARGUS frontend.
 - The worker window says it launched the SQLite-backed worker.
-- Your OpenAI-compatible VLM inference engine is already running before you
-  upload an ad.
+- The OpenAI-compatible VLM inference engine is running before ad upload.
 - For visual search, the torch verification command above reports a usable GPU
-  or you intentionally configured the image embedder for CPU.
+  or the image embedder is configured for CPU.
 
 ---
 
@@ -545,7 +536,7 @@ Enable in `config.yaml`:
 api:
   public:
     enabled: true
-    api_key: "your-secret-key"
+    api_key: "<api-key>"
 ```
 
 Committed examples keep `api_key: null`; in that state `/api/public/*` routes
@@ -712,8 +703,8 @@ GLM-OCR output is stored separately as `ocr_items.engine = "glm_ocr"`. It has no
 Paddle-style bounding boxes or confidence, so it is useful for search recall and
 readable text enrichment, not as the authoritative source for prices, dates,
 APR, or legal terms. Keep `glm_ocr.include_in_search: true` and
-`glm_ocr.include_in_vlm_bundle: false` unless you explicitly want the classifier
-to see GLM text.
+`glm_ocr.include_in_vlm_bundle: false` unless classifier prompts should include
+GLM text.
 
 #### 6. Transcript Alignment and Rules
 
@@ -723,8 +714,8 @@ patterns over OCR and transcript text. Rule triggers are persisted in
 `rule_triggers` and later become structured evidence for classification,
 marketing extraction, and API evidence views.
 
-Rules are descriptive. ARGUS is categorization-only: rules can add category or
-observation evidence, but they never approve, block, gate, or escalate an ad.
+Rules add structured category and observation evidence used by classification,
+search, and API evidence views.
 
 #### 7. Evidence Bundle and VLM Verification
 
@@ -891,9 +882,9 @@ Different parts of ARGUS use different acceleration paths:
 
 | Component | Uses GPU when |
 |---|---|
-| VLM classification | Your OpenAI-compatible inference engine is configured for GPU |
-| GLM-OCR | Your configured local/remote GLM-OCR inference engine is configured for GPU |
-| Whisper transcript | `whisper.whisper_cpp.use_gpu: true` and the bundled CLI works with your driver |
+| VLM classification | The OpenAI-compatible inference engine is configured for GPU |
+| GLM-OCR | The configured local/remote GLM-OCR inference engine is configured for GPU |
+| Whisper transcript | `whisper.whisper_cpp.use_gpu: true` and the bundled CLI works with the installed driver |
 | PaddleOCR | Usually CPU by default in this project |
 | MiniLM text embeddings | `text_embedder.device: cuda` and torch GPU is available |
 | SigLIP 2 visual embeddings | `image_embedder.device: cuda` and torch GPU is available |

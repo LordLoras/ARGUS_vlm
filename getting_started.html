@@ -441,9 +441,9 @@
         <div class="eyebrow">Standalone setup guide</div>
         <h1>ARGUS Getting Started</h1>
         <p>
-          Use this when cloning ARGUS from GitHub or operating a delivered
-          fallback copy. It covers the Windows local run path, bundled model
-          assets, endpoint configuration, and key handoff expectations.
+          Windows local setup for a GitHub clone or delivered fallback copy.
+          Covers bundled model assets, endpoint configuration, local secrets,
+          and first-run checks.
         </p>
         <div class="hero-actions">
           <a class="button primary" href="#quick-start">Start Setup</a>
@@ -475,26 +475,26 @@
           </div>
           <div class="content">
             <p>
-              The preferred fallback path is to clone from GitHub, pull Git LFS
-              assets, then configure local secrets. If you received a delivered
-              folder instead, copy it to a local path such as
-              <code>C:\Users\you\Desktop\ads_classification</code> and open
+              The preferred fallback path is a GitHub clone with Git LFS assets
+              pulled locally, followed by local secret configuration. Delivered
+              folders should be copied to a stable local path such as
+              <code>C:\ARGUS\ads_classification</code> before opening
               PowerShell inside that folder.
             </p>
             <pre><code>git clone https://github.com/LordLoras/ARGUS_vlm.git
 cd ARGUS_vlm
 git lfs pull</code></pre>
             <p>
-              You should see <code>pyproject.toml</code>,
+              The folder should contain <code>pyproject.toml</code>,
               <code>config.example.yaml</code>, <code>start.bat</code>,
               <code>frontend\</code>, <code>tools\whisper.cpp\</code>, and
               <code>ad_classifier\</code>.
             </p>
             <div class="callout">
               <strong>Assumption for this guide:</strong> the clone or delivered
-              folder does not include a working <code>.venv</code>. You will create a
-              fresh environment and install the correct torch build for your
-              GPU before installing the embedding packages.
+              folder does not include a working <code>.venv</code>. Create a
+              fresh environment, install the correct torch build for the target
+              GPU, then install the embedding packages.
             </div>
             <ol>
               <li>Install or verify Git LFS, Python, Node.js, ffmpeg, and an OpenAI-compatible inference engine.</li>
@@ -584,7 +584,7 @@ python -m pip install -e ".[dev,clustering]"</code></pre>
               <strong>Torch is installed separately.</strong> ARGUS
               intentionally omits <code>torch</code>, <code>torchvision</code>,
               and <code>torchaudio</code> from <code>pyproject.toml</code>
-              because the correct Windows build depends on your hardware.
+              because the correct Windows build depends on the host hardware.
             </div>
           </div>
         </section>
@@ -597,7 +597,7 @@ python -m pip install -e ".[dev,clustering]"</code></pre>
           <div class="content">
             <p>
               Install torch before the embedding libraries. Use the current
-              official command for your GPU and Python version; wheel URLs
+              official command for the target GPU and Python version; wheel URLs
               change over time, so treat the examples below as the shape of the
               command and verify them against the official pages.
             </p>
@@ -607,7 +607,7 @@ python -m pip install -e ".[dev,clustering]"</code></pre>
               Use the PyTorch selector at
               <a href="https://pytorch.org/get-started/locally/">pytorch.org/get-started/locally</a>.
               Choose Windows, Pip, Python, and the CUDA runtime that matches the
-              selector recommendation for your driver.
+              selector recommendation for the installed driver.
             </p>
             <pre><code># Example shape only: use the exact CUDA index URL from the PyTorch selector.
 python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126</code></pre>
@@ -625,9 +625,9 @@ python -m pip install --no-cache-dir https://repo.radeon.com/rocm/windows/.../to
 
             <h3>CPU fallback</h3>
             <p>
-              CPU torch works for tests and small demos but visual search and
-              embedding backfills will be slow. Use this only when GPU setup is
-              unavailable.
+              CPU torch works for tests and small demos, but visual search and
+              embedding backfills will be slow. This path is intended for hosts
+              without GPU setup.
             </p>
             <pre><code>python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu</code></pre>
 
@@ -643,7 +643,7 @@ print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else
             <h3>Install embedding libraries after torch</h3>
             <p>
               Use <code>--no-deps</code> here so these libraries do not replace
-              the torch wheel you just installed.
+              the installed torch wheel.
             </p>
             <pre><code>python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1</code></pre>
           </div>
@@ -731,11 +731,10 @@ notepad .\.env.local</code></pre>
               a different channel and rotate keys after the handoff window.
             </div>
             <p>
-              A local fallback operator should clone the repo, run
+              Local fallback setup should clone the repo, run
               <code>git lfs pull</code>, copy <code>.env.local.example</code>,
-              paste the provided keys locally, copy
-              <code>config.example.yaml</code> to <code>config.yaml</code>, then
-              run the normal install steps below.
+              add runtime keys locally, copy <code>config.example.yaml</code> to
+              <code>config.yaml</code>, then run the normal install steps below.
             </p>
           </div>
         </section>
@@ -821,8 +820,8 @@ cd ..</code></pre>
             </div>
             <h3>Remote viewer testing</h3>
             <p>
-              If you expose ARGUS through a temporary tunnel for another person
-              to test, expose only the frontend on port <code>5173</code>.
+              For temporary remote testing through a tunnel, expose only the
+              frontend on port <code>5173</code>.
               The browser will keep API and media requests on that same origin,
               and Vite forwards <code>/api</code> and <code>/data</code> to the
               local FastAPI service at <code>http://127.0.0.1:8000</code>.
@@ -856,11 +855,11 @@ ARGUS_AUTH_SESSION_TTL_HOURS=12
 "@
 npm run dev</code></pre>
             <p>
-              Add users by adding comma-separated
+              Add login accounts as comma-separated
               <code>username:password</code> pairs, then restart Vite. Use HTTPS
               on the public domain and keep the FastAPI port private. Set
-              <code>ARGUS_AUTH_MODE=basic</code> only if you want the
-              browser-native Basic Auth prompt instead.
+              <code>ARGUS_AUTH_MODE=basic</code> only for the browser-native
+              Basic Auth prompt.
             </p>
           </div>
         </section>
@@ -893,7 +892,7 @@ npm run dev</code></pre>
                 </tr>
                 <tr>
                   <td>Inference engine</td>
-                  <td>Running before you upload an ad.</td>
+                  <td>Running before ad upload.</td>
                 </tr>
                 <tr>
                   <td>Visual search</td>

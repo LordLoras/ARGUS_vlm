@@ -505,10 +505,9 @@
             ARGUS starts with a local video ad and ends with an analyst-ready
             record: what the ad shows, what it says, who or what it promotes,
             which campaign it resembles, and why the system reached that
-            classification. The system is categorization-only: it does not
-            approve, block, gate, or escalate ads. Observation tags such as
-            urgency or before/after claims are descriptive search fields, not
-            policy decisions.
+            classification. Category labels, observation tags, evidence, and
+            marketing entities are stored as structured fields for search and
+            analysis.
           </p>
           <div class="grid three">
             <div class="card">
@@ -558,8 +557,8 @@
             </tbody>
           </table>
           <p>
-            For temporary remote testing, the frontend is the only service that
-            needs to be exposed. Keeping browser requests same-origin avoids
+            For temporary remote testing, expose only the frontend service.
+            Keeping browser requests same-origin avoids
             rotating API tunnel URLs and avoids widening FastAPI CORS for
             short-lived hosts. <code>VITE_API_BASE_URL</code> is reserved for
             deliberate split-origin deployments; otherwise the Vite proxy sends
@@ -652,8 +651,8 @@
               <p>
                 Whisper segments are aligned to frames with a configurable time
                 window. Deterministic rules over OCR and transcript text produce
-                category evidence and descriptive observation tags. Rules never
-                gate content.
+                category evidence and observation tags used by downstream
+                classification records.
               </p>
             </div>
           </div>

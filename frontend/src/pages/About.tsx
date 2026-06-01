@@ -130,10 +130,10 @@ const PROBLEM_CARDS: CardItem[] = [
   },
 ];
 
-const AUDIENCE_CARDS: CardItem[] = [
+const SCOPE_CARDS: CardItem[] = [
   {
-    title: "Built for ad analysts",
-    body: "ARGUS is for teams that need to inspect creative, compare campaigns, mine claims, and retrieve evidence from a growing ad database.",
+    title: "Ad evidence workspace",
+    body: "Supports creative inspection, campaign comparison, claim mining, and evidence retrieval from a growing ad database.",
     icon: Radar,
     color: "var(--sky)",
   },
@@ -144,8 +144,8 @@ const AUDIENCE_CARDS: CardItem[] = [
     color: "var(--emerald)",
   },
   {
-    title: "Categorization only",
-    body: "All ingested content is treated as valid TV, promo, or ad material. ARGUS does not approve, reject, block, escalate, or route ads for review.",
+    title: "Structured taxonomy output",
+    body: "Records category labels, observation tags, confidence, evidence timestamps, and marketing entities in one classification record.",
     icon: ShieldCheck,
     color: "var(--amber)",
   },
@@ -259,7 +259,7 @@ const FEATURE_CARDS: CardItem[] = [
   },
   {
     title: "Knowledge Graph",
-    body: "Interactive graph visualization of entity relationships across your ad library. Select a node to trace brand, product, and category connections. Designed to expand with agentic auto-discovery of emerging signals and cross-campaign patterns.",
+    body: "Interactive graph visualization of entity relationships across the ad library. Select a node to trace brand, product, and category connections. Designed to expand with agentic auto-discovery of emerging signals and cross-campaign patterns.",
     icon: Network,
     color: "var(--emerald)",
   },
@@ -539,7 +539,7 @@ export function About() {
             <p className="about-hero-subtitle">
               A multimodal system that turns video ads into searchable evidence:
               categories, marketing entities, campaign variants, visual matches,
-              and agent answers you can trace back to the source.
+              and source-traceable agent answers.
             </p>
             {benchmarkLeader ? (
               <Link to="/benchmark" className="about-benchmark-callout">
@@ -593,15 +593,15 @@ export function About() {
         <CardGrid items={PROBLEM_CARDS} />
       </FadeSection>
 
-      <FadeSection className="about-section" id="audience">
+      <FadeSection className="about-section" id="scope">
         <div className="about-section-head">
           <span>02</span>
           <div>
-            <h2>Audience And Scope</h2>
-            <p>Who the system is for, what it ingests, and the boundaries it keeps.</p>
+            <h2>Scope And Inputs</h2>
+            <p>What the system ingests, preserves, and exposes for analysis.</p>
           </div>
         </div>
-        <CardGrid items={AUDIENCE_CARDS} columns="two" />
+        <CardGrid items={SCOPE_CARDS} columns="two" />
       </FadeSection>
 
       <FadeSection className="about-section" id="demo-path">
@@ -705,7 +705,7 @@ export function About() {
           <span>06</span>
           <div>
             <h2>Ask In Plain Language</h2>
-            <p>The agent answers natural-language queries over your entire ad database.</p>
+            <p>The agent answers natural-language queries over the full ad database.</p>
           </div>
         </div>
         <div className="about-question-cloud">
@@ -765,7 +765,7 @@ export function About() {
           <span>10</span>
           <div>
             <h2>Under The Hood</h2>
-            <p>A semi-technical summary of the stack layers.</p>
+            <p>A concise summary of the stack layers.</p>
           </div>
         </div>
         <div className="about-stack-table">

@@ -86,7 +86,7 @@ export function ModelBenchmark() {
       <main className="page benchmark-page">
         <section className="benchmark-hero">
           <div>
-            <span className="eyebrow">Measured visitor benchmark</span>
+            <span className="eyebrow">Measured endpoint benchmark</span>
             <h1>VLM routes scored on five existing ad artifacts</h1>
             <p>
               Real OpenRouter and local endpoint calls using selected frames, OCR, transcript,
