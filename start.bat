@@ -25,7 +25,8 @@ echo [start.bat] Starting ARGUS API, worker, and frontend...
 
 REM -u keeps Python's stdout unbuffered so uvicorn logs appear immediately.
 start "ARGUS API" cmd /k "cd /d "%~dp0" && echo [api] launching uvicorn on http://127.0.0.1:%PORT_API% && "%~dp0.venv\Scripts\python.exe" -u -m ad_classifier api --host 127.0.0.1 --port %PORT_API%"
-start "ARGUS Worker" cmd /k "cd /d "%~dp0" && echo [worker] launching SQLite-backed worker && "%~dp0.venv\Scripts\python.exe" -u -m ad_classifier worker"
+set "KMP_DUPLICATE_LIB_OK=TRUE"
+start "ARGUS Worker" cmd /k "cd /d "%~dp0" && set "KMP_DUPLICATE_LIB_OK=TRUE" && echo [worker] launching SQLite-backed worker && "%~dp0.venv\Scripts\python.exe" -u -m ad_classifier worker"
 
 if exist "frontend\node_modules" (
   start "ARGUS Frontend" cmd /k "cd /d "%~dp0frontend" && echo [web] vite dev on http://127.0.0.1:%PORT_WEB% && npm run dev"

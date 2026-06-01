@@ -56,21 +56,19 @@ class PaddleOCREngine(OCREngine):
                 "Note: use the CPU wheel on Windows AMD GPU systems."
             ) from exc
 
-        # PaddleOCR 3.x uses a 'device' kwarg; older versions used use_gpu.
         # Windows AMD GPU is not supported by PaddlePaddle; force CPU.
-        ocr_device = (
-            self._device if self._device != "cpu" and sys.platform != "win32"
-            else "cpu"
-        )
-        if ocr_device != "cpu":
+        use_gpu = self._device != "cpu" and sys.platform != "win32"
+        if use_gpu:
             try:
-                paddle.set_device(ocr_device)
+                paddle.set_device(self._device)
             except Exception:
-                ocr_device = "cpu"
+                use_gpu = False  # best-effort; fall back to CPU
 
         self._ocr = PaddleOCR(
+            use_angle_cls=False,
             lang=self._lang,
-            device=ocr_device,
+            use_gpu=use_gpu,
+            show_log=False,
         )
         return self._ocr
 
