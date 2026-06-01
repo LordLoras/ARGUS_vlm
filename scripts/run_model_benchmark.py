@@ -33,6 +33,8 @@ ADS = [
 ]
 
 OPENROUTER_MODELS = [
+    "openai/gpt-5.5",
+    "google/gemini-3.5-flash",
     "stepfun/step-3.7-flash",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.5",
@@ -41,6 +43,8 @@ OPENROUTER_MODELS = [
 ]
 
 MODEL_PRICING_PER_M: dict[str, dict[str, float]] = {
+    "openai/gpt-5.5": {"prompt": 5.0, "completion": 30.0},
+    "google/gemini-3.5-flash": {"prompt": 1.5, "completion": 9.0},
     "stepfun/step-3.7-flash": {"prompt": 0.2, "completion": 1.15},
     "stepfun/step-3.7-flash-max": {"prompt": 0.2, "completion": 1.15},
     "moonshotai/kimi-k2.6": {"prompt": 0.684, "completion": 3.42},
@@ -49,31 +53,9 @@ MODEL_PRICING_PER_M: dict[str, dict[str, float]] = {
     "google/gemma-4-31b-it": {"prompt": 0.12, "completion": 0.37},
 }
 
-PRICE_ONLY_MODELS: list[dict[str, Any]] = [
-    {
-        "id": "google/gemini-3.5-flash",
-        "name": "Gemini 3.5 Flash",
-        "provider": "Google",
-        "prompt_price_per_m": 1.5,
-        "completion_price_per_m": 9.0,
-    },
-    {
-        "id": "openai/gpt-5.5",
-        "name": "GPT-5.5",
-        "provider": "OpenAI",
-        "prompt_price_per_m": 5.0,
-        "completion_price_per_m": 30.0,
-    },
-    {
-        "id": "openai/gpt-5.5-pro",
-        "name": "GPT-5.5 Pro",
-        "provider": "OpenAI",
-        "prompt_price_per_m": 30.0,
-        "completion_price_per_m": 180.0,
-    },
-]
-
 DISPLAY_NAMES: dict[str, str] = {
+    "openai/gpt-5.5": "GPT-5.5",
+    "google/gemini-3.5-flash": "Gemini 3.5 Flash",
     "stepfun/step-3.7-flash": "Step 3.7 Flash",
     "stepfun/step-3.7-flash-max": "Step 3.7 Flash Max",
     "moonshotai/kimi-k2.6": "Kimi K2.6",
@@ -393,11 +375,15 @@ def call_model(endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: 
         "response_format": {"type": "json_object"},
         "stream": False,
     }
+    if endpoint.id == "openai/gpt-5.5":
+        payload.pop("temperature", None)
     if endpoint.route_type == "OpenRouter":
         if endpoint.id == "stepfun/step-3.7-flash":
             payload["reasoning"] = {"effort": "low", "exclude": True}
         elif endpoint.id == "stepfun/step-3.7-flash-max":
             payload["reasoning"] = {"effort": "xhigh", "exclude": True}
+        elif endpoint.id == "google/gemini-3.5-flash":
+            payload["reasoning"] = {"effort": "low", "exclude": True}
         else:
             payload["reasoning"] = {"effort": "none", "exclude": True}
             payload["include_reasoning"] = False
@@ -731,19 +717,18 @@ def summarize_results(
         "source": "actual OpenRouter/local endpoint calls",
         "raw_output_path": raw_output_path,
         "protocol": {
-            "temperature": 0,
+            "temperature": "0 where supported; GPT-5.5 uses provider default because temperature is not listed for that route",
             "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
             "response_format": "json_object",
             "openrouter_thinking": (
-                'reasoning.effort="none" except StepFun, which required '
-                'reasoning.effort="low"; StepFun Max uses reasoning.effort="xhigh"'
+                'reasoning.effort="none" except mandatory-reasoning routes: '
+                'StepFun low and Gemini 3.5 Flash use "low"; StepFun Max uses "xhigh"'
             ),
             "local_thinking": "chat_template_kwargs.enable_thinking=false",
             "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10.",
         },
         "ads": ads,
         "models": sorted(by_model, key=lambda row: row["score"], reverse=True),
-        "price_estimates": price_estimates(by_model),
     }
 
 
@@ -803,6 +788,8 @@ def provider_for_endpoint(model_id: str) -> str:
         return "Xiaomi"
     if model_id.startswith("google/"):
         return "Google"
+    if model_id.startswith("openai/"):
+        return "OpenAI"
     if model_id.startswith("qwen"):
         return "Qwen endpoint"
     return "Reference"
@@ -810,6 +797,8 @@ def provider_for_endpoint(model_id: str) -> str:
 
 def readout_for_model(model_id: str) -> str:
     return {
+        "openai/gpt-5.5": "Measured frontier route; highest expected reasoning quality with materially higher provider cost.",
+        "google/gemini-3.5-flash": "Measured current high-efficiency Gemini route; OpenRouter requires low reasoning on this endpoint.",
         "moonshotai/kimi-k2.6": "Measured strongest overall quality on the selected artifact ladder.",
         "moonshotai/kimi-k2.5": "Measured balanced quality and cost with a lower dense-OCR ceiling than K2.6.",
         "stepfun/step-3.7-flash": "Measured fast paid route; useful for cleaner artifacts.",
@@ -864,49 +853,10 @@ def thinking_off_for(model_id: str, route_type: str) -> str:
             return 'reasoning.effort="low"'
         if model_id == "stepfun/step-3.7-flash-max":
             return 'reasoning.effort="xhigh"'
+        if model_id == "google/gemini-3.5-flash":
+            return 'reasoning.effort="low"'
         return 'reasoning.effort="none"'
     return "enable_thinking=false"
-
-
-def price_estimates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    basis_rows = [
-        row
-        for row in rows
-        if row["successful_ads"] == row["total_ads"]
-        and row["prompt_tokens"] > 0
-        and row["completion_tokens"] > 0
-        and not row["id"].startswith("stepfun/")
-    ]
-    prompt_basis = median_int([row["prompt_tokens"] for row in basis_rows]) if basis_rows else 0
-    completion_basis = (
-        median_int([row["completion_tokens"] for row in basis_rows]) if basis_rows else 0
-    )
-    estimates: list[dict[str, Any]] = []
-    for model in PRICE_ONLY_MODELS:
-        cost = (
-            prompt_basis * float(model["prompt_price_per_m"]) / 1_000_000
-            + completion_basis * float(model["completion_price_per_m"]) / 1_000_000
-        )
-        estimates.append(
-            {
-                **model,
-                "basis_prompt_tokens": prompt_basis,
-                "basis_completion_tokens": completion_basis,
-                "estimated_cost_usd": round(cost, 6),
-                "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run.",
-            }
-        )
-    return estimates
-
-
-def median_int(values: list[int]) -> int:
-    if not values:
-        return 0
-    sorted_values = sorted(values)
-    mid = len(sorted_values) // 2
-    if len(sorted_values) % 2:
-        return int(sorted_values[mid])
-    return int(round((sorted_values[mid - 1] + sorted_values[mid]) / 2))
 
 
 def normalize_chat_endpoint(endpoint: str) -> str:

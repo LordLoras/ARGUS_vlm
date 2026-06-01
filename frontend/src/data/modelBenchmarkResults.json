@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-06-01T05:31:47.172333+00:00",
+  "generated_at": "2026-06-01T05:44:28.563690+00:00",
   "benchmark_date_label": "June 1, 2026",
   "source": "actual OpenRouter/local endpoint calls",
   "raw_output_path": "data/benchmarks/model_benchmark_latest_raw.json",
   "protocol": {
-    "temperature": 0,
+    "temperature": "0 where supported; GPT-5.5 uses provider default because temperature is not listed for that route",
     "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
     "response_format": "json_object",
-    "openrouter_thinking": "reasoning.effort=\"none\" except StepFun low uses \"low\" and StepFun Max uses \"xhigh\"",
+    "openrouter_thinking": "reasoning.effort=\"none\" except mandatory-reasoning routes: StepFun low and Gemini 3.5 Flash use \"low\"; StepFun Max uses \"xhigh\"",
     "local_thinking": "chat_template_kwargs.enable_thinking=false",
     "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10."
   },
@@ -214,6 +214,122 @@
       ],
       "relative_performance_pct": 100.0,
       "performance_price_index": 97.9
+    },
+    {
+      "id": "openai/gpt-5.5",
+      "name": "GPT-5.5",
+      "provider": "OpenAI",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "openai/gpt-5.5",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 92.38,
+      "completion_seconds": 42.69,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 24051,
+      "completion_tokens": 2090,
+      "estimated_cost_usd": 0.182955,
+      "readout": "Measured frontier route; highest expected reasoning quality with materially higher provider cost.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 89.3,
+          "seconds": 7.625,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 89.3,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 11.05,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 93.16,
+          "seconds": 6.282,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 93.16,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 11.25,
+            "offers_ctas_disclaimers": 11.91,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 96.06,
+          "seconds": 7.392,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Strong rubric match.",
+          "breakdown": {
+            "total": 96.06,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.33,
+            "offers_ctas_disclaimers": 12.73,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 90.12,
+          "seconds": 11.187,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 90.12,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 7.5,
+            "offers_ctas_disclaimers": 12.62,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.24,
+          "seconds": 10.205,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.24,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 12.5,
+            "offers_ctas_disclaimers": 10.74,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 99.2,
+      "performance_price_index": 2.2
     },
     {
       "id": "moonshotai/kimi-k2.5",
@@ -680,6 +796,122 @@
       "performance_price_index": null
     },
     {
+      "id": "google/gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash",
+      "provider": "Google",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "google/gemini-3.5-flash",
+      "thinking_off": "reasoning.effort=\"low\"",
+      "score": 89.0,
+      "completion_seconds": 29.82,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 74685,
+      "completion_tokens": 2315,
+      "estimated_cost_usd": 0.132862,
+      "readout": "Measured current high-efficiency Gemini route; OpenRouter requires low reasoning on this endpoint.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 82.1,
+          "seconds": 6.114,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 82.1,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 8.85,
+            "evidence": 10.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 92.17,
+          "seconds": 6.055,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: evidence.",
+          "breakdown": {
+            "total": 92.17,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 12.17,
+            "evidence": 10.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 87.75,
+          "seconds": 5.275,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: evidence.",
+          "breakdown": {
+            "total": 87.75,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 11.25,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 10.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 89.21,
+          "seconds": 5.827,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 89.21,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 14.21,
+            "evidence": 10.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.75,
+          "seconds": 6.546,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.75,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 10.12,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 95.5,
+      "performance_price_index": 3.0
+    },
+    {
       "id": "stepfun/step-3.7-flash",
       "name": "Step 3.7 Flash",
       "provider": "StepFun",
@@ -910,41 +1142,6 @@
       ],
       "relative_performance_pct": 64.6,
       "performance_price_index": 17.4
-    }
-  ],
-  "price_estimates": [
-    {
-      "id": "google/gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash",
-      "provider": "Google",
-      "prompt_price_per_m": 1.5,
-      "completion_price_per_m": 9.0,
-      "basis_prompt_tokens": 26905,
-      "basis_completion_tokens": 2992,
-      "estimated_cost_usd": 0.067285,
-      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
-    },
-    {
-      "id": "openai/gpt-5.5",
-      "name": "GPT-5.5",
-      "provider": "OpenAI",
-      "prompt_price_per_m": 5.0,
-      "completion_price_per_m": 30.0,
-      "basis_prompt_tokens": 26905,
-      "basis_completion_tokens": 2992,
-      "estimated_cost_usd": 0.224285,
-      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
-    },
-    {
-      "id": "openai/gpt-5.5-pro",
-      "name": "GPT-5.5 Pro",
-      "provider": "OpenAI",
-      "prompt_price_per_m": 30.0,
-      "completion_price_per_m": 180.0,
-      "basis_prompt_tokens": 26905,
-      "basis_completion_tokens": 2992,
-      "estimated_cost_usd": 1.34571,
-      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
     }
   ]
 }
