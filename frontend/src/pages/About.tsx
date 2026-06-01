@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
   BadgeInfo,
+  BarChart3,
   BrainCircuit,
   Clock3,
   Database,
@@ -31,6 +32,7 @@ import {
 
 import bannerUrl from "../../banner.jpg";
 import logoUrl from "../../logo-mark.png";
+import benchmarkData from "../data/modelBenchmarkResults.json";
 
 type DemoStep = {
   label: string;
@@ -47,6 +49,22 @@ type CardItem = {
   icon: LucideIcon;
   color?: string;
 };
+
+type BenchmarkSummaryModel = {
+  name: string;
+  route_type: string;
+  score: number;
+  completion_seconds: number;
+  successful_ads: number;
+  total_ads: number;
+};
+
+type BenchmarkSummaryPayload = {
+  benchmark_date_label: string;
+  models: BenchmarkSummaryModel[];
+};
+
+const benchmarkSummary = benchmarkData as BenchmarkSummaryPayload;
 
 const DEMO_STEPS: DemoStep[] = [
   {
@@ -482,6 +500,16 @@ function CardGrid({ items, columns = "three" }: { items: CardItem[]; columns?: "
 export function About() {
   const [activeStep, setActiveStep] = useState(0);
   const [paused, setPaused] = useState(false);
+  const measuredModels = benchmarkSummary.models.filter(
+    (model) => model.total_ads > 0 && model.successful_ads === model.total_ads
+  );
+  const benchmarkLeader = measuredModels[0];
+  const paidBenchmarkModels = measuredModels.filter((model) => model.route_type === "OpenRouter");
+  const fastestPaidModel = paidBenchmarkModels.length
+    ? paidBenchmarkModels.reduce((best, model) =>
+        model.completion_seconds < best.completion_seconds ? model : best
+      )
+    : undefined;
 
   useEffect(() => {
     if (paused) return;
@@ -513,6 +541,20 @@ export function About() {
               categories, marketing entities, campaign variants, visual matches,
               and agent answers you can trace back to the source.
             </p>
+            {benchmarkLeader ? (
+              <Link to="/benchmark" className="about-benchmark-callout">
+                <span className="about-benchmark-mark">
+                  <BarChart3 size={17} />
+                  Model benchmark
+                </span>
+                <strong>{measuredModels.length} measured routes on five ad artifacts</strong>
+                <em>
+                  Leader: {benchmarkLeader.name} at {benchmarkLeader.score.toFixed(1)} / 100
+                  {fastestPaidModel ? `; fastest paid route: ${fastestPaidModel.name} in ${formatAboutSeconds(fastestPaidModel.completion_seconds)}.` : "."}
+                </em>
+                <ArrowRight size={16} />
+              </Link>
+            ) : null}
             <div className="about-hero-actions">
               <a href="#demo-path" className="about-btn about-btn-primary">
                 <Play size={15} />
@@ -795,4 +837,11 @@ export function About() {
       </footer>
     </div>
   );
+}
+
+function formatAboutSeconds(seconds: number) {
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return `${minutes}m ${remainder}s`;
 }

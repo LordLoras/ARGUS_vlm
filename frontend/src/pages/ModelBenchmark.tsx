@@ -107,9 +107,8 @@ export function ModelBenchmark() {
             <div>
               <strong>{failures.length} route{failures.length === 1 ? "" : "s"} did not produce scored results.</strong>
               <p>
-                StepFun rejected the required no-thinking setting, and the local Qwen endpoint
-                was unreachable during this run. They remain visible as measured failures rather
-                than being estimated.
+                Failed routes remain visible as measured failures rather than being estimated
+                or replaced with projected numbers.
               </p>
             </div>
           </section>
