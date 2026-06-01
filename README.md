@@ -144,44 +144,60 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev]"
 ```
 
-`.[dev]` installs the API, worker, CLI, and test tooling. It does **not**
-install OCR, torch, or the embedding libraries. Continue through section 4 for
-torch + MiniLM/SigLIP dependencies, then install OCR below if you want local OCR.
+`.[dev]` is a Python extra from `pyproject.toml`. It installs the editable ARGUS
+package plus developer/test tools. It intentionally does not install OCR,
+PyTorch, or embedding model packages.
 
-This one-liner intentionally excludes torch. First install the correct NVIDIA
-or AMD torch wheel from section 4, then run this for the default local runtime
-without unused optional backends or replacing torch:
+For a normal local setup, use this order:
+
+1. Install the editable app and dev tools:
+
+   ```powershell
+   python -m pip install -e ".[dev]"
+   ```
+
+2. Install the correct PyTorch wheel for your NVIDIA or AMD GPU using
+   [section 4](#4-pytorch-and-embeddings).
+
+3. Install the embedding packages without letting pip replace that torch wheel:
+
+   ```powershell
+   python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+   ```
+
+4. Install local OCR:
+
+   ```powershell
+   python -m pip install paddlepaddle==2.6.2
+   python -m pip install paddleocr==2.7.3
+   ```
+
+Same commands as a compact copy/paste block:
 
 ```powershell
-python -m pip install --upgrade pip setuptools wheel; python -m pip install -e ".[dev]"; python -m pip install paddlepaddle; python -m pip install paddleocr; python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install -e ".[dev]"
+python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install paddlepaddle==2.6.2
+python -m pip install paddleocr==2.7.3
 ```
 
-Install optional extras only when you actively need them: `.[clustering]` for
-campaign discovery experiments, `.[qdrant]` for a future Qdrant backend, or
-`.[whisper]` if switching from bundled whisper.cpp to `faster-whisper`.
+Optional extras are available, but do not install them by default:
+
+| Extra | Install when |
+|---|---|
+| `.[ocr]` | You want pip to install the pinned Paddle stack (`paddlepaddle==2.6.2`, `paddleocr==2.7.3`) instead of running the two manual OCR commands. Manual install is usually clearer on Windows. |
+| `.[embeddings]` | You are not preserving a custom GPU torch wheel. For this project, prefer the `--no-deps` embedding command above. |
+| `.[clustering]` | You are actively running campaign discovery experiments. |
+| `.[qdrant]` | You are testing a future Qdrant vector backend. The default backend is `sqlite-vec`. |
+| `.[whisper]` | You are switching from bundled whisper.cpp to `faster-whisper`. |
 
 If PowerShell blocks activation for the current terminal session:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process RemoteSigned
 .\.venv\Scripts\Activate.ps1
-```
-
-Install OCR separately on Windows. Installing `paddlepaddle` first usually gives
-clearer errors if the Paddle stack has a platform issue:
-
-```powershell
-python -m pip install paddlepaddle
-python -m pip install paddleocr
-```
-
-Optional OCR extra:
-
-```powershell
-python -m pip install -e ".[ocr,dev]"
 ```
 
 ### 4. PyTorch and Embeddings
@@ -970,8 +986,9 @@ structured output.
 `python -m ad_classifier reindex-visual-frames` for ads processed before the
 per-frame index existed.
 
-**PaddleOCR fails to import.** Install `paddlepaddle` before `paddleocr` on
-Windows, then reinstall the OCR extra if needed.
+**PaddleOCR fails to import.** Install the pinned versions with
+`python -m pip install paddlepaddle==2.6.2` followed by
+`python -m pip install paddleocr==2.7.3`.
 
 **`sentence-transformers is not installed`.** Install the embedding libraries in
 the same active venv that runs ARGUS:

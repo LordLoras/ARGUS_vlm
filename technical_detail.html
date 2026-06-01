@@ -1005,10 +1005,10 @@
             torch, embedding libraries with <code>--no-deps</code>, OCR
             packages, frontend packages.
           </p>
-          <pre><code>python -m pip install -e ".[dev,clustering]"
+          <pre><code>python -m pip install -e ".[dev]"
 # Install torch for NVIDIA, AMD, or CPU using the hardware-specific official command.
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
-python -m pip install paddlepaddle paddleocr
+python -m pip install paddlepaddle==2.6.2 paddleocr==2.7.3
 cd frontend
 npm ci</code></pre>
         </div>

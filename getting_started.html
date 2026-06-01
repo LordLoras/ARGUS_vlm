@@ -567,10 +567,9 @@ ffprobe -version</code></pre>
             <pre><code>python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev,clustering]"</code></pre>
+python -m pip install -e ".[dev]"</code></pre>
             <p>
-              This installs the API, worker, CLI, tests, and campaign
-              clustering dependencies. It does not install torch, OCR, or the
+              This installs the API, worker, CLI, and tests. It does not install torch, OCR, or the
               MiniLM/SigLIP embedding libraries; install those in the sections
               below from the same active venv.
             </p>
@@ -581,7 +580,7 @@ python -m pip install -e ".[dev,clustering]"</code></pre>
               <tbody>
                 <tr><td>Core + developer tools</td><td><code>python -m pip install -e ".[dev]"</code></td><td>API, worker, SQLite, tests, CLI.</td></tr>
                 <tr><td>Campaign clustering</td><td><code>python -m pip install -e ".[clustering]"</code></td><td>HDBSCAN/scikit-learn campaign discovery.</td></tr>
-                <tr><td>OCR</td><td><code>python -m pip install paddlepaddle paddleocr</code></td><td>Local PaddleOCR text extraction.</td></tr>
+                <tr><td>OCR</td><td><code>python -m pip install paddlepaddle==2.6.2 paddleocr==2.7.3</code></td><td>Local PaddleOCR text extraction.</td></tr>
                 <tr><td>Embeddings</td><td><code>python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1</code></td><td>MiniLM text vectors and SigLIP visual vectors.</td></tr>
                 <tr><td>Qdrant client</td><td><code>python -m pip install -e ".[qdrant]"</code></td><td>Optional future vector backend; not required for sqlite-vec.</td></tr>
               </tbody>
@@ -755,9 +754,8 @@ notepad .\.env.local</code></pre>
           <div class="content">
             <h3>PaddleOCR</h3>
             <p>PaddleOCR is the grounded local OCR engine. It stores raw text, boxes, confidence, engine, frame, and timestamp.</p>
-            <pre><code>python -m pip install paddlepaddle
-python -m pip install paddleocr
-python -m pip install -e ".[ocr,dev]"</code></pre>
+            <pre><code>python -m pip install paddlepaddle==2.6.2
+python -m pip install paddleocr==2.7.3</code></pre>
 
             <h3>Optional GLM-OCR</h3>
             <p>
@@ -928,7 +926,7 @@ npm run dev</code></pre>
               </div>
               <div class="card">
                 <strong>PaddleOCR import fails</strong>
-                <p>Install <code>paddlepaddle</code> first, then <code>paddleocr</code>, then reinstall the OCR extra.</p>
+                <p>Install the pinned versions: <code>paddlepaddle==2.6.2</code> first, then <code>paddleocr==2.7.3</code>.</p>
               </div>
               <div class="card">
                 <strong>Slow VLM responses</strong>

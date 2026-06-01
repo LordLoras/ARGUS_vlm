@@ -45,8 +45,9 @@ whisper = [
     "faster-whisper>=1.0",
 ]
 ocr = [
-    "paddlepaddle>=2.6,<3",
-    "paddleocr>=2.7,<3",
+    # Pinned because newer Paddle wheels have broken this Windows OCR stack.
+    "paddlepaddle==2.6.2",
+    "paddleocr==2.7.3",
 ]
 embeddings = [
     # Install with --no-deps to preserve pre-installed torch GPU wheel.
