@@ -109,12 +109,15 @@ Setup checklist:
 
 ### 1. Prerequisites
 
-ARGUS is primarily developed for Windows 11.
+ARGUS is tested on Windows 11 with AMD GPUs and Python 3.12. NVIDIA GPUs
+should work but are not tested; if torch fails to find the GPU, try creating
+the venv with Python 3.12 instead.
 
 Install or verify:
 
 - Git with Git LFS enabled
-- Python 3.11+ (`python --version`)
+- Python 3.12 (`python --version`). AMD ROCm wheels and the tested setup
+  both target 3.12.
 - Node.js 20.19+ (`node --version`)
 - ffmpeg and ffprobe on `PATH` (`ffmpeg -version`)
 - an inference engine that exposes an OpenAI-compatible chat completions
