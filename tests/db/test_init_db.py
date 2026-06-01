@@ -35,6 +35,7 @@ def test_initialize_database_creates_schema_and_wal(tmp_path):
         "009_brand_profiles_alter",
         "010_iab_content_taxonomy",
         "011_promotion_name",
+        "012_job_stage",
     ]
 
     conn = open_database(db_path)

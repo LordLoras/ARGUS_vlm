@@ -482,6 +482,34 @@ def test_completed_job_sse_emits_done(config_path: Path):
     assert "event: done" in body
 
 
+def test_failed_job_sse_emits_stage_and_error(config_path: Path):
+    app = create_app(config_path=config_path, upload_probe=lambda _path: object())
+    conn = _db(config_path)
+    try:
+        JobRepository(conn).create(
+            JobRecord(
+                id="job_failed",
+                state="failed",
+                progress=0.34,
+                stage="ocr",
+                message="fatal error",
+                error="OCR engine crashed",
+            )
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    with TestClient(app) as client, client.stream("GET", "/api/jobs/job_failed/events") as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert '"state": "failed"' in body
+    assert '"stage": "ocr"' in body
+    assert '"error": "OCR engine crashed"' in body
+    assert "event: done" in body
+
+
 def test_campaign_crud_endpoints(client: TestClient, config_path: Path):
     conn = _db(config_path)
     try:

@@ -21,6 +21,7 @@ class JobRecord(StrictModel):
     ad_id: str | None = None
     state: JobState
     progress: float | None = Field(default=None, ge=0.0, le=1.0)
+    stage: str | None = None
     message: str | None = None
     error: str | None = None
     started_at: datetime | None = None

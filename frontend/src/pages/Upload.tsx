@@ -16,6 +16,7 @@ import type { JobRecord } from "../lib/types";
 
 const STAGE_LABELS: Record<string, string> = {
   upload: "Uploading file",
+  queued: "Waiting for worker",
   ingest: "Extracting frames & audio",
   whisper: "Transcribing with Whisper",
   preprocess: "Filtering frames (blur, dedup)",
@@ -24,7 +25,12 @@ const STAGE_LABELS: Record<string, string> = {
   embed: "Generating embeddings",
   vlm: "VLM classification",
   finalize: "Persisting results",
+  completed: "Pipeline complete",
+  cancelled: "Pipeline cancelled",
+  failed: "Pipeline failed",
 };
+
+const TERMINAL_JOB_STATES = new Set(["completed", "failed", "cancelled"]);
 
 const UPLOAD_SESSION_KEY = "argus:last-upload-job";
 
@@ -185,13 +191,20 @@ export function Upload() {
 
   useEffect(() => {
     if (!job) return;
-    const sig = `${job.state}|${job.progress ?? ""}|${job.message ?? ""}`;
+    const sig = `${job.state}|${job.progress ?? ""}|${job.stage ?? ""}|${job.message ?? ""}|${job.error ?? ""}`;
     if (sig === lastSig.current) return;
     lastSig.current = sig;
 
-    const level: LogLine["level"] = job.state === "failed" ? "warn" : job.state === "completed" ? "ok" : "info";
-    const msg = job.message || job.state || "(no message)";
-    const stageKey = job.message || "";
+    const level = job.state === "failed" ? "error" : job.state === "completed" ? "ok" : job.state === "cancelled" ? "warn" : "info";
+    const errorText = job.error?.trim();
+    const msg =
+      job.state === "failed"
+        ? `fatal error: ${errorText || job.message || "pipeline stopped"}`
+        : job.state === "cancelled"
+          ? job.message || "job cancelled"
+          : job.message || job.state || "(no message)";
+    const stageKey = stageRoot(job.stage) || inferStageKey(job.message) || job.state || "";
+    const progressText = typeof job.progress === "number" ? ` (${Math.round(job.progress * 100)}%)` : "";
 
     // Emit a stage header when the stage changes
     if (stageKey && stageKey !== lastStage.current && STAGE_LABELS[stageKey]) {
@@ -202,12 +215,12 @@ export function Upload() {
       ]);
     }
 
-    setLogLines((prev) => [...prev, timestampedLog(level, `${job.state}: ${msg}`)]);
+    setLogLines((prev) => [...prev, timestampedLog(level, `${job.state}${progressText}: ${msg}`)]);
   }, [job]);
 
   const isDuplicateOrSkipped = Boolean(adId && jobId === null);
   const isDone = job?.state === "completed" || isDuplicateOrSkipped;
-  const isTerminal = isDone || job?.state === "failed" || job?.state === "cancelled";
+  const isTerminal = isDone || (job ? TERMINAL_JOB_STATES.has(job.state) : false);
 
   useEffect(() => {
     if (!isTerminal || !startedAt || finishedAt) return;
@@ -332,6 +345,16 @@ export function Upload() {
       return;
     }
     if (jobId) {
+      if (job && TERMINAL_JOB_STATES.has(job.state)) {
+        setLogLines((prev) => [
+          ...prev,
+          timestampedLog(
+            job.state === "failed" ? "error" : "warn",
+            `${job.state}: job already stopped`
+          )
+        ]);
+        return;
+      }
       void api.cancelJob(jobId).then(
         ({ job: cancelled }) => {
           if (cancelled.state === "cancelled") {
@@ -383,7 +406,7 @@ export function Upload() {
 
   const uploading = uploadMutation.isPending;
   const batchUploading = batchUploadMutation.isPending;
-  const processing = adId && !isDone;
+  const processing = adId && (!isDone || job?.state === "failed" || job?.state === "cancelled");
   const displayFileName = file?.name ?? restoredFileName ?? "clip";
 
   return (
@@ -545,6 +568,7 @@ export function Upload() {
                 elapsedMs={elapsed}
                 logLines={logLines}
                 onCancel={cancel}
+                onClear={reset}
               />
             )}
 
@@ -609,6 +633,25 @@ function stateBadge(state: string) {
   if (state === "failed") return "badge-rose";
   if (state === "cancelled") return "badge-mono";
   return "badge-mono";
+}
+
+function stageRoot(stage?: string | null) {
+  return stage?.split(":")[0] || null;
+}
+
+function inferStageKey(message?: string | null) {
+  if (!message) return null;
+  const text = message.toLowerCase();
+  if (text.includes("upload")) return "upload";
+  if (text.includes("frame") || text.includes("audio") || text.includes("ffmpeg")) return "ingest";
+  if (text.includes("whisper") || text.includes("transcrib")) return "whisper";
+  if (text.includes("preprocess") || text.includes("blur") || text.includes("phash")) return "preprocess";
+  if (text.includes("duplicate") || text.includes("dedup")) return "dedup";
+  if (text.includes("ocr")) return "ocr";
+  if (text.includes("embed")) return "embed";
+  if (text.includes("vlm") || text.includes("classif")) return "vlm";
+  if (text.includes("persist") || text.includes("final")) return "finalize";
+  return null;
 }
 
 function fileSizeText(size: number) {

@@ -84,6 +84,7 @@ class JobRepository:
         *,
         state: JobState,
         progress: float | None = None,
+        stage: str | None = None,
         message: str | None = None,
         error: str | None = None,
         started_at: datetime | None = None,
@@ -94,6 +95,7 @@ class JobRepository:
             UPDATE jobs
             SET state = ?,
                 progress = ?,
+                stage = ?,
                 message = ?,
                 error = ?,
                 started_at = COALESCE(?, started_at),
@@ -103,6 +105,7 @@ class JobRepository:
             (
                 state,
                 progress,
+                stage,
                 message,
                 error,
                 db_value(started_at),
@@ -116,6 +119,7 @@ class JobRepository:
             """
             UPDATE jobs
             SET state = 'cancelled',
+                stage = 'cancelled',
                 message = ?,
                 finished_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -135,6 +139,7 @@ class JobRepository:
             UPDATE jobs
             SET state = 'queued',
                 progress = 0.0,
+                stage = NULL,
                 message = ?,
                 error = NULL,
                 started_at = NULL,

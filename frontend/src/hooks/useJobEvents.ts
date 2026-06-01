@@ -24,12 +24,27 @@ export function useJobEvents(jobId: string | null) {
       if (event.type === "job") {
         setJob((prev) => ({
           id: event.job_id,
-          ad_id: prev?.ad_id ?? null,
+          ad_id: event.ad_id ?? prev?.ad_id ?? null,
           state: event.state,
           progress: event.progress,
+          stage: event.stage,
           message: event.message,
-          error: event.error
+          error: event.error,
+          started_at: event.started_at ?? prev?.started_at ?? null,
+          finished_at: event.finished_at ?? prev?.finished_at ?? null
         }));
+      } else if (event.type === "error") {
+        setJob((prev) =>
+          prev
+            ? {
+                ...prev,
+                state: "failed",
+                stage: "event-stream",
+                message: "event stream error",
+                error: event.message
+              }
+            : null
+        );
       }
     });
     return () => {

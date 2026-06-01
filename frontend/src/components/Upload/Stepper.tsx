@@ -15,8 +15,9 @@ const STEPS = [
 
 function activeIndex(job?: JobRecord | null) {
   if (!job) return 0;
-  const haystack = `${job.state ?? ""} ${job.message ?? ""}`.toLowerCase();
-  const idx = STEPS.findIndex((s) => haystack.includes(s.key));
+  const rootStage = (job.stage ?? "").split(":")[0].toLowerCase();
+  const haystack = `${rootStage} ${job.state ?? ""} ${job.message ?? ""}`.toLowerCase();
+  const idx = STEPS.findIndex((s) => rootStage === s.key || haystack.includes(s.key));
   if (idx >= 0) return idx;
   if (job.state === "completed") return STEPS.length;
   if (job.state === "failed" || job.state === "cancelled") {
@@ -28,21 +29,26 @@ function activeIndex(job?: JobRecord | null) {
 export function Stepper({ job }: { job?: JobRecord | null }) {
   const current = activeIndex(job);
   const failed = job?.state === "failed";
+  const cancelled = job?.state === "cancelled";
 
   return (
     <div className="stepper">
       {STEPS.map((step, idx) => {
         const done = idx < current || job?.state === "completed";
-        const active = !done && idx === current && !failed;
+        const active = !done && idx === current && !failed && !cancelled;
         const wasFailed = failed && idx === current;
+        const wasCancelled = cancelled && idx === current;
         const cls = ["step"];
         if (done) cls.push("done");
         if (active) cls.push("active");
         if (wasFailed) cls.push("failed");
+        if (wasCancelled) cls.push("cancelled");
         return (
           <div key={step.key} className={cls.join(" ")}>
             <div className="step-icon">
               {wasFailed ? (
+                <XIcon size={12} />
+              ) : wasCancelled ? (
                 <XIcon size={12} />
               ) : done ? (
                 <CheckIcon size={12} />
@@ -64,7 +70,7 @@ export function Stepper({ job }: { job?: JobRecord | null }) {
               <div className="step-sub">{step.sub}</div>
             </div>
             <div className="step-time">
-              {active && job?.message ? job.message : done ? "ok" : ""}
+              {(active || wasFailed || wasCancelled) && job?.message ? job.message : done ? "ok" : ""}
             </div>
           </div>
         );

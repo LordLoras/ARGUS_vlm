@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export type LogLevel = "info" | "ok" | "warn" | "rule";
+export type LogLevel = "info" | "ok" | "warn" | "error" | "rule";
 
 export type LogLine = {
   ts: string;
@@ -12,6 +12,7 @@ const LEVEL_STYLES: Record<LogLevel, { color: string; bg: string }> = {
   info: { color: "var(--sky)", bg: "rgba(56,189,248,0.08)" },
   ok: { color: "var(--emerald)", bg: "rgba(52,211,153,0.08)" },
   warn: { color: "var(--amber)", bg: "rgba(251,191,36,0.08)" },
+  error: { color: "var(--rose)", bg: "rgba(244,63,94,0.12)" },
   rule: { color: "var(--violet)", bg: "rgba(139,92,246,0.08)" },
 };
 

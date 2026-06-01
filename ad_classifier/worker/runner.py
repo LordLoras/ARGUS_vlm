@@ -60,6 +60,7 @@ class PipelineWorker:
                 job.id,
                 state="running",
                 progress=0.0,
+                stage="queued",
                 message="job started",
                 started_at=datetime.now(UTC),
             )
@@ -74,7 +75,13 @@ class PipelineWorker:
                 current = jobs.get(job.id)
                 if current is None or current.state == "cancelled":
                     raise JobCancelled(job.id)
-                jobs.update_state(job.id, state="running", progress=value, message=message)
+                jobs.update_state(
+                    job.id,
+                    state="running",
+                    progress=value,
+                    stage=stage,
+                    message=message,
+                )
                 conn.commit()
 
             if self._runner is not None:
@@ -98,6 +105,7 @@ class PipelineWorker:
                 job.id,
                 state="completed",
                 progress=1.0,
+                stage="completed",
                 message="completed",
                 finished_at=datetime.now(UTC),
             )
@@ -111,11 +119,13 @@ class PipelineWorker:
             return True
         except Exception as exc:
             if "job" in locals():
+                current = jobs.get(job.id)
                 jobs.update_state(
                     job.id,
                     state="failed",
-                    progress=1.0,
-                    message="failed",
+                    progress=current.progress if current is not None else 0.0,
+                    stage=current.stage if current is not None else "failed",
+                    message="fatal error",
                     error=str(exc),
                     finished_at=datetime.now(UTC),
                 )

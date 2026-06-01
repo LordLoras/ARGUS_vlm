@@ -9,7 +9,8 @@ export function PipelineProgress({
   job,
   elapsedMs,
   logLines,
-  onCancel
+  onCancel,
+  onClear
 }: {
   filename: string;
   adId: string;
@@ -18,11 +19,19 @@ export function PipelineProgress({
   elapsedMs: number;
   logLines: LogLine[];
   onCancel: () => void;
+  onClear: () => void;
 }) {
   const progress = Math.max(0, Math.min(1, job?.progress ?? 0));
-  const stage = job?.message || job?.state || "";
+  const stage = job?.stage || job?.message || job?.state || "";
+  const terminal = job?.state === "failed" || job?.state === "cancelled";
+  const failed = job?.state === "failed";
+  const statusText = failed
+    ? `Fatal error: ${job?.error || job?.message || "pipeline stopped"}`
+    : job?.state === "cancelled"
+      ? "Job cancelled. Processing has stopped."
+      : null;
   return (
-    <div className="pp-card">
+    <div className={`pp-card ${failed ? "failed" : job?.state === "cancelled" ? "cancelled" : ""}`}>
       <div className="pp-head">
         <div className="pp-head-left">
           <span className="pp-filename">{filename}</span>
@@ -31,11 +40,20 @@ export function PipelineProgress({
         </div>
         <div className="pp-head-right">
           <span className="pp-elapsed">{(elapsedMs / 1000).toFixed(1)}s</span>
-          <button className="btn btn-sm" disabled={!jobId} onClick={onCancel}>
-            Cancel
-          </button>
+          {terminal ? (
+            <button className="btn btn-sm" onClick={onClear}>
+              Clear
+            </button>
+          ) : (
+            <button className="btn btn-sm" disabled={!jobId} onClick={onCancel}>
+              Cancel
+            </button>
+          )}
         </div>
       </div>
+      {statusText ? (
+        <div className={`pp-status ${failed ? "error" : "warn"}`}>{statusText}</div>
+      ) : null}
       <div className="pp-progress">
         <div className="pp-progress-bar" style={{ width: `${Math.max(progress * 100, 2)}%` }} />
       </div>

@@ -568,6 +568,7 @@ export type JobRecord = {
   ad_id?: string | null;
   state: string;
   progress?: number | null;
+  stage?: string | null;
   message?: string | null;
   error?: string | null;
   started_at?: string | null;
@@ -583,10 +584,14 @@ export type JobStreamEvent =
   | {
       type: "job";
       job_id: string;
+      ad_id?: string | null;
       state: string;
       progress?: number | null;
+      stage?: string | null;
       message?: string | null;
       error?: string | null;
+      started_at?: string | null;
+      finished_at?: string | null;
     }
   | { type: "done"; state: string }
   | { type: "error"; message: string };

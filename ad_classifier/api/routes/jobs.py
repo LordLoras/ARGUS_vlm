@@ -138,10 +138,14 @@ async def job_events(job_id: str, request: Request) -> EventSourceResponse:
             payload = {
                 "type": "job",
                 "job_id": job.id,
+                "ad_id": job.ad_id,
                 "state": job.state,
                 "progress": job.progress,
+                "stage": job.stage,
                 "message": job.message,
                 "error": job.error,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "finished_at": job.finished_at.isoformat() if job.finished_at else None,
             }
             if payload != last_payload:
                 yield {"event": "job", "data": json.dumps(payload)}

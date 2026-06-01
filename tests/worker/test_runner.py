@@ -193,3 +193,52 @@ def test_worker_stops_when_job_cancelled_during_progress(tmp_path: Path):
     assert calls == 1
     assert job is not None
     assert job.state == "cancelled"
+
+
+def test_worker_failed_job_keeps_stage_progress_and_error(tmp_path: Path):
+    db_path = tmp_path / "worker.db"
+    conn = open_database(db_path)
+    apply_migrations(conn)
+    AdRepository(conn).create(
+        AdRecord(
+            id="ad_fail",
+            source_path="/tmp/ad.mp4",
+            ingested_at=datetime.now(UTC),
+            status="new",
+        )
+    )
+    JobRepository(conn).create(JobRecord(id="job_fail", ad_id="ad_fail", state="queued"))
+    conn.commit()
+    conn.close()
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"paths": {"sqlite_path": str(db_path)}}), encoding="utf-8"
+    )
+    config, config_file = load_config(config_path)
+
+    def fake_runner(conn, ad_id, progress):
+        assert ad_id == "ad_fail"
+        progress("ocr", 0.34, "extracting OCR")
+        raise RuntimeError("OCR engine crashed")
+
+    worker = PipelineWorker(
+        config=config, config_file=config_file, db_path=db_path, runner=fake_runner
+    )
+    assert worker.run_once() is True
+
+    conn = open_database(db_path)
+    try:
+        job = JobRepository(conn).get("job_fail")
+        ad = AdRepository(conn).get("ad_fail")
+    finally:
+        conn.close()
+
+    assert job is not None
+    assert job.state == "failed"
+    assert job.stage == "ocr"
+    assert job.progress == 0.34
+    assert job.message == "fatal error"
+    assert job.error == "OCR engine crashed"
+    assert ad is not None
+    assert ad.status == "failed"
