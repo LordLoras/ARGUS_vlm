@@ -1,0 +1,915 @@
+{
+  "generated_at": "2026-06-01T04:57:13.915875+00:00",
+  "benchmark_date_label": "June 1, 2026",
+  "source": "actual OpenRouter/local endpoint calls",
+  "raw_output_path": "data/benchmarks/model_benchmark_latest_raw.json",
+  "protocol": {
+    "temperature": 0,
+    "max_tokens": 1600,
+    "response_format": "json_object",
+    "openrouter_thinking": "reasoning.effort=\"none\", include_reasoning=false",
+    "local_thinking": "chat_template_kwargs.enable_thinking=false",
+    "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10."
+  },
+  "ads": [
+    {
+      "id": "ad_61e6c407",
+      "label": "Toyota spot",
+      "brand": "Toyota",
+      "category": "automotive",
+      "duration_s": 15.0,
+      "frame_count": 30,
+      "kept_frames": 13,
+      "ocr_items": 55,
+      "transcript_segments": 5,
+      "difficulty": "Easy",
+      "focus": [
+        "category",
+        "brand",
+        "basic evidence"
+      ]
+    },
+    {
+      "id": "ad_3271eca8",
+      "label": "iPhone 17 Pro",
+      "brand": "T-Mobile",
+      "category": "telecommunications",
+      "duration_s": 15.0,
+      "frame_count": 30,
+      "kept_frames": 19,
+      "ocr_items": 70,
+      "transcript_segments": 8,
+      "difficulty": "Medium",
+      "focus": [
+        "product",
+        "CTA",
+        "offer copy"
+      ]
+    },
+    {
+      "id": "ad_23506859",
+      "label": "credit union membership",
+      "brand": "Wright-Patt Credit Union",
+      "category": "banking_lending",
+      "duration_s": 30.0,
+      "frame_count": 60,
+      "kept_frames": 22,
+      "ocr_items": 48,
+      "transcript_segments": 8,
+      "difficulty": "Hard",
+      "focus": [
+        "regulated category",
+        "claim grounding",
+        "offer terms"
+      ]
+    },
+    {
+      "id": "ad_e7b406e5",
+      "label": "Absolue Longevity MD Reset The Cream",
+      "brand": "Lanc\u00f4me",
+      "category": "beauty_personal_care",
+      "duration_s": 14.2,
+      "frame_count": 28,
+      "kept_frames": 23,
+      "ocr_items": 107,
+      "transcript_segments": 3,
+      "difficulty": "Hard",
+      "focus": [
+        "dense OCR",
+        "claims",
+        "disclaimers"
+      ]
+    },
+    {
+      "id": "ad_e20a0bc4",
+      "label": "2026 Sierra 1500",
+      "brand": "GMC",
+      "category": "automotive",
+      "duration_s": 30.0,
+      "frame_count": 60,
+      "kept_frames": 28,
+      "ocr_items": 173,
+      "transcript_segments": 7,
+      "difficulty": "Stress",
+      "focus": [
+        "multi-product",
+        "fine print",
+        "timestamp evidence"
+      ]
+    }
+  ],
+  "models": [
+    {
+      "id": "google/gemma-4-31b-it",
+      "name": "Gemma 4 31B",
+      "provider": "Google",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "google/gemma-4-31b-it",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 93.16,
+      "completion_seconds": 280.93,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 27073,
+      "completion_tokens": 2622,
+      "estimated_cost_usd": 0.004219,
+      "readout": "Measured low-cost route with strong price/performance when parse quality holds.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 89.68,
+          "seconds": 107.189,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 89.68,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 11.43,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 97.17,
+          "seconds": 25.914,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Strong rubric match.",
+          "breakdown": {
+            "total": 97.17,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 12.17,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 90.68,
+          "seconds": 48.199,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 90.68,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.57,
+            "offers_ctas_disclaimers": 12.11,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 94.21,
+          "seconds": 46.6,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 94.21,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 14.21,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 94.05,
+          "seconds": 53.024,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 94.05,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 10.42,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 100.0,
+      "performance_price_index": 97.9
+    },
+    {
+      "id": "moonshotai/kimi-k2.5",
+      "name": "Kimi K2.5",
+      "provider": "MoonshotAI",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "moonshotai/kimi-k2.5",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 92.1,
+      "completion_seconds": 106.91,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 26919,
+      "completion_tokens": 2904,
+      "estimated_cost_usd": 0.016285,
+      "readout": "Measured balanced quality and cost with a lower dense-OCR ceiling than K2.6.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 87.6,
+          "seconds": 21.163,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 87.6,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 9.35,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 92.44,
+          "seconds": 32.212,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 92.44,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 12.44,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 93.5,
+          "seconds": 14.999,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.5,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 12.0,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 94.04,
+          "seconds": 26.217,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 94.04,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 14.04,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 92.94,
+          "seconds": 12.323,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 92.94,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 9.3,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 98.9,
+      "performance_price_index": 25.1
+    },
+    {
+      "id": "xiaomi/mimo-v2.5",
+      "name": "MiMo V2.5",
+      "provider": "Xiaomi",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "xiaomi/mimo-v2.5",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 91.93,
+      "completion_seconds": 77.64,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 22604,
+      "completion_tokens": 3250,
+      "estimated_cost_usd": 0.004075,
+      "readout": "Measured low-cost route; schema and dense extraction decide its usefulness.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 89.07,
+          "seconds": 15.895,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 89.07,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 10.82,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 96.07,
+          "seconds": 16.117,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 96.07,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 11.07,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 91.11,
+          "seconds": 17.989,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 91.11,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 9.0,
+            "offers_ctas_disclaimers": 12.11,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 92.52,
+          "seconds": 11.21,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 92.52,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 9.0,
+            "offers_ctas_disclaimers": 13.52,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 90.86,
+          "seconds": 16.432,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 90.86,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 7.23,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 98.7,
+      "performance_price_index": 100.0
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "name": "Kimi K2.6",
+      "provider": "MoonshotAI",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "moonshotai/kimi-k2.6",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 91.17,
+      "completion_seconds": 82.16,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 26905,
+      "completion_tokens": 2992,
+      "estimated_cost_usd": 0.028636,
+      "readout": "Measured strongest overall quality on the selected artifact ladder.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 89.82,
+          "seconds": 32.913,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 89.82,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 11.57,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 96.65,
+          "seconds": 9.262,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 96.65,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 11.65,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 81.5,
+          "seconds": 11.617,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 81.5,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 94.04,
+          "seconds": 5.41,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 94.04,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 14.04,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.83,
+          "seconds": 22.959,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.83,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 10.19,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 97.9,
+      "performance_price_index": 14.1
+    },
+    {
+      "id": "qwen3.6-27b-q4-remote-local",
+      "name": "Qwen3.6 27B Q4 Remote",
+      "provider": "Qwen endpoint",
+      "route_type": "Remote",
+      "endpoint": "https://ai.ipdy.io/llm/v1/chat/completions",
+      "model": "model",
+      "thinking_off": "enable_thinking=false",
+      "score": 89.71,
+      "completion_seconds": 131.69,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 22852,
+      "completion_tokens": 2998,
+      "estimated_cost_usd": 0.0,
+      "readout": "Measured custom remote-compatible route for the local Qwen quantized model.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 87.82,
+          "seconds": 37.586,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 87.82,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 9.57,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 96.62,
+          "seconds": 21.196,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 96.62,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 11.62,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 81.5,
+          "seconds": 18.002,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 81.5,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 88.78,
+          "seconds": 23.427,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 88.78,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 6.67,
+            "offers_ctas_disclaimers": 12.12,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.83,
+          "seconds": 31.474,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.83,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 10.19,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 96.3,
+      "performance_price_index": null
+    },
+    {
+      "id": "stepfun/step-3.7-flash",
+      "name": "Step 3.7 Flash",
+      "provider": "StepFun",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "stepfun/step-3.7-flash",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 0.0,
+      "completion_seconds": 2.25,
+      "successful_ads": 0,
+      "total_ads": 5,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "estimated_cost_usd": 0.0,
+      "readout": "Measured fast paid route; useful for cleaner artifacts.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 0.0,
+          "seconds": 0.654,
+          "ok": false,
+          "parse_ok": false,
+          "error": "{\"error\":{\"message\":\"Reasoning is mandatory for this endpoint and cannot be disabled.\",\"code\":400,\"metadata\":{\"provider_name\":null}},\"user_id\":\"redacted\"}",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 0.0,
+          "seconds": 0.388,
+          "ok": false,
+          "parse_ok": false,
+          "error": "{\"error\":{\"message\":\"Reasoning is mandatory for this endpoint and cannot be disabled.\",\"code\":400,\"metadata\":{\"provider_name\":null}},\"user_id\":\"redacted\"}",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 0.0,
+          "seconds": 0.407,
+          "ok": false,
+          "parse_ok": false,
+          "error": "{\"error\":{\"message\":\"Reasoning is mandatory for this endpoint and cannot be disabled.\",\"code\":400,\"metadata\":{\"provider_name\":null}},\"user_id\":\"redacted\"}",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 0.0,
+          "seconds": 0.404,
+          "ok": false,
+          "parse_ok": false,
+          "error": "{\"error\":{\"message\":\"Reasoning is mandatory for this endpoint and cannot be disabled.\",\"code\":400,\"metadata\":{\"provider_name\":null}},\"user_id\":\"redacted\"}",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 0.0,
+          "seconds": 0.4,
+          "ok": false,
+          "parse_ok": false,
+          "error": "{\"error\":{\"message\":\"Reasoning is mandatory for this endpoint and cannot be disabled.\",\"code\":400,\"metadata\":{\"provider_name\":null}},\"user_id\":\"redacted\"}",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        }
+      ],
+      "relative_performance_pct": 0.0,
+      "performance_price_index": null
+    },
+    {
+      "id": "qwen3.6-27b-q4-local",
+      "name": "Qwen3.6 27B Q4",
+      "provider": "Local endpoint",
+      "route_type": "Local",
+      "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+      "model": "Qwen3.6-27B-Q4_K_M",
+      "thinking_off": "enable_thinking=false",
+      "score": 0.0,
+      "completion_seconds": 10.99,
+      "successful_ads": 0,
+      "total_ads": 5,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "estimated_cost_usd": 0.0,
+      "readout": "Measured local quantized route; provider cost is zero but latency is local hardware bound.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 0.0,
+          "seconds": 2.186,
+          "ok": false,
+          "parse_ok": false,
+          "error": "[WinError 10061] No connection could be made because the target machine actively refused it",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 0.0,
+          "seconds": 2.181,
+          "ok": false,
+          "parse_ok": false,
+          "error": "[WinError 10061] No connection could be made because the target machine actively refused it",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 0.0,
+          "seconds": 2.211,
+          "ok": false,
+          "parse_ok": false,
+          "error": "[WinError 10061] No connection could be made because the target machine actively refused it",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 0.0,
+          "seconds": 2.207,
+          "ok": false,
+          "parse_ok": false,
+          "error": "[WinError 10061] No connection could be made because the target machine actively refused it",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 0.0,
+          "seconds": 2.208,
+          "ok": false,
+          "parse_ok": false,
+          "error": "[WinError 10061] No connection could be made because the target machine actively refused it",
+          "note": "Call failed.",
+          "breakdown": {
+            "total": 0.0,
+            "parse": 0.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        }
+      ],
+      "relative_performance_pct": 0.0,
+      "performance_price_index": null
+    }
+  ]
+}

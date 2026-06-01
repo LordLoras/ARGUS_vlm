@@ -51,6 +51,10 @@ const Embeddings = lazy(() =>
   import("./pages/Embeddings").then((m) => ({ default: m.Embeddings }))
 );
 
+const ModelBenchmark = lazy(() =>
+  import("./pages/ModelBenchmark").then((m) => ({ default: m.ModelBenchmark }))
+);
+
 function RouteFallback() {
   return (
     <div className="page">
@@ -83,6 +87,7 @@ export default function App() {
         <Route path="/taxonomy" element={route(<Taxonomy />)} />
         <Route path="/pipelines" element={route(<Jobs />)} />
         <Route path="/embeddings" element={route(<Embeddings />)} />
+        <Route path="/benchmark" element={route(<ModelBenchmark />)} />
         <Route path="/settings" element={route(<Settings />)} />
       </Route>
     </Routes>

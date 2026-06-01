@@ -4,6 +4,7 @@ import logoUrl from "../../logo-mark.png";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { cn } from "../lib/utils";
 import {
+  BenchmarkIcon,
   CampaignsIcon,
   ChatIcon,
   FlowIcon,
@@ -37,7 +38,8 @@ const intelligence: NavEntry[] = [
   { to: "/agent", label: "Agent", icon: ChatIcon },
   { to: "/debate", label: "Debate", icon: FlowIcon },
   { to: "/graph", label: "Knowledge Graph", icon: GraphIcon },
-  { to: "/embeddings", label: "Embeddings", icon: LayersIcon }
+  { to: "/embeddings", label: "Embeddings", icon: LayersIcon },
+  { to: "/benchmark", label: "Model Benchmark", icon: BenchmarkIcon }
 ];
 
 const disabledIntelligence: { label: string; icon: IconComponent }[] = [];

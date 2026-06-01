@@ -209,6 +209,16 @@ export const GraphIcon = ({ size = 14, ...props }: Props) => (
   </svg>
 );
 
+export const BenchmarkIcon = ({ size = 14, ...props }: Props) => (
+  <svg {...base(size, props)} strokeWidth={1.9}>
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <rect x="7" y="12" width="3" height="4" rx="0.6" />
+    <rect x="12" y="8" width="3" height="8" rx="0.6" />
+    <rect x="17" y="4" width="3" height="12" rx="0.6" />
+  </svg>
+);
+
 export const CubeIcon = ({ size = 14, ...props }: Props) => (
   <svg {...base(size, props)} strokeWidth={1.8}>
     <path d="M12 2L3 7v10l9 5 9-5V7z" />
