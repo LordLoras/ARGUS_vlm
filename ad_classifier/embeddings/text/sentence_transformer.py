@@ -19,8 +19,10 @@ class SentenceTransformerEmbedder(TextEmbedder):
                 from sentence_transformers import SentenceTransformer  # noqa: PLC0415
             except ImportError as exc:
                 raise ImportError(
-                    "sentence-transformers is not installed. "
-                    "Run: pip install --no-deps sentence-transformers"
+                    "sentence-transformers is not installed in the active "
+                    "environment. Run: python -m pip install --no-deps "
+                    "sentence-transformers==3.0.1 transformers==4.57.6 "
+                    "tokenizers==0.22.1"
                 ) from exc
             self._model = SentenceTransformer(self._model_name, device=self._device)
         return self._model

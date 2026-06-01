@@ -11,6 +11,7 @@ def SigLIP2ImageEmbedder(*args, **kwargs):
     except ImportError as exc:
         raise ImportError(
             "SigLIP 2 image embedder requires torch and transformers. "
-            "Install with: pip install --no-deps sentence-transformers transformers tokenizers\n"
+            "Install with: python -m pip install --no-deps "
+            "sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1\n"
             "Or disable visual embeddings in config: image_embedder.enabled = false"
         ) from exc

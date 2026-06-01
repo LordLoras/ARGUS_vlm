@@ -101,7 +101,8 @@ Setup checklist:
 1. Install Git LFS, Python, Node.js, ffmpeg, and an OpenAI-compatible inference
    engine for the VLM.
 2. Create `.venv`, then install ARGUS Python dependencies.
-3. Install the correct GPU torch build for your hardware (section 4).
+3. Install the correct GPU torch build for your hardware, then install the
+   embedding libraries with `--no-deps` (section 4).
 4. Copy `.env.local.example` to `.env.local` and add keys locally.
 5. Copy `config.example.yaml` to `config.yaml` and confirm the endpoint/model.
 6. Run `python -m ad_classifier init-db`.
@@ -145,6 +146,10 @@ python -m venv .venv
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e ".[dev]"
 ```
+
+`.[dev]` installs the API, worker, CLI, and test tooling. It does **not**
+install OCR, torch, or the embedding libraries. Continue through section 4 for
+torch + MiniLM/SigLIP dependencies, then install OCR below if you want local OCR.
 
 If PowerShell blocks activation for the current terminal session:
 
@@ -205,7 +210,9 @@ ARGUS uses two embedding models that both depend on PyTorch:
 | `sentence-transformers/all-MiniLM-L6-v2` | Text vectors from transcript + OCR | 384 |
 | `google/siglip2-base-patch16-224` | Visual vectors from keyframes and text-to-image search | 768 |
 
-After torch is installed, add the embedding packages without letting pip
+The `embeddings` extra in `pyproject.toml` records the pinned versions, but a
+base/dev install does not include it. On Windows, install the embedding packages
+explicitly in the active venv after torch is installed, without letting pip
 resolve and replace the GPU torch build:
 
 ```powershell
@@ -953,6 +960,10 @@ per-frame index existed.
 
 **PaddleOCR fails to import.** Install `paddlepaddle` before `paddleocr` on
 Windows, then reinstall the OCR extra if needed.
+
+**`sentence-transformers is not installed`.** Install the embedding libraries in
+the same active venv that runs ARGUS:
+`python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1`.
 
 **SigLIP or sentence-transformers tries to change torch.** Reinstall those
 packages with `--no-deps` and verify the existing torch build before running the
