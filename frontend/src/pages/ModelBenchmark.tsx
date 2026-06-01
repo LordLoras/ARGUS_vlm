@@ -78,6 +78,7 @@ export function ModelBenchmark() {
     .filter((model) => model.route_type === "OpenRouter")
     .reduce((best, model) => (model.completion_seconds < best.completion_seconds ? model : best), completedModels[0]);
   const failures = models.filter((model) => model.successful_ads === 0);
+  const orderedAds = data.ads;
 
   return (
     <>
@@ -141,9 +142,9 @@ export function ModelBenchmark() {
               <span>Run record</span>
               <strong>{formatDate(data.generated_at)} / {data.benchmark_date_label}</strong>
               <p>
-                Raw outputs are stored in <code>{data.raw_output_path}</code>. Codex is not
-                included as a scored model because this desktop session is not a repeatable
-                OpenRouter/local API endpoint.
+                Raw outputs are stored locally at <code>{data.raw_output_path}</code> when
+                the benchmark runner is executed. The page shows measured endpoint rows only;
+                projected results are not mixed into the table.
               </p>
             </div>
           </div>
@@ -242,26 +243,52 @@ export function ModelBenchmark() {
               <h2>Score and completion matrix</h2>
             </div>
           </div>
-          <div className="benchmark-matrix">
+          <div className="benchmark-matrix-card" role="table" aria-label="Per-ad benchmark comparison">
+            <div className="benchmark-matrix-header" role="row">
+              <div className="benchmark-matrix-corner" role="columnheader">
+                <span>Route</span>
+                <strong>Model and aggregate</strong>
+              </div>
+              {orderedAds.map((ad) => (
+                <div className="benchmark-matrix-ad-head" role="columnheader" key={ad.id}>
+                  <span className={`benchmark-difficulty is-${ad.difficulty.toLowerCase()}`}>{ad.difficulty}</span>
+                  <strong>{ad.brand}</strong>
+                  <em>{ad.label}</em>
+                </div>
+              ))}
+            </div>
             {models.map((model) => (
-              <article className="benchmark-matrix-row" key={model.id}>
-                <div className="benchmark-matrix-model">
+              <article className="benchmark-matrix-row" role="row" key={model.id}>
+                <div className="benchmark-matrix-route" role="rowheader">
                   <strong>{model.name}</strong>
-                  <span>{model.route_type}</span>
+                  <span>{model.provider} / {model.route_type}</span>
+                  <em>
+                    {model.score.toFixed(1)} avg · {formatSeconds(model.completion_seconds)}
+                  </em>
                 </div>
-                <div className="benchmark-case-grid">
-                  {model.cases.map((item) => {
-                    const ad = data.ads.find((candidate) => candidate.id === item.ad_id);
-                    return (
-                      <div className={item.ok ? "benchmark-case" : "benchmark-case is-failed"} key={`${model.id}-${item.ad_id}`}>
-                        <span>{ad?.brand ?? item.ad_id}</span>
+                {orderedAds.map((ad) => {
+                  const item = model.cases.find((candidate) => candidate.ad_id === ad.id);
+                  return item ? (
+                    <div className={caseClassName(item)} role="cell" key={`${model.id}-${ad.id}`}>
+                      <div className="benchmark-case-scoreline">
                         <strong>{item.score.toFixed(1)}</strong>
-                        <em>{item.ok ? formatSeconds(item.seconds) : "failed"}</em>
-                        <p>{item.ok ? item.note : shortError(item.error)}</p>
+                        <span>{item.ok ? formatSeconds(item.seconds) : "failed"}</span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="benchmark-case-track" aria-hidden="true">
+                        <span style={{ width: `${Math.max(3, Math.min(100, item.score))}%` }} />
+                      </div>
+                      <p>{item.ok ? item.note : shortError(item.error)}</p>
+                    </div>
+                  ) : (
+                    <div className="benchmark-case is-failed" role="cell" key={`${model.id}-${ad.id}`}>
+                      <div className="benchmark-case-scoreline">
+                        <strong>0.0</strong>
+                        <span>missing</span>
+                      </div>
+                      <p>No recorded run for this artifact.</p>
+                    </div>
+                  );
+                })}
               </article>
             ))}
           </div>
@@ -338,4 +365,11 @@ function shortError(error?: string | null) {
   if (error.includes("Reasoning is mandatory")) return "Provider requires reasoning.";
   if (error.includes("actively refused")) return "Endpoint refused connection.";
   return error.length > 78 ? `${error.slice(0, 75)}...` : error;
+}
+
+function caseClassName(item: BenchmarkCase) {
+  if (!item.ok) return "benchmark-case is-failed";
+  if (item.score >= 92) return "benchmark-case is-strong";
+  if (item.score >= 85) return "benchmark-case is-good";
+  return "benchmark-case is-low";
 }

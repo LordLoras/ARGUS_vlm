@@ -35,6 +35,7 @@ ADS = [
 OPENROUTER_MODELS = [
     "openai/gpt-5.5",
     "google/gemini-3.5-flash",
+    "minimax/minimax-m3",
     "stepfun/step-3.7-flash",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.5",
@@ -45,6 +46,7 @@ OPENROUTER_MODELS = [
 MODEL_PRICING_PER_M: dict[str, dict[str, float]] = {
     "openai/gpt-5.5": {"prompt": 5.0, "completion": 30.0},
     "google/gemini-3.5-flash": {"prompt": 1.5, "completion": 9.0},
+    "minimax/minimax-m3": {"prompt": 0.3, "completion": 1.2},
     "stepfun/step-3.7-flash": {"prompt": 0.2, "completion": 1.15},
     "stepfun/step-3.7-flash-max": {"prompt": 0.2, "completion": 1.15},
     "moonshotai/kimi-k2.6": {"prompt": 0.684, "completion": 3.42},
@@ -56,6 +58,7 @@ MODEL_PRICING_PER_M: dict[str, dict[str, float]] = {
 DISPLAY_NAMES: dict[str, str] = {
     "openai/gpt-5.5": "GPT-5.5",
     "google/gemini-3.5-flash": "Gemini 3.5 Flash",
+    "minimax/minimax-m3": "MiniMax M3",
     "stepfun/step-3.7-flash": "Step 3.7 Flash",
     "stepfun/step-3.7-flash-max": "Step 3.7 Flash Max",
     "moonshotai/kimi-k2.6": "Kimi K2.6",
@@ -788,6 +791,8 @@ def provider_for_endpoint(model_id: str) -> str:
         return "Xiaomi"
     if model_id.startswith("google/"):
         return "Google"
+    if model_id.startswith("minimax/"):
+        return "MiniMax"
     if model_id.startswith("openai/"):
         return "OpenAI"
     if model_id.startswith("qwen"):
@@ -799,6 +804,7 @@ def readout_for_model(model_id: str) -> str:
     return {
         "openai/gpt-5.5": "Measured frontier route; highest expected reasoning quality with materially higher provider cost.",
         "google/gemini-3.5-flash": "Measured current high-efficiency Gemini route; OpenRouter requires low reasoning on this endpoint.",
+        "minimax/minimax-m3": "Measured MiniMax multimodal long-context route; currently priced as a low-cost OpenRouter route.",
         "moonshotai/kimi-k2.6": "Measured strongest overall quality on the selected artifact ladder.",
         "moonshotai/kimi-k2.5": "Measured balanced quality and cost with a lower dense-OCR ceiling than K2.6.",
         "stepfun/step-3.7-flash": "Measured fast paid route; useful for cleaner artifacts.",

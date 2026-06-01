@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-01T05:44:28.563690+00:00",
+  "generated_at": "2026-06-01T10:10:24.863197+00:00",
   "benchmark_date_label": "June 1, 2026",
   "source": "actual OpenRouter/local endpoint calls",
   "raw_output_path": "data/benchmarks/model_benchmark_latest_raw.json",
@@ -562,6 +562,122 @@
       ],
       "relative_performance_pct": 98.7,
       "performance_price_index": 100.0
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "name": "MiniMax M3",
+      "provider": "MiniMax",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "minimax/minimax-m3",
+      "thinking_off": "reasoning.effort=\"none\"",
+      "score": 91.3,
+      "completion_seconds": 93.01,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 27720,
+      "completion_tokens": 3154,
+      "estimated_cost_usd": 0.012101,
+      "readout": "Measured MiniMax multimodal long-context route; currently priced as a low-cost OpenRouter route.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 87.6,
+          "seconds": 24.227,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 87.6,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 9.35,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 96.2,
+          "seconds": 18.727,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 96.2,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 11.2,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 88.17,
+          "seconds": 13.77,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 88.17,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 6.67,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 91.34,
+          "seconds": 17.813,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 91.34,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 9.0,
+            "offers_ctas_disclaimers": 12.34,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.2,
+          "seconds": 18.477,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.2,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 9.56,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 98.0,
+      "performance_price_index": 33.4
     },
     {
       "id": "moonshotai/kimi-k2.6",
