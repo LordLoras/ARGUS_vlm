@@ -55,7 +55,7 @@ DISPLAY_NAMES: dict[str, str] = {
     "xiaomi/mimo-v2.5": "MiMo V2.5",
     "google/gemma-4-31b-it": "Gemma 4 31B",
     "qwen3.6-27b-q4-local": "Qwen3.6 27B Q4",
-    "qwen3.6-27b-q4-remote-local": "Qwen3.6 27B Q4 Remote",
+    "qwen3.6-27b-q4-remote": "Qwen3.6 27B Q4 Remote",
 }
 
 SYSTEM_PROMPT = """You are the ARGUS ad intelligence benchmark verifier.
@@ -104,7 +104,8 @@ def main() -> None:
     parser.add_argument("--max-frames", type=int, default=12)
     parser.add_argument("--image-max-dim", type=int, default=512)
     parser.add_argument("--timeout-s", type=float, default=240.0)
-    parser.add_argument("--skip-local", action="store_true")
+    parser.add_argument("--include-direct-local", action="store_true")
+    parser.add_argument("--skip-local", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--only", action="append", default=[])
     args = parser.parse_args()
 
@@ -128,14 +129,14 @@ def main() -> None:
     ]
     endpoints.append(
         Endpoint(
-            id="qwen3.6-27b-q4-remote-local",
+            id="qwen3.6-27b-q4-remote",
             route_type="Remote",
             endpoint=normalize_chat_endpoint(config.vlm.remote.endpoint),
             model=config.vlm.remote.model,
             api_key_env=config.vlm.remote.api_key_env,
         )
     )
-    if not args.skip_local:
+    if args.include_direct_local and not args.skip_local:
         endpoints.append(
             Endpoint(
                 id="qwen3.6-27b-q4-local",
@@ -353,13 +354,16 @@ def call_model(endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: 
             {"role": "user", "content": content},
         ],
         "temperature": 0,
-        "max_tokens": 1600,
+        "max_tokens": max_tokens_for(endpoint.id),
         "response_format": {"type": "json_object"},
         "stream": False,
     }
     if endpoint.route_type == "OpenRouter":
-        payload["reasoning"] = {"effort": "none", "exclude": True}
-        payload["include_reasoning"] = False
+        if endpoint.id == "stepfun/step-3.7-flash":
+            payload["reasoning"] = {"effort": "low", "exclude": True}
+        else:
+            payload["reasoning"] = {"effort": "none", "exclude": True}
+            payload["include_reasoning"] = False
     else:
         payload["chat_template_kwargs"] = {"enable_thinking": False}
 
@@ -640,7 +644,7 @@ def summarize_results(
                 "route_type": endpoint.route_type,
                 "endpoint": endpoint.endpoint,
                 "model": endpoint.model,
-                "thinking_off": thinking_off_for(endpoint.route_type),
+                "thinking_off": thinking_off_for(endpoint.id, endpoint.route_type),
                 "score": round(score, 2),
                 "completion_seconds": round(elapsed, 2),
                 "successful_ads": len(successful),
@@ -691,9 +695,12 @@ def summarize_results(
         "raw_output_path": raw_output_path,
         "protocol": {
             "temperature": 0,
-            "max_tokens": 1600,
+            "max_tokens": "1600, except StepFun uses 4096 because reasoning is mandatory",
             "response_format": "json_object",
-            "openrouter_thinking": 'reasoning.effort="none", include_reasoning=false',
+            "openrouter_thinking": (
+                'reasoning.effort="none" except StepFun, which required '
+                'reasoning.effort="low"'
+            ),
             "local_thinking": "chat_template_kwargs.enable_thinking=false",
             "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10.",
         },
@@ -771,7 +778,7 @@ def readout_for_model(model_id: str) -> str:
         "xiaomi/mimo-v2.5": "Measured low-cost route; schema and dense extraction decide its usefulness.",
         "google/gemma-4-31b-it": "Measured low-cost route with strong price/performance when parse quality holds.",
         "qwen3.6-27b-q4-local": "Measured local quantized route; provider cost is zero but latency is local hardware bound.",
-        "qwen3.6-27b-q4-remote-local": "Measured custom remote-compatible route for the local Qwen quantized model.",
+        "qwen3.6-27b-q4-remote": "Measured custom remote-compatible endpoint for the Qwen quantized model.",
     }.get(model_id, "Measured benchmark row.")
 
 
@@ -804,8 +811,16 @@ def sanitize_error(text: str | None) -> str:
     return cleaned
 
 
-def thinking_off_for(route_type: str) -> str:
+def max_tokens_for(model_id: str) -> int:
+    if model_id == "stepfun/step-3.7-flash":
+        return 4096
+    return 1600
+
+
+def thinking_off_for(model_id: str, route_type: str) -> str:
     if route_type == "OpenRouter":
+        if model_id == "stepfun/step-3.7-flash":
+            return 'reasoning.effort="low"'
         return 'reasoning.effort="none"'
     return "enable_thinking=false"
 
