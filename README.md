@@ -152,12 +152,16 @@ install OCR, torch, or the embedding libraries. Continue through section 4 for
 torch + MiniLM/SigLIP dependencies, then install OCR below if you want local OCR.
 
 This one-liner intentionally excludes torch. First install the correct NVIDIA
-or AMD torch wheel from section 4, then run this to install the rest of the
-local Python feature set without replacing torch:
+or AMD torch wheel from section 4, then run this for the default local runtime
+without unused optional backends or replacing torch:
 
 ```powershell
-python -m pip install --upgrade pip setuptools wheel; python -m pip install -e ".[dev,clustering,qdrant,whisper]"; python -m pip install paddlepaddle; python -m pip install paddleocr; python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
+python -m pip install --upgrade pip setuptools wheel; python -m pip install -e ".[dev]"; python -m pip install paddlepaddle; python -m pip install paddleocr; python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
 ```
+
+Install optional extras only when you actively need them: `.[clustering]` for
+campaign discovery experiments, `.[qdrant]` for a future Qdrant backend, or
+`.[whisper]` if switching from bundled whisper.cpp to `faster-whisper`.
 
 If PowerShell blocks activation for the current terminal session:
 
