@@ -93,16 +93,15 @@ bytes, Git LFS was not installed or `git lfs pull` was not run.
 ## Installation
 
 Recommended Windows setup path. Order matters: most setup problems come from
-replacing the preinstalled torch GPU wheel, missing ffmpeg on `PATH`, or
-starting ARGUS before `config.yaml` and frontend dependencies exist.
+using a CPU-only torch build, missing ffmpeg on `PATH`, or starting ARGUS
+before `config.yaml` and frontend dependencies exist.
 
 Setup checklist:
 
 1. Install Git LFS, Python, Node.js, ffmpeg, and an OpenAI-compatible inference
    engine for the VLM.
-2. Create or activate `.venv`, then install ARGUS Python dependencies.
-3. Do not install or upgrade `torch` unless replacing the hardware-specific GPU
-   build.
+2. Create `.venv`, then install ARGUS Python dependencies.
+3. Install the correct GPU torch build for your hardware (section 4).
 4. Copy `.env.local.example` to `.env.local` and add keys locally.
 5. Copy `config.example.yaml` to `config.yaml` and confirm the endpoint/model.
 6. Run `python -m ad_classifier init-db`.
@@ -136,10 +135,6 @@ in GitHub because they are hundreds of megabytes to multiple gigabytes.
 
 ### 3. Create the Python environment
 
-If this machine already has a working project `.venv`, activate it and do not
-delete it just to reinstall. The environment may contain a manually installed
-GPU PyTorch wheel that pip cannot safely recreate by guessing.
-
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -171,21 +166,34 @@ python -m pip install -e ".[ocr,dev]"
 
 ### 4. PyTorch and Embeddings
 
-Important: a working `.venv` may contain a hardware-specific torch build that is
-part of the machine setup.
+PyTorch is not listed as a dependency in `pyproject.toml`. A plain
+`pip install torch` pulls the CPU-only build, which cannot run MiniLM or SigLIP
+on the GPU. Install the correct wheel for the GPU vendor:
 
-Avoid this command in a production ARGUS environment unless the existing GPU
-build is being replaced:
+- **NVIDIA** — install the CUDA wheel from PyTorch's index. Check
+  <https://pytorch.org/get-started/locally/> for the latest recommended CUDA
+  version. The current stable build is CUDA 12.8:
+
+  ```powershell
+  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+  ```
+
+- **AMD** — follow [section 5 below](#5-amd-rocm-on-windows) instead, then
+  come back here for the embedding packages.
+
+Verify torch sees the GPU:
 
 ```powershell
-pip install torch torchvision torchaudio
+@'
+import torch
+
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu")
+'@ | python -
 ```
 
-PyTorch is intentionally not listed as a direct dependency in `pyproject.toml`.
-Windows GPU wheels are hardware-specific, and a normal `pip install` can replace
-a working AMD/NVIDIA GPU wheel with a CPU build.
-
-#### SigLIP 2 and MiniLM Installation
+#### Embedding Models
 
 ARGUS uses two embedding models that both depend on PyTorch:
 
@@ -194,8 +202,8 @@ ARGUS uses two embedding models that both depend on PyTorch:
 | `sentence-transformers/all-MiniLM-L6-v2` | Text vectors from transcript + OCR | 384 |
 | `google/siglip2-base-patch16-224` | Visual vectors from keyframes and text-to-image search | 768 |
 
-After torch is installed, add the embedding packages without letting pip resolve
-and replace torch:
+After torch is installed, add the embedding packages without letting pip
+resolve and replace the GPU torch build:
 
 ```powershell
 python -m pip install --no-deps sentence-transformers==3.0.1 transformers==4.57.6 tokenizers==0.22.1
