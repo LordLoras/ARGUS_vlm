@@ -59,6 +59,18 @@ type BenchmarkModel = {
   cases: BenchmarkCase[];
 };
 
+type PriceEstimate = {
+  id: string;
+  name: string;
+  provider: string;
+  prompt_price_per_m: number;
+  completion_price_per_m: number;
+  basis_prompt_tokens: number;
+  basis_completion_tokens: number;
+  estimated_cost_usd: number;
+  source: string;
+};
+
 type BenchmarkPayload = {
   generated_at: string;
   benchmark_date_label: string;
@@ -67,12 +79,14 @@ type BenchmarkPayload = {
   protocol: Record<string, string | number>;
   ads: BenchmarkAd[];
   models: BenchmarkModel[];
+  price_estimates?: PriceEstimate[];
 };
 
 const data = benchmarkData as BenchmarkPayload;
 
 export function ModelBenchmark() {
   const models = data.models;
+  const priceEstimates = data.price_estimates ?? [];
   const completedModels = models.filter((model) => model.successful_ads > 0);
   const qualityLeader = completedModels[0] ?? models[0];
   const fastestPaid = completedModels
@@ -210,6 +224,50 @@ export function ModelBenchmark() {
           </div>
         </section>
 
+        {priceEstimates.length > 0 ? (
+          <section className="benchmark-section">
+            <div className="benchmark-section-head">
+              <div>
+                <span className="eyebrow">OpenRouter projections</span>
+                <h2>Price-only routes not benchmarked</h2>
+              </div>
+              <span className="badge badge-sky">Not run</span>
+            </div>
+            <div className="benchmark-table-wrap">
+              <table className="benchmark-table benchmark-price-table">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Prompt rate</th>
+                    <th>Completion rate</th>
+                    <th>Token basis</th>
+                    <th>Projected 5-ad cost</th>
+                    <th>Basis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceEstimates.map((estimate) => (
+                    <tr key={estimate.id}>
+                      <td>
+                        <div className="benchmark-model-cell">
+                          <strong>{estimate.name}</strong>
+                          <span>{estimate.id}</span>
+                          <em>{estimate.provider}</em>
+                        </div>
+                      </td>
+                      <td>{formatRate(estimate.prompt_price_per_m)}</td>
+                      <td>{formatRate(estimate.completion_price_per_m)}</td>
+                      <td>{formatTokenBasis(estimate)}</td>
+                      <td>{formatProjectedCost(estimate.estimated_cost_usd)}</td>
+                      <td>{estimate.source}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
         <section className="benchmark-section">
           <div className="benchmark-section-head">
             <div>
@@ -329,6 +387,18 @@ function formatCost(model: BenchmarkModel) {
   if (model.route_type === "Remote") return "custom";
   if (!model.estimated_cost_usd) return "N/A";
   return `$${model.estimated_cost_usd.toFixed(4)}`;
+}
+
+function formatProjectedCost(cost: number) {
+  return `$${cost.toFixed(cost >= 1 ? 4 : 6)}`;
+}
+
+function formatRate(rate: number) {
+  return `$${rate.toFixed(rate >= 10 ? 0 : 2)}/M`;
+}
+
+function formatTokenBasis(estimate: PriceEstimate) {
+  return `${estimate.basis_prompt_tokens.toLocaleString()} / ${estimate.basis_completion_tokens.toLocaleString()}`;
 }
 
 function formatDate(value: string) {

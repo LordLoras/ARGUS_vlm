@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-06-01T05:23:48.216982+00:00",
+  "generated_at": "2026-06-01T05:31:47.172333+00:00",
   "benchmark_date_label": "June 1, 2026",
   "source": "actual OpenRouter/local endpoint calls",
   "raw_output_path": "data/benchmarks/model_benchmark_latest_raw.json",
   "protocol": {
     "temperature": 0,
-    "max_tokens": "1600, except StepFun uses 4096 because reasoning is mandatory",
+    "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
     "response_format": "json_object",
-    "openrouter_thinking": "reasoning.effort=\"none\" except StepFun, which required reasoning.effort=\"low\"",
+    "openrouter_thinking": "reasoning.effort=\"none\" except StepFun low uses \"low\" and StepFun Max uses \"xhigh\"",
     "local_thinking": "chat_template_kwargs.enable_thinking=false",
     "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10."
   },
@@ -794,6 +794,157 @@
       ],
       "relative_performance_pct": 81.7,
       "performance_price_index": 16.1
+    },
+    {
+      "id": "stepfun/step-3.7-flash-max",
+      "name": "Step 3.7 Flash Max",
+      "provider": "StepFun",
+      "route_type": "OpenRouter",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "stepfun/step-3.7-flash",
+      "thinking_off": "reasoning.effort=\"xhigh\"",
+      "score": 60.14,
+      "completion_seconds": 49.79,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 21608,
+      "completion_tokens": 9585,
+      "estimated_cost_usd": 0.015344,
+      "readout": "Measured StepFun with maximum OpenRouter reasoning effort for comparison.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 29.0,
+          "seconds": 12.332,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: category.",
+          "breakdown": {
+            "total": 29.0,
+            "parse": 10.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 4.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 10.0,
+          "seconds": 10.891,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: category.",
+          "breakdown": {
+            "total": 10.0,
+            "parse": 10.0,
+            "category": 0.0,
+            "brand": 0.0,
+            "products": 0.0,
+            "offers_ctas_disclaimers": 0.0,
+            "evidence": 0.0,
+            "confidence_quality": 0.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 93.64,
+          "seconds": 6.449,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 93.64,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.91,
+            "offers_ctas_disclaimers": 12.73,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 74.53,
+          "seconds": 6.877,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: category.",
+          "breakdown": {
+            "total": 74.53,
+            "parse": 10.0,
+            "category": 0.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 14.53,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.54,
+          "seconds": 13.239,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.54,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 9.9,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 64.6,
+      "performance_price_index": 17.4
+    }
+  ],
+  "price_estimates": [
+    {
+      "id": "google/gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash",
+      "provider": "Google",
+      "prompt_price_per_m": 1.5,
+      "completion_price_per_m": 9.0,
+      "basis_prompt_tokens": 26905,
+      "basis_completion_tokens": 2992,
+      "estimated_cost_usd": 0.067285,
+      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
+    },
+    {
+      "id": "openai/gpt-5.5",
+      "name": "GPT-5.5",
+      "provider": "OpenAI",
+      "prompt_price_per_m": 5.0,
+      "completion_price_per_m": 30.0,
+      "basis_prompt_tokens": 26905,
+      "basis_completion_tokens": 2992,
+      "estimated_cost_usd": 0.224285,
+      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
+    },
+    {
+      "id": "openai/gpt-5.5-pro",
+      "name": "GPT-5.5 Pro",
+      "provider": "OpenAI",
+      "prompt_price_per_m": 30.0,
+      "completion_price_per_m": 180.0,
+      "basis_prompt_tokens": 26905,
+      "basis_completion_tokens": 2992,
+      "estimated_cost_usd": 1.34571,
+      "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run."
     }
   ]
 }

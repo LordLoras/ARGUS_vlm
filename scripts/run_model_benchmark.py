@@ -42,14 +42,40 @@ OPENROUTER_MODELS = [
 
 MODEL_PRICING_PER_M: dict[str, dict[str, float]] = {
     "stepfun/step-3.7-flash": {"prompt": 0.2, "completion": 1.15},
+    "stepfun/step-3.7-flash-max": {"prompt": 0.2, "completion": 1.15},
     "moonshotai/kimi-k2.6": {"prompt": 0.684, "completion": 3.42},
     "moonshotai/kimi-k2.5": {"prompt": 0.4, "completion": 1.9},
     "xiaomi/mimo-v2.5": {"prompt": 0.14, "completion": 0.28},
     "google/gemma-4-31b-it": {"prompt": 0.12, "completion": 0.37},
 }
 
+PRICE_ONLY_MODELS: list[dict[str, Any]] = [
+    {
+        "id": "google/gemini-3.5-flash",
+        "name": "Gemini 3.5 Flash",
+        "provider": "Google",
+        "prompt_price_per_m": 1.5,
+        "completion_price_per_m": 9.0,
+    },
+    {
+        "id": "openai/gpt-5.5",
+        "name": "GPT-5.5",
+        "provider": "OpenAI",
+        "prompt_price_per_m": 5.0,
+        "completion_price_per_m": 30.0,
+    },
+    {
+        "id": "openai/gpt-5.5-pro",
+        "name": "GPT-5.5 Pro",
+        "provider": "OpenAI",
+        "prompt_price_per_m": 30.0,
+        "completion_price_per_m": 180.0,
+    },
+]
+
 DISPLAY_NAMES: dict[str, str] = {
     "stepfun/step-3.7-flash": "Step 3.7 Flash",
+    "stepfun/step-3.7-flash-max": "Step 3.7 Flash Max",
     "moonshotai/kimi-k2.6": "Kimi K2.6",
     "moonshotai/kimi-k2.5": "Kimi K2.5",
     "xiaomi/mimo-v2.5": "MiMo V2.5",
@@ -127,6 +153,15 @@ def main() -> None:
         )
         for model in OPENROUTER_MODELS
     ]
+    endpoints.append(
+        Endpoint(
+            id="stepfun/step-3.7-flash-max",
+            route_type="OpenRouter",
+            endpoint="https://openrouter.ai/api/v1/chat/completions",
+            model="stepfun/step-3.7-flash",
+            api_key_env="OPENROUTER_API_KEY",
+        )
+    )
     endpoints.append(
         Endpoint(
             id="qwen3.6-27b-q4-remote",
@@ -361,6 +396,8 @@ def call_model(endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: 
     if endpoint.route_type == "OpenRouter":
         if endpoint.id == "stepfun/step-3.7-flash":
             payload["reasoning"] = {"effort": "low", "exclude": True}
+        elif endpoint.id == "stepfun/step-3.7-flash-max":
+            payload["reasoning"] = {"effort": "xhigh", "exclude": True}
         else:
             payload["reasoning"] = {"effort": "none", "exclude": True}
             payload["include_reasoning"] = False
@@ -695,17 +732,18 @@ def summarize_results(
         "raw_output_path": raw_output_path,
         "protocol": {
             "temperature": 0,
-            "max_tokens": "1600, except StepFun uses 4096 because reasoning is mandatory",
+            "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
             "response_format": "json_object",
             "openrouter_thinking": (
                 'reasoning.effort="none" except StepFun, which required '
-                'reasoning.effort="low"'
+                'reasoning.effort="low"; StepFun Max uses reasoning.effort="xhigh"'
             ),
             "local_thinking": "chat_template_kwargs.enable_thinking=false",
             "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10.",
         },
         "ads": ads,
         "models": sorted(by_model, key=lambda row: row["score"], reverse=True),
+        "price_estimates": price_estimates(by_model),
     }
 
 
@@ -777,6 +815,7 @@ def readout_for_model(model_id: str) -> str:
         "stepfun/step-3.7-flash": "Measured fast paid route; useful for cleaner artifacts.",
         "xiaomi/mimo-v2.5": "Measured low-cost route; schema and dense extraction decide its usefulness.",
         "google/gemma-4-31b-it": "Measured low-cost route with strong price/performance when parse quality holds.",
+        "stepfun/step-3.7-flash-max": "Measured StepFun with maximum OpenRouter reasoning effort for comparison.",
         "qwen3.6-27b-q4-local": "Measured local quantized route; provider cost is zero but latency is local hardware bound.",
         "qwen3.6-27b-q4-remote": "Measured custom remote-compatible endpoint for the Qwen quantized model.",
     }.get(model_id, "Measured benchmark row.")
@@ -814,6 +853,8 @@ def sanitize_error(text: str | None) -> str:
 def max_tokens_for(model_id: str) -> int:
     if model_id == "stepfun/step-3.7-flash":
         return 4096
+    if model_id == "stepfun/step-3.7-flash-max":
+        return 8192
     return 1600
 
 
@@ -821,8 +862,51 @@ def thinking_off_for(model_id: str, route_type: str) -> str:
     if route_type == "OpenRouter":
         if model_id == "stepfun/step-3.7-flash":
             return 'reasoning.effort="low"'
+        if model_id == "stepfun/step-3.7-flash-max":
+            return 'reasoning.effort="xhigh"'
         return 'reasoning.effort="none"'
     return "enable_thinking=false"
+
+
+def price_estimates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    basis_rows = [
+        row
+        for row in rows
+        if row["successful_ads"] == row["total_ads"]
+        and row["prompt_tokens"] > 0
+        and row["completion_tokens"] > 0
+        and not row["id"].startswith("stepfun/")
+    ]
+    prompt_basis = median_int([row["prompt_tokens"] for row in basis_rows]) if basis_rows else 0
+    completion_basis = (
+        median_int([row["completion_tokens"] for row in basis_rows]) if basis_rows else 0
+    )
+    estimates: list[dict[str, Any]] = []
+    for model in PRICE_ONLY_MODELS:
+        cost = (
+            prompt_basis * float(model["prompt_price_per_m"]) / 1_000_000
+            + completion_basis * float(model["completion_price_per_m"]) / 1_000_000
+        )
+        estimates.append(
+            {
+                **model,
+                "basis_prompt_tokens": prompt_basis,
+                "basis_completion_tokens": completion_basis,
+                "estimated_cost_usd": round(cost, 6),
+                "source": "OpenRouter model metadata fetched June 1, 2026; price projection only, not a measured run.",
+            }
+        )
+    return estimates
+
+
+def median_int(values: list[int]) -> int:
+    if not values:
+        return 0
+    sorted_values = sorted(values)
+    mid = len(sorted_values) // 2
+    if len(sorted_values) % 2:
+        return int(sorted_values[mid])
+    return int(round((sorted_values[mid - 1] + sorted_values[mid]) / 2))
 
 
 def normalize_chat_endpoint(endpoint: str) -> str:
