@@ -1,0 +1,17 @@
+ARGUS showcase deck QA
+
+Deliverable: argus-showcase-bg.pptx
+Slides: 13
+Language: Bulgarian with English technical terms where useful
+Audience: semi-technical internal showcase
+
+Checks completed:
+- PPTX exported successfully.
+- All 13 slide previews rendered.
+- Contact sheet reviewed for visual rhythm and ordering.
+- Full-size QA checked key visual slides: evidence flow, upload, search, operations, and final demo path.
+- Automated layout check run. Remaining reported errors are intentional cover-slide text over a full-bleed hero image.
+
+Notes:
+- The deck is editable PowerPoint and can be imported into Google Slides.
+- Screenshots are taken from the local ARGUS UI and embedded into the deck.
