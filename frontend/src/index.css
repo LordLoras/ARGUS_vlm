@@ -75,21 +75,8 @@ select:focus-visible {
 }
 
 /* ========== Experimental Entity Graph ========== */
-.nav-section-archived {
-  color: color-mix(in srgb, var(--fg-mute) 82%, transparent);
-}
-
 .nav-section-experimental {
   color: var(--accent-2);
-}
-
-.nav-item-archived {
-  opacity: 0.72;
-}
-
-.nav-item-archived.active,
-.nav-item-archived:hover {
-  opacity: 1;
 }
 
 .nav-item-experimental {

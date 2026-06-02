@@ -25,14 +25,14 @@ type NavEntry = {
   icon: IconComponent;
   badge?: string | null;
   accentBadge?: boolean;
-  variant?: "archived" | "experimental";
+  variant?: "experimental";
 };
 
-const submittedPast: NavEntry[] = [
-  { to: "/about", label: "Demo Review", icon: InfoIcon, variant: "archived" },
-  { to: "/library", label: "Existing Ad Library", icon: LibraryIcon, variant: "archived" },
-  { to: "/search", label: "Existing Search", icon: SearchIcon, variant: "archived" },
-  { to: "/agent", label: "Existing Agent", icon: ChatIcon, variant: "archived" },
+const workspace: NavEntry[] = [
+  { to: "/library", label: "Library", icon: LibraryIcon },
+  { to: "/upload", label: "Upload", icon: UploadIcon },
+  { to: "/search", label: "Search", icon: SearchIcon },
+  { to: "/campaigns", label: "Campaigns", icon: CampaignsIcon }
 ];
 
 const experimental: NavEntry[] = [
@@ -42,16 +42,18 @@ const experimental: NavEntry[] = [
   { to: "/experimental/taxonomy-mapping", label: "Taxonomy Mapping", icon: LayersIcon, variant: "experimental" },
 ];
 
-const submittedSupport: NavEntry[] = [
-  { to: "/upload", label: "Upload", icon: UploadIcon, variant: "archived" },
-  { to: "/campaigns", label: "Campaigns", icon: CampaignsIcon, variant: "archived" },
-  { to: "/debate", label: "Debate", icon: FlowIcon, variant: "archived" },
-  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon, variant: "archived" },
-  { to: "/embeddings", label: "Embeddings", icon: LayersIcon, variant: "archived" },
-  { to: "/benchmark", label: "Model Benchmark", icon: BenchmarkIcon, variant: "archived" }
+const intelligence: NavEntry[] = [
+  { to: "/agent", label: "Agent", icon: ChatIcon },
+  { to: "/debate", label: "Debate", icon: FlowIcon },
+  { to: "/graph", label: "Knowledge Graph", icon: GraphIcon },
+  { to: "/embeddings", label: "Embeddings", icon: LayersIcon },
+  { to: "/benchmark", label: "Model Benchmark", icon: BenchmarkIcon }
 ];
 
+const disabledIntelligence: { label: string; icon: IconComponent }[] = [];
+
 const system: NavEntry[] = [
+  { to: "/about", label: "About", icon: InfoIcon },
   { to: "/pipelines", label: "Jobs", icon: FlowIcon },
   { to: "/taxonomy", label: "Taxonomy", icon: LayersIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon }
@@ -68,20 +70,23 @@ export function Sidebar() {
         <div className="brand-meta">v0.4</div>
       </div>
       <nav className="nav">
-        <div className="nav-section nav-section-archived">Submitted Past Submission</div>
-        {submittedPast.map((entry) => (
+        <div className="nav-section">Workspace</div>
+        {workspace.map((entry) => (
+          <NavItem key={entry.to} entry={entry} />
+        ))}
+        <div className="nav-section">Intelligence</div>
+        {intelligence.map((entry) => (
+          <NavItem key={entry.to} entry={entry} />
+        ))}
+        {disabledIntelligence.map((entry) => (
+          <DisabledItem key={entry.label} label={entry.label} Icon={entry.icon} />
+        ))}
+        <div className="nav-section">System</div>
+        {system.map((entry) => (
           <NavItem key={entry.to} entry={entry} />
         ))}
         <div className="nav-section nav-section-experimental">Experimental</div>
         {experimental.map((entry) => (
-          <NavItem key={entry.to} entry={entry} />
-        ))}
-        <div className="nav-section nav-section-archived">Submitted Support</div>
-        {submittedSupport.map((entry) => (
-          <NavItem key={entry.to} entry={entry} />
-        ))}
-        <div className="nav-section">System</div>
-        {system.map((entry) => (
           <NavItem key={entry.to} entry={entry} />
         ))}
       </nav>
@@ -102,7 +107,6 @@ function NavItem({ entry }: { entry: NavEntry }) {
       className={({ isActive }) =>
         cn(
           "nav-item",
-          entry.variant === "archived" && "nav-item-archived",
           entry.variant === "experimental" && "nav-item-experimental",
           isActive && "active"
         )
