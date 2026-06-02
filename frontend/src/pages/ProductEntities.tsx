@@ -67,7 +67,7 @@ export function ProductEntities() {
               Writes stay in entity_graph.db; submitted ad records are read-only inputs.
             </span>
           </div>
-          <Link to="/about#experimental-products">View home notice</Link>
+          <Link to="/about#experimental-routes">View experimental routes</Link>
         </section>
 
         <section className="entity-hero">
