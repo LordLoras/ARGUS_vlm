@@ -59,12 +59,24 @@ export function ProductEntities() {
       <ApiOfflineBanner offline={health.isError} />
 
       <div className="page entity-page">
+        <section className="entity-branch-banner">
+          <div>
+            <strong>Post-submission experimental feature in development</strong>
+            <span>
+              Running on this local FastAPI/Vite server while developed on the experimental Git branch.
+              Writes stay in entity_graph.db; submitted ad records are read-only inputs.
+            </span>
+          </div>
+          <Link to="/about#experimental-products">View home notice</Link>
+        </section>
+
         <section className="entity-hero">
           <div>
-            <span className="entity-kicker">Experimental graph DB</span>
+            <span className="entity-kicker">Post-submission experimental graph DB</span>
             <h1 className="page-title">Product Entities</h1>
             <p className="page-sub">
               Canonical product nodes generated from submitted ad evidence and stored in the isolated entity graph.
+              This page is active development work, separate from the submitted past submission demo routes.
             </p>
           </div>
           <div className="entity-stat-strip">

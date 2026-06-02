@@ -317,6 +317,13 @@ const FEATURE_LINKS = [
   { label: "Embeddings", to: "/embeddings", icon: Radar, note: "show vector space" },
 ];
 
+const EXPERIMENTAL_LINKS = [
+  { label: "Product Entities", to: "/experimental/products", icon: Layers, note: "canonical product pages" },
+  { label: "Brand Graph", to: "/experimental/brand-graph", icon: Network, note: "brand and owner links" },
+  { label: "Entity Resolver", to: "/experimental/entity-resolver", icon: FileSearch, note: "candidate promotion" },
+  { label: "Taxonomy Mapping", to: "/experimental/taxonomy-mapping", icon: ListTree, note: "confidence-aware mappings" },
+];
+
 function FadeSection({
   children,
   className,
@@ -568,12 +575,43 @@ export function About() {
                 <MessageSquare size={15} />
                 Ask the agent
               </Link>
+              <Link to="/experimental/products" className="about-btn about-btn-experimental">
+                <Sparkles size={15} />
+                Experimental products
+              </Link>
             </div>
           </div>
 
           <DemoSignalPanel activeStep={activeStep} />
         </div>
       </section>
+
+      <FadeSection className="about-section about-section-experimental" id="experimental-products">
+        <div className="about-experimental-callout">
+          <div className="about-experimental-copy">
+            <span className="about-mini-label">Post-submission experimental feature</span>
+            <h2>Product entity graph work is visible here, but isolated on the experimental branch.</h2>
+            <p>
+              These routes run on the same local FastAPI/Vite server for convenience, while the new work lives on
+              the <code>experimental</code> Git branch and writes only to the separate <code>entity_graph.db</code>.
+              The submitted demo database is read through a read-only adapter.
+            </p>
+          </div>
+          <div className="about-experimental-routes">
+            {EXPERIMENTAL_LINKS.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <Link key={feature.label} to={feature.to} className="about-experimental-route">
+                  <Icon size={18} />
+                  <strong>{feature.label}</strong>
+                  <span>{feature.note}</span>
+                  <ArrowRight size={15} />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </FadeSection>
 
       <FadeSection className="about-section about-section-intro" id="one-liner">
         <div className="about-section-head">
@@ -818,6 +856,25 @@ export function About() {
               </Link>
             );
           })}
+        </div>
+        <div className="about-explore-subsection">
+          <div>
+            <span className="about-mini-label">Experimental</span>
+            <p>Post-submission routes for product entities, graph relations, resolver review, and taxonomy mapping.</p>
+          </div>
+          <div className="about-feature-grid about-feature-grid-experimental">
+            {EXPERIMENTAL_LINKS.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <Link key={feature.label} to={feature.to} className="about-feature-link about-feature-link-experimental">
+                  <Icon size={18} />
+                  <strong>{feature.label}</strong>
+                  <span>{feature.note}</span>
+                  <ArrowRight size={15} />
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </FadeSection>
 
