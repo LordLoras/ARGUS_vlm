@@ -1,17 +1,18 @@
 ARGUS showcase deck QA
 
 Deliverable: argus-showcase-bg.pptx
-Slides: 13
-Language: neutral Bulgarian with English technical terms where useful
-Audience: semi-technical product/system showcase
+Slides: 12
+Language: English-only slide copy
+Audience: short semi-technical system overview
 
 Checks completed:
 - PPTX exported successfully.
-- All 13 slide previews rendered.
+- All 12 slide previews rendered.
 - Contact sheet reviewed for visual rhythm and ordering.
-- Full-size QA checked key visual slides: upload, library, search, embeddings, agent, operations, and final demo path.
-- Neutral-language scan completed for personalized organization language.
-- Tight text boxes and visible clipping risks were padded or shortened.
+- Full-size QA checked key visual slides: pipeline, upload, library, search, campaigns, agent, operations, and final demo path.
+- Embedding Space slide removed.
+- English-only source scan completed; no Cyrillic slide copy remains.
+- Slide 4 was rebuilt with larger pipeline cards to remove visible clipping.
 - Automated layout check run. Remaining reported errors are intentional cover-slide text over a full-bleed hero image.
 
 Notes:
