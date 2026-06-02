@@ -781,6 +781,139 @@ export type SearchHit = {
   thumbnail_time_ms?: number | null;
 };
 
+export type EntityStatus =
+  | "candidate"
+  | "confirmed_unreviewed"
+  | "confirmed_reviewed"
+  | "rejected";
+
+export type EntityType = "product" | "brand" | "company" | "category" | "taxonomy" | "ad";
+
+export type EntityNode = {
+  id: string;
+  type: EntityType;
+  canonical_name: string;
+  normalized_name: string;
+  description?: string | null;
+  status: EntityStatus;
+  confidence: number;
+  generated_from?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type EntityAlias = {
+  id?: number | null;
+  node_id: string;
+  alias: string;
+  normalized_alias: string;
+  source_id?: string | null;
+  confidence: number;
+  status: EntityStatus;
+  created_at?: string | null;
+};
+
+export type EntityEdge = {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation: string;
+  confidence: number;
+  status: EntityStatus;
+  source_id?: string | null;
+  evidence?: Record<string, unknown> | null;
+  created_at?: string | null;
+};
+
+export type EntityObservation = {
+  id: string;
+  node_id: string;
+  ad_id: string;
+  field: string;
+  evidence_text: string;
+  source: string;
+  time_ms?: number | null;
+  frame_index?: number | null;
+  confidence: number;
+  source_id?: string | null;
+  created_at?: string | null;
+};
+
+export type EntityTaxonomyMapping = {
+  id: string;
+  entity_id: string;
+  taxonomy_type: "product" | "content" | "category" | string;
+  taxonomy_id: string;
+  taxonomy_name?: string | null;
+  relation: string;
+  confidence: number;
+  status: EntityStatus;
+  source_id?: string | null;
+  evidence_text?: string | null;
+  created_at?: string | null;
+};
+
+export type RelatedAdSummary = {
+  ad_id: string;
+  brand_name?: string | null;
+  products_text?: string | null;
+  primary_category?: string | null;
+  subcategory?: string | null;
+  ingested_at?: string | null;
+  evidence_count: number;
+  first_evidence_text?: string | null;
+};
+
+export type ProductSummary = {
+  node: EntityNode;
+  brand?: EntityNode | null;
+  owner?: EntityNode | null;
+  category?: EntityNode | null;
+  aliases_count: number;
+  evidence_count: number;
+  related_ads_count: number;
+  taxonomy_mappings_count: number;
+};
+
+export type ProductPage = ProductSummary & {
+  aliases: EntityAlias[];
+  taxonomy_mappings: EntityTaxonomyMapping[];
+  observations: EntityObservation[];
+  related_ads: RelatedAdSummary[];
+};
+
+export type EntityGraphPayload = {
+  nodes: EntityNode[];
+  edges: EntityEdge[];
+};
+
+export type EntityTaxonomyMappingSummary = {
+  mapping: EntityTaxonomyMapping;
+  entity: EntityNode;
+};
+
+export type ResolverItem = {
+  ad_id: string;
+  product_name: string;
+  status: EntityStatus;
+  confidence: number;
+  reason: string;
+  brand_name?: string | null;
+  owner_name?: string | null;
+  category_name?: string | null;
+};
+
+export type ResolverResult = {
+  preview: boolean;
+  mode: string;
+  source_ad_count: number;
+  created_count: number;
+  updated_count: number;
+  candidate_count: number;
+  confirmed_unreviewed_count: number;
+  items: ResolverItem[];
+};
+
 export type AgentSession = {
   id: string;
   user_label?: string | null;

@@ -14,11 +14,17 @@ import type {
   CreativeDebateReport,
   CreativePanelPersona,
   CreativePanelReport,
+  EntityGraphPayload,
+  EntityNode,
+  EntityTaxonomyMappingSummary,
   FrameRecord,
   JobStreamEvent,
   JobRecord,
   OcrItemDetail,
+  ProductPage,
+  ProductSummary,
   RelatedAds,
+  ResolverResult,
   SearchHit,
   SettingsConfig,
   SettingsSnapshot,
@@ -347,7 +353,67 @@ export const api = {
   listAgentTools: () =>
     apiFetch<{ tools: Array<{ name: string; description: string; parameters: unknown }> }>(
       "/api/agent/tools"
-    )
+    ),
+
+  listEntityProducts: (query: { status?: string; q?: string; limit?: number; offset?: number } = {}) =>
+    apiFetch<{ items: ProductSummary[]; limit: number; offset: number }>(
+      `/api/entity-graph/products${params(query)}`
+    ),
+
+  getEntityProduct: (productId: string) =>
+    apiFetch<ProductPage>(`/api/entity-graph/products/${encodeURIComponent(productId)}`),
+
+  getEntityGraph: (limit = 400) =>
+    apiFetch<EntityGraphPayload>(`/api/entity-graph/graph${params({ limit })}`),
+
+  getEntityTaxonomyMappings: (limit = 200) =>
+    apiFetch<{ items: EntityTaxonomyMappingSummary[]; limit: number }>(
+      `/api/entity-graph/taxonomy-mappings${params({ limit })}`
+    ),
+
+  getEntityReadonlyStatus: () =>
+    apiFetch<{ submitted_db_query_only: boolean }>("/api/entity-graph/readonly-status"),
+
+  previewEntityResolver: (body: { mode?: string; fully_automatic?: boolean; limit?: number } = {}) =>
+    apiFetch<ResolverResult>("/api/entity-graph/resolver/preview", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  runEntityResolver: (body: { mode?: string; fully_automatic?: boolean; limit?: number } = {}) =>
+    apiFetch<ResolverResult>("/api/entity-graph/resolver/run", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  promoteEntity: (entityId: string) =>
+    apiFetch<EntityNode>(`/api/entity-graph/entities/${encodeURIComponent(entityId)}/promote`, {
+      method: "POST"
+    }),
+
+  rejectEntity: (entityId: string) =>
+    apiFetch<EntityNode>(`/api/entity-graph/entities/${encodeURIComponent(entityId)}/reject`, {
+      method: "POST"
+    }),
+
+  reviewEntity: (entityId: string, status: string) =>
+    apiFetch<EntityNode>(`/api/entity-graph/entities/${encodeURIComponent(entityId)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ status })
+    }),
+
+  addDiscoveryCandidate: (body: {
+    entity_type?: string;
+    name: string;
+    aliases?: string[];
+    source_url?: string | null;
+    notes?: string | null;
+    confidence?: number;
+  }) =>
+    apiFetch<EntityNode>("/api/entity-graph/discovery-candidates", {
+      method: "POST",
+      body: JSON.stringify(body)
+    })
 };
 
 export function streamJobEvents(jobId: string, onEvent: (event: JobStreamEvent) => void) {

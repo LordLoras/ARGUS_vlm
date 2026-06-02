@@ -20,6 +20,7 @@ class PathsConfig(BaseModel):
     whisper: Path = Path("./data/whisper")
     out: Path = Path("./data/out")
     sqlite_path: Path = Path("./ad_classifier.db")
+    entity_graph_path: Path = Path("./entity_graph.db")
     qdrant_path: Path = Path("./qdrant_db")
 
 

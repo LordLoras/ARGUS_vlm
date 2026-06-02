@@ -13,6 +13,9 @@ paths:
   whisper: ./data/whisper
   out: ./data/out
   sqlite_path: ./ad_classifier.db
+  # Experimental product entity graph. This store can read ad_classifier.db
+  # through read-only adapters but must not mutate submitted demo records.
+  entity_graph_path: ./entity_graph.db
   qdrant_path: ./qdrant_db
 
 ingest:

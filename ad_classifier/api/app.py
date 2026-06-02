@@ -14,6 +14,7 @@ from ad_classifier.api.routes.brand_profiles import router as brand_profiles_rou
 from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.creative_panel import router as creative_panel_router
 from ad_classifier.api.routes.evidence import router as evidence_router
+from ad_classifier.api.routes.entity_graph import router as entity_graph_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.knowledge import router as knowledge_router
 from ad_classifier.api.routes.public import router as public_router
@@ -23,6 +24,7 @@ from ad_classifier.api.routes.embeddings import router as embeddings_router
 from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
+from ad_classifier.entity_graph.manager import EntityGraphManager
 from ad_classifier.knowledge.manager import KnowledgeManager
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
@@ -83,6 +85,8 @@ def create_app(
     kb_path = resolved_db.parent / "knowledge.db"
     kb = KnowledgeManager(kb_path)
     app.state.knowledge_manager = kb
+    entity_graph_path = resolve_config_path(config.paths.entity_graph_path, config_file)
+    app.state.entity_graph_manager = EntityGraphManager(entity_graph_path, resolved_db)
 
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
@@ -124,6 +128,7 @@ def create_app(
     app.include_router(agent_router, prefix="/api")
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(embeddings_router, prefix="/api")
+    app.include_router(entity_graph_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
     if config.api.public.enabled:
         app.include_router(public_router, prefix="/api")

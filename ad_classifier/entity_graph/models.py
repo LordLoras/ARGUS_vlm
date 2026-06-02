@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field
+
+from ad_classifier.models.common import StrictModel
+
+EntityType = Literal["product", "brand", "company", "category", "taxonomy", "ad"]
+EntityStatus = Literal["candidate", "confirmed_unreviewed", "confirmed_reviewed", "rejected"]
+SourceType = Literal["submitted_ad", "taxonomy", "discovery_only", "user", "resolver"]
+RelationType = Literal[
+    "BRANDED_BY",
+    "OWNED_BY",
+    "IN_CATEGORY",
+    "MAPS_TO_TAXONOMY",
+    "MENTIONED_IN_AD",
+]
+
+
+class EntitySource(StrictModel):
+    id: str
+    source_type: SourceType
+    label: str
+    url: str | None = None
+    ad_id: str | None = None
+    payload: dict | None = None
+    created_at: str | None = None
+
+
+class EntityNode(StrictModel):
+    id: str
+    type: EntityType
+    canonical_name: str
+    normalized_name: str
+    description: str | None = None
+    status: EntityStatus = "candidate"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    generated_from: dict | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class EntityAlias(StrictModel):
+    id: int | None = None
+    node_id: str
+    alias: str
+    normalized_alias: str
+    source_id: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: EntityStatus = "candidate"
+    created_at: str | None = None
+
+
+class EntityEdge(StrictModel):
+    id: str
+    source_node_id: str
+    target_node_id: str
+    relation: RelationType
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: EntityStatus = "candidate"
+    source_id: str | None = None
+    evidence: dict | None = None
+    created_at: str | None = None
+
+
+class EntityObservation(StrictModel):
+    id: str
+    node_id: str
+    ad_id: str
+    field: str
+    evidence_text: str
+    source: str
+    time_ms: int | None = Field(default=None, ge=0)
+    frame_index: int | None = Field(default=None, ge=0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    source_id: str | None = None
+    created_at: str | None = None
+
+
+class TaxonomyMapping(StrictModel):
+    id: str
+    entity_id: str
+    taxonomy_type: Literal["product", "content", "category"]
+    taxonomy_id: str
+    taxonomy_name: str | None = None
+    relation: str = "maps_to"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: EntityStatus = "candidate"
+    source_id: str | None = None
+    evidence_text: str | None = None
+    created_at: str | None = None
+
+
+class SubmittedAdObservation(StrictModel):
+    ad_id: str
+    product_name: str
+    brand_name: str | None = None
+    advertiser_name: str | None = None
+    parent_company: str | None = None
+    primary_category: str | None = None
+    subcategory: str | None = None
+    iab_product_id: str | None = None
+    iab_product_name: str | None = None
+    iab_content_ids: list[str] = Field(default_factory=list)
+    iab_content_names: list[str] = Field(default_factory=list)
+    evidence_text: str | None = None
+    evidence_source: str = "submitted_ad"
+    time_ms: int | None = Field(default=None, ge=0)
+    frame_index: int | None = Field(default=None, ge=0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class RelatedAdSummary(StrictModel):
+    ad_id: str
+    brand_name: str | None = None
+    products_text: str | None = None
+    primary_category: str | None = None
+    subcategory: str | None = None
+    ingested_at: str | None = None
+    evidence_count: int = 0
+    first_evidence_text: str | None = None
+
+
+class ProductSummary(StrictModel):
+    node: EntityNode
+    brand: EntityNode | None = None
+    owner: EntityNode | None = None
+    category: EntityNode | None = None
+    aliases_count: int = 0
+    evidence_count: int = 0
+    related_ads_count: int = 0
+    taxonomy_mappings_count: int = 0
+
+
+class ProductPage(ProductSummary):
+    aliases: list[EntityAlias] = Field(default_factory=list)
+    taxonomy_mappings: list[TaxonomyMapping] = Field(default_factory=list)
+    observations: list[EntityObservation] = Field(default_factory=list)
+    related_ads: list[RelatedAdSummary] = Field(default_factory=list)
+
+
+class GraphPayload(StrictModel):
+    nodes: list[EntityNode]
+    edges: list[EntityEdge]
+
+
+class TaxonomyMappingSummary(StrictModel):
+    mapping: TaxonomyMapping
+    entity: EntityNode
+
+
+class ResolverItem(StrictModel):
+    ad_id: str
+    product_name: str
+    status: EntityStatus
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str
+    brand_name: str | None = None
+    owner_name: str | None = None
+    category_name: str | None = None
+
+
+class ResolverResult(StrictModel):
+    preview: bool
+    mode: Literal["minimal_review", "fully_automatic"] = "minimal_review"
+    source_ad_count: int = 0
+    created_count: int = 0
+    updated_count: int = 0
+    candidate_count: int = 0
+    confirmed_unreviewed_count: int = 0
+    items: list[ResolverItem] = Field(default_factory=list)
+
+
+class DiscoveryCandidateRequest(StrictModel):
+    entity_type: EntityType = "product"
+    name: str
+    aliases: list[str] = Field(default_factory=list)
+    source_url: str | None = None
+    notes: str | None = None
+    confidence: float = Field(default=0.35, ge=0.0, le=1.0)

@@ -15,8 +15,16 @@ const Campaigns = lazy(() =>
   import("./pages/Campaigns").then((m) => ({ default: m.Campaigns }))
 );
 
+const BrandGraph = lazy(() =>
+  import("./pages/BrandGraph").then((m) => ({ default: m.BrandGraph }))
+);
+
 const DebatePanel = lazy(() =>
   import("./pages/DebatePanel").then((m) => ({ default: m.DebatePanel }))
+);
+
+const EntityResolver = lazy(() =>
+  import("./pages/EntityResolver").then((m) => ({ default: m.EntityResolver }))
 );
 
 const Jobs = lazy(() =>
@@ -55,6 +63,18 @@ const ModelBenchmark = lazy(() =>
   import("./pages/ModelBenchmark").then((m) => ({ default: m.ModelBenchmark }))
 );
 
+const ProductEntities = lazy(() =>
+  import("./pages/ProductEntities").then((m) => ({ default: m.ProductEntities }))
+);
+
+const ProductEntityDetail = lazy(() =>
+  import("./pages/ProductEntityDetail").then((m) => ({ default: m.ProductEntityDetail }))
+);
+
+const TaxonomyMapping = lazy(() =>
+  import("./pages/TaxonomyMapping").then((m) => ({ default: m.TaxonomyMapping }))
+);
+
 function RouteFallback() {
   return (
     <div className="page">
@@ -89,6 +109,11 @@ export default function App() {
         <Route path="/embeddings" element={route(<Embeddings />)} />
         <Route path="/benchmark" element={route(<ModelBenchmark />)} />
         <Route path="/settings" element={route(<Settings />)} />
+        <Route path="/experimental/products" element={route(<ProductEntities />)} />
+        <Route path="/experimental/products/:productId" element={route(<ProductEntityDetail />)} />
+        <Route path="/experimental/brand-graph" element={route(<BrandGraph />)} />
+        <Route path="/experimental/entity-resolver" element={route(<EntityResolver />)} />
+        <Route path="/experimental/taxonomy-mapping" element={route(<TaxonomyMapping />)} />
       </Route>
     </Routes>
   );
