@@ -21,6 +21,7 @@ class PathsConfig(BaseModel):
     out: Path = Path("./data/out")
     sqlite_path: Path = Path("./ad_classifier.db")
     entity_graph_path: Path = Path("./entity_graph.db")
+    entity_crawler_config_path: Path = Path("./entity_crawler.yaml")
     qdrant_path: Path = Path("./qdrant_db")
 
 

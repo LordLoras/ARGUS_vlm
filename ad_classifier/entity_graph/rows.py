@@ -4,6 +4,7 @@ import json
 import sqlite3
 
 from ad_classifier.entity_graph.models import (
+    AdChangeSuggestion,
     EntityAlias,
     EntityEdge,
     EntityNode,
@@ -122,4 +123,24 @@ def mapping(row: sqlite3.Row) -> TaxonomyMapping:
         source_id=row["source_id"],
         evidence_text=row["evidence_text"],
         created_at=row["created_at"],
+    )
+
+
+def suggestion(row: sqlite3.Row) -> AdChangeSuggestion:
+    return AdChangeSuggestion(
+        id=row["id"],
+        ad_id=row["ad_id"],
+        source_id=row["source_id"],
+        field_path=row["field_path"],
+        current_value=row["current_value"],
+        suggested_value=row["suggested_value"],
+        confidence=float(row["confidence"] or 0.0),
+        reason=row["reason"],
+        evidence_text=row["evidence_text"],
+        status=row["status"],
+        apply_safety=row["apply_safety"],
+        payload=loads_dict(row["payload_json"]),
+        created_at=row["created_at"],
+        reviewed_at=row["reviewed_at"],
+        applied_at=row["applied_at"],
     )

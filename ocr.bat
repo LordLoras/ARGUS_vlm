@@ -1,0 +1,20 @@
+"C:\Users\moonk\Desktop\LM Stuff\lm\llama\llama-server.exe" ^
+  -m "C:\Users\moonk\Desktop\ads_classification\models\glm-ocr\GLM-OCR-Q8_0.gguf" ^
+  --mmproj "C:\Users\moonk\Desktop\ads_classification\models\glm-ocr\mmproj-GLM-OCR-Q8_0.gguf" ^
+  --alias "glm-ocr" ^
+  --host 127.0.0.1 ^
+  --port 5050 ^
+  --gpu-layers all ^
+  --ctx-size 32768 ^
+  --parallel 1 ^
+  --batch-size 2048 ^
+  --ubatch-size 512 ^
+  --flash-attn on ^
+  --mmproj-offload ^
+  --reasoning off ^
+  --temp 0 ^
+  --top-p 1 ^
+  --min-p 0 ^
+  --top-k 1 ^
+  --repeat-penalty 1.0 ^
+  --seed 42

@@ -36,7 +36,9 @@ const workspace: NavEntry[] = [
 ];
 
 const experimental: NavEntry[] = [
+  { to: "/experimental/about", label: "Experimental Overview", icon: InfoIcon, variant: "experimental" },
   { to: "/experimental/products", label: "Product Entities", icon: LibraryIcon, variant: "experimental" },
+  { to: "/experimental/crawler", label: "Crawler Review", icon: SearchIcon, variant: "experimental" },
   { to: "/experimental/brand-graph", label: "Brand Graph", icon: GraphIcon, variant: "experimental" },
   { to: "/experimental/entity-resolver", label: "Entity Resolver", icon: FlowIcon, variant: "experimental" },
   { to: "/experimental/taxonomy-mapping", label: "Taxonomy Mapping", icon: LayersIcon, variant: "experimental" },

@@ -788,6 +788,7 @@ export type EntityStatus =
   | "rejected";
 
 export type EntityType = "product" | "brand" | "company" | "category" | "taxonomy" | "ad";
+export type IngestAssistMode = "keep_initial_metadata" | "use_graph" | "crawl_reinforce";
 
 export type EntityNode = {
   id: string;
@@ -864,6 +865,14 @@ export type RelatedAdSummary = {
   first_evidence_text?: string | null;
 };
 
+export type SubmittedAdCrawlQueueItem = RelatedAdSummary & {
+  has_web_targets: boolean;
+  web_targets: string[];
+  product_count: number;
+  pending_suggestion_count: number;
+  last_crawled_at?: string | null;
+};
+
 export type ProductSummary = {
   node: EntityNode;
   brand?: EntityNode | null;
@@ -912,6 +921,69 @@ export type ResolverResult = {
   candidate_count: number;
   confirmed_unreviewed_count: number;
   items: ResolverItem[];
+};
+
+export type CrawlerItem = {
+  ad_id: string;
+  url: string;
+  status: "visited" | "skipped" | "failed";
+  source_id?: string | null;
+  matched_products: string[];
+  title?: string | null;
+  final_url?: string | null;
+  reason?: string | null;
+};
+
+export type CrawlerResult = {
+  visited_count: number;
+  skipped_count: number;
+  failed_count: number;
+  observation_count: number;
+  suggestion_count: number;
+  items: CrawlerItem[];
+};
+
+export type AdChangeSuggestion = {
+  id: string;
+  ad_id: string;
+  source_id?: string | null;
+  field_path: "ads.brand_name" | "ads.products_text" | "ads.primary_category" | "ads.subcategory";
+  current_value?: string | null;
+  suggested_value: string;
+  confidence: number;
+  reason: string;
+  evidence_text?: string | null;
+  status: "pending" | "approved" | "rejected" | "applied";
+  apply_safety: "safe_projection_update" | "review_only" | "do_not_apply";
+  payload?: Record<string, unknown> | null;
+  created_at?: string | null;
+  reviewed_at?: string | null;
+  applied_at?: string | null;
+};
+
+export type ProductEntityUpdatePayload = {
+  canonical_name?: string | null;
+  description?: string | null;
+  status?: EntityStatus | null;
+  confidence?: number | null;
+  brand_name?: string | null;
+  owner_name?: string | null;
+  category_name?: string | null;
+};
+
+export type IngestAssistCandidate = {
+  input_value: string;
+  node: EntityNode;
+  score: number;
+  reason: string;
+};
+
+export type IngestAssistResult = {
+  mode: IngestAssistMode;
+  recommendation: string;
+  product_candidates: IngestAssistCandidate[];
+  brand_candidates: IngestAssistCandidate[];
+  category_candidates: IngestAssistCandidate[];
 };
 
 export type AgentSession = {

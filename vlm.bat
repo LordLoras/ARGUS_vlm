@@ -1,0 +1,20 @@
+C:\Users\moonk\Downloads\llama-hip\llama-server.exe ^
+  -m "E:\LLM\unsloth\Qwen3.6-35B-A3B-GGUF\Qwen3.6-35B-A3B-UD-IQ3_S.gguf" ^
+  --mmproj "E:\LLM\unsloth\Qwen3.6-35B-A3B-GGUF\mmproj-F32.gguf" ^
+  --alias "Qwen3.6-27B-Q4_K_M" ^
+  --host 127.0.0.1 ^
+  --port 1234 ^
+  --gpu-layers 30 ^
+  --ctx-size 90000 ^
+  --parallel 1 ^
+  --batch-size 2048 ^
+  --ubatch-size 512 ^
+  --flash-attn on ^
+  --mmproj-offload ^
+  --reasoning off ^
+  --temp 0 ^
+  --top-p 1 ^
+  --min-p 0 ^
+  --top-k 1 ^
+  --repeat-penalty 1.0 ^
+  --seed 42

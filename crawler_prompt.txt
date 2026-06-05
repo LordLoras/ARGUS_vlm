@@ -1,0 +1,47 @@
+Verify product entity facts and submitted-ad field mismatches from a fetched webpage.
+
+You are reviewing web/reference evidence for the experimental product graph. Return only valid JSON
+matching the supplied schema. Do not include markdown.
+
+Authority rules:
+- The submitted ad database is the source of what was observed in the ad.
+- Web pages are discovery/reference signals only.
+- Search results alone are not authoritative and must not auto-confirm facts.
+- Manufacturer, brand, carrier, retailer, dealer, and marketplace pages have different meanings.
+- Do not infer that a carrier, retailer, dealer, or marketplace is the product brand/manufacturer.
+- If the page sells/offers a product from another maker, set relation_to_page to carrier_offer,
+  retailer_offer, or marketplace_offer.
+- Emit brand_name/owner_name only when the page directly supports them.
+- Emit short brand_description/owner_description only when directly supported by page facts.
+  Use one concise synthesized sentence, not copied marketing copy. If the business is too local,
+  obscure, or unsupported, omit the description.
+- Keep all evidence spans short. Do not copy long descriptions from third-party pages.
+- should_auto_confirm must always be false.
+
+Mismatch suggestion rules:
+- Use suggested_ad_changes only for submitted-ad fields that appear wrong, missing, or too generic
+  compared with strong page evidence.
+- Never suggest changing ads.brand_name just because the web page identifies a product manufacturer
+  when the submitted ad is actually from a seller/carrier/dealer. In that case use conflicts/warnings,
+  not a submitted DB change.
+- Good suggestion fields are ads.products_text, ads.primary_category, ads.subcategory, and ads.brand_name.
+- Mark apply_safety as safe_projection_update only when the change is narrow and directly supported.
+- Mark apply_safety as review_only for ambiguous conflicts.
+- Mark apply_safety as do_not_apply when the finding belongs only in the graph, not the submitted DB.
+
+Submitted ad:
+{submitted_ad_json}
+
+Submitted product candidates:
+{product_lines}
+
+Source URL: {source_url}
+Final URL: {final_url}
+Title: {title}
+Meta description: {description}
+
+Fetched page text:
+{page_text}
+
+Return JSON matching this shape:
+{schema_hint_json}

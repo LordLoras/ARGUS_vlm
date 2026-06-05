@@ -134,6 +134,35 @@ CREATE TABLE IF NOT EXISTS resolver_runs (
 );
 """
 
+MIGRATION_002 = """
+CREATE TABLE IF NOT EXISTS ad_change_suggestions (
+  id TEXT PRIMARY KEY,
+  ad_id TEXT NOT NULL,
+  source_id TEXT REFERENCES entity_sources(id) ON DELETE SET NULL,
+  field_path TEXT NOT NULL
+    CHECK (field_path IN ('ads.brand_name', 'ads.products_text', 'ads.primary_category', 'ads.subcategory')),
+  current_value TEXT,
+  suggested_value TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0.0,
+  reason TEXT NOT NULL,
+  evidence_text TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'rejected', 'applied')),
+  apply_safety TEXT NOT NULL DEFAULT 'review_only'
+    CHECK (apply_safety IN ('safe_projection_update', 'review_only', 'do_not_apply')),
+  payload_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reviewed_at TEXT,
+  applied_at TEXT,
+  UNIQUE(ad_id, field_path, suggested_value, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_change_suggestions_status
+  ON ad_change_suggestions(status, ad_id);
+CREATE INDEX IF NOT EXISTS idx_ad_change_suggestions_ad
+  ON ad_change_suggestions(ad_id);
+"""
+
 
 def initialize_entity_graph_db(path: Path) -> list[str]:
     path = path.expanduser().resolve()
@@ -144,14 +173,21 @@ def initialize_entity_graph_db(path: Path) -> list[str]:
     conn.execute("PRAGMA journal_mode = WAL")
     try:
         applied = _applied_migrations(conn)
-        if "001_initial" in applied:
-            return []
+        migrations: list[str] = []
         conn.executescript(SCHEMA)
-        conn.execute(
-            "INSERT OR IGNORE INTO entity_graph_migrations (version) VALUES ('001_initial')"
-        )
+        if "001_initial" not in applied:
+            conn.execute(
+                "INSERT OR IGNORE INTO entity_graph_migrations (version) VALUES ('001_initial')"
+            )
+            migrations.append("001_initial")
+        if "002_ad_change_suggestions" not in applied:
+            conn.executescript(MIGRATION_002)
+            conn.execute(
+                "INSERT OR IGNORE INTO entity_graph_migrations (version) VALUES ('002_ad_change_suggestions')"
+            )
+            migrations.append("002_ad_change_suggestions")
         conn.commit()
-        return ["001_initial"]
+        return migrations
     finally:
         conn.close()
 

@@ -65,6 +65,9 @@ embeddings = [
 qdrant = [
     "qdrant-client>=1.9",
 ]
+browser = [
+    "playwright>=1.44",
+]
 clustering = [
     "hdbscan>=0.8",
     "scikit-learn>=1.5",

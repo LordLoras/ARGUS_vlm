@@ -8,7 +8,9 @@ from ad_classifier.models.common import StrictModel
 
 EntityType = Literal["product", "brand", "company", "category", "taxonomy", "ad"]
 EntityStatus = Literal["candidate", "confirmed_unreviewed", "confirmed_reviewed", "rejected"]
+AdChangeSuggestionStatus = Literal["pending", "approved", "rejected", "applied"]
 SourceType = Literal["submitted_ad", "taxonomy", "discovery_only", "user", "resolver"]
+IngestAssistMode = Literal["keep_initial_metadata", "use_graph", "crawl_reinforce"]
 RelationType = Literal[
     "BRANDED_BY",
     "OWNED_BY",
@@ -95,6 +97,7 @@ class TaxonomyMapping(StrictModel):
 class SubmittedAdObservation(StrictModel):
     ad_id: str
     product_name: str
+    original_product_names: list[str] = Field(default_factory=list)
     brand_name: str | None = None
     advertiser_name: str | None = None
     parent_company: str | None = None
@@ -111,6 +114,14 @@ class SubmittedAdObservation(StrictModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class SubmittedAdWebTarget(StrictModel):
+    ad_id: str
+    url: str
+    domain: str | None = None
+    source: str
+    evidence_text: str | None = None
+
+
 class RelatedAdSummary(StrictModel):
     ad_id: str
     brand_name: str | None = None
@@ -120,6 +131,14 @@ class RelatedAdSummary(StrictModel):
     ingested_at: str | None = None
     evidence_count: int = 0
     first_evidence_text: str | None = None
+
+
+class SubmittedAdCrawlQueueItem(RelatedAdSummary):
+    has_web_targets: bool = False
+    web_targets: list[str] = Field(default_factory=list)
+    product_count: int = 0
+    pending_suggestion_count: int = 0
+    last_crawled_at: str | None = None
 
 
 class ProductSummary(StrictModel):
@@ -172,6 +191,44 @@ class ResolverResult(StrictModel):
     items: list[ResolverItem] = Field(default_factory=list)
 
 
+class CrawlerItem(StrictModel):
+    ad_id: str
+    url: str
+    status: Literal["visited", "skipped", "failed"]
+    source_id: str | None = None
+    matched_products: list[str] = Field(default_factory=list)
+    title: str | None = None
+    final_url: str | None = None
+    reason: str | None = None
+
+
+class CrawlerResult(StrictModel):
+    visited_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    observation_count: int = 0
+    suggestion_count: int = 0
+    items: list[CrawlerItem] = Field(default_factory=list)
+
+
+class AdChangeSuggestion(StrictModel):
+    id: str
+    ad_id: str
+    source_id: str | None = None
+    field_path: Literal["ads.brand_name", "ads.products_text", "ads.primary_category", "ads.subcategory"]
+    current_value: str | None = None
+    suggested_value: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    reason: str
+    evidence_text: str | None = None
+    status: AdChangeSuggestionStatus = "pending"
+    apply_safety: Literal["safe_projection_update", "review_only", "do_not_apply"] = "review_only"
+    payload: dict | None = None
+    created_at: str | None = None
+    reviewed_at: str | None = None
+    applied_at: str | None = None
+
+
 class DiscoveryCandidateRequest(StrictModel):
     entity_type: EntityType = "product"
     name: str
@@ -179,3 +236,25 @@ class DiscoveryCandidateRequest(StrictModel):
     source_url: str | None = None
     notes: str | None = None
     confidence: float = Field(default=0.35, ge=0.0, le=1.0)
+
+
+class IngestAssistRequest(StrictModel):
+    mode: IngestAssistMode | None = None
+    products: list[str] = Field(default_factory=list, max_length=50)
+    brand_name: str | None = None
+    category_name: str | None = None
+
+
+class IngestAssistCandidate(StrictModel):
+    input_value: str
+    node: EntityNode
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    reason: str
+
+
+class IngestAssistResult(StrictModel):
+    mode: IngestAssistMode
+    recommendation: str
+    product_candidates: list[IngestAssistCandidate] = Field(default_factory=list)
+    brand_candidates: list[IngestAssistCandidate] = Field(default_factory=list)
+    category_candidates: list[IngestAssistCandidate] = Field(default_factory=list)

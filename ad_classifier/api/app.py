@@ -13,14 +13,14 @@ from ad_classifier.api.routes.agent import router as agent_router
 from ad_classifier.api.routes.brand_profiles import router as brand_profiles_router
 from ad_classifier.api.routes.campaigns import router as campaigns_router
 from ad_classifier.api.routes.creative_panel import router as creative_panel_router
-from ad_classifier.api.routes.evidence import router as evidence_router
+from ad_classifier.api.routes.embeddings import router as embeddings_router
 from ad_classifier.api.routes.entity_graph import router as entity_graph_router
+from ad_classifier.api.routes.evidence import router as evidence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.knowledge import router as knowledge_router
 from ad_classifier.api.routes.public import router as public_router
 from ad_classifier.api.routes.search import router as search_router
 from ad_classifier.api.routes.settings import router as settings_router
-from ad_classifier.api.routes.embeddings import router as embeddings_router
 from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
@@ -86,7 +86,14 @@ def create_app(
     kb = KnowledgeManager(kb_path)
     app.state.knowledge_manager = kb
     entity_graph_path = resolve_config_path(config.paths.entity_graph_path, config_file)
-    app.state.entity_graph_manager = EntityGraphManager(entity_graph_path, resolved_db)
+    entity_crawler_config_path = resolve_config_path(
+        config.paths.entity_crawler_config_path, config_file
+    )
+    app.state.entity_graph_manager = EntityGraphManager(
+        entity_graph_path,
+        resolved_db,
+        crawler_config_path=entity_crawler_config_path,
+    )
 
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:

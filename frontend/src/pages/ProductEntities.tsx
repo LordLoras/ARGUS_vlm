@@ -46,37 +46,28 @@ export function ProductEntities() {
       <Topbar
         crumbs={["Experimental", "Product Entities"]}
         actions={
-          <button
-            className="btn btn-primary"
-            disabled={resolverMutation.isPending}
-            onClick={() => resolverMutation.mutate()}
-          >
-            <SparkleIcon size={11} />
-            <span>{resolverMutation.isPending ? "Resolving" : "Run resolver"}</span>
-          </button>
+          <div className="entity-action-row">
+            <button
+              className="btn btn-primary"
+              disabled={resolverMutation.isPending}
+              onClick={() => resolverMutation.mutate()}
+            >
+              <SparkleIcon size={11} />
+              <span>{resolverMutation.isPending ? "Resolving" : "Run resolver"}</span>
+            </button>
+          </div>
         }
       />
       <ApiOfflineBanner offline={health.isError} />
 
       <div className="page entity-page">
-        <section className="entity-branch-banner">
-          <div>
-            <strong>Post-submission experimental feature in development</strong>
-            <span>
-              Running on this local FastAPI/Vite server while developed on the experimental Git branch.
-              Writes stay in entity_graph.db; submitted ad records are read-only inputs.
-            </span>
-          </div>
-          <Link to="/about#experimental-routes">View experimental routes</Link>
-        </section>
-
         <section className="entity-hero">
           <div>
-            <span className="entity-kicker">Post-submission experimental graph DB</span>
+            <span className="entity-kicker">Experimental entity graph</span>
             <h1 className="page-title">Product Entities</h1>
             <p className="page-sub">
-              Canonical product nodes generated from submitted ad evidence and stored in the isolated entity graph.
-              This page is active development work, separate from the submitted past submission demo routes.
+              Canonical product pages built from submitted ad evidence and optional discovery-only enrichment.
+              The local API writes these records only to entity_graph.db while submitted ad records stay read-only.
             </p>
           </div>
           <div className="entity-stat-strip">

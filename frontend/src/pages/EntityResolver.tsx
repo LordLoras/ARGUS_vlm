@@ -58,7 +58,8 @@ export function EntityResolver() {
             <span className="entity-kicker">Automation with audit trail</span>
             <h1 className="page-title">Entity Resolver</h1>
             <p className="page-sub">
-              Build product graph entries from submitted ad evidence. Search or web discoveries remain candidate-only.
+              Preview and run resolver jobs through the local FastAPI API. Strong submitted-ad evidence can create
+              unreviewed graph nodes; search or web discoveries stay candidate-only until reviewed.
             </p>
           </div>
           <div className="entity-readonly-badge">

@@ -1,0 +1,161 @@
+# Experimental entity crawler and resolver configuration.
+#
+# This file is intentionally separate from config.yaml so product-entity
+# discovery can evolve without changing the submitted demo pipeline settings.
+# Search/crawl output is discovery-only by default; submitted ad evidence is
+# still required before auto-confirming product graph facts.
+
+crawler:
+  enabled: true
+  provider: http
+  max_queries_per_run: 25
+  max_results_per_query: 5
+  max_pages_per_entity: 2
+  max_targets_per_ad: 3
+  reference_search_enabled: true
+  max_reference_results_per_ad: 2
+  reference_search_endpoint: https://duckduckgo.com/html/
+  reference_search_query_template: "{product} official product"
+  timeout_s: 10.0
+  rate_limit_per_minute: 30
+  cache_dir: ./data/entity_crawler_cache
+  user_agent: ARGUS-EntityCrawler/0.1
+  # Optional JS-rendered fallback. Requires installing the project browser extra
+  # and Playwright's Chromium runtime; otherwise HTTP crawling still runs.
+  use_browser_fallback: true
+  respect_robots_txt: true
+  store_raw_html: false
+  allowed_domains: []
+  blocked_domains: []
+  # Submitted DB website/contact fields can contain OCR-visible publisher overlays
+  # from the TV broadcast, not the advertiser/product. Keep auto-crawl targets
+  # only when the domain matches ad context or evidence contains a clear CTA.
+  require_context_match_for_ad_targets: true
+  allow_cta_evidence_targets: true
+  target_context_min_chars: 3
+  target_context_stopwords:
+    - ad
+    - ads
+    - auto
+    - car
+    - cars
+    - com
+    - deal
+    - dealer
+    - dealership
+    - model
+    - models
+    - new
+    - offer
+    - sale
+    - sales
+    - shop
+    - suv
+    - suvs
+    - truck
+    - trucks
+    - vehicle
+    - vehicles
+    - www
+  target_evidence_cta_phrases:
+    - visit
+    - go to
+    - shop
+    - buy
+    - order
+    - learn more
+    - get started
+    - schedule
+    - book
+    - apply
+
+discovery_source_type: discovery_only
+discovery_status: candidate
+search_only_can_confirm: false
+
+vlm_parse:
+  enabled: true
+  write_mode: candidate_only
+  prompt_path: ./crawler_prompt.txt
+  endpoint: https://ai.ipdy.io/llm/v1
+  model: model
+  api_key_env: VLM_API_KEY
+  timeout_s: 120.0
+  max_retries: 2
+  retry_delay_s: 2.0
+  temperature: 0.1
+  max_tokens: 2048
+  response_format: json_schema
+  stream: true
+  enable_thinking: false
+  max_input_chars: 6000
+
+submitted_db_repairs:
+  enabled: true
+  allowed_fields:
+    - ads.brand_name
+    - ads.products_text
+    - ads.primary_category
+    - ads.subcategory
+
+ingest_assist:
+  enabled: true
+  # Future upload hook:
+  # - keep_initial_metadata: persist VLM ingest output as-is and show graph matches as context.
+  # - use_graph: use reviewed/high-confidence product graph matches when above min_graph_confidence.
+  # - crawl_reinforce: use graph matches when strong and queue weak/new entities for crawler/VLM verification.
+  default_mode: keep_initial_metadata
+  min_graph_confidence: 0.75
+  crawl_on_low_confidence: false
+
+resolver:
+  # Generic product-entity cleanup policy. This is deliberately not a
+  # maintained table of product families; canonicalization should come from
+  # submitted ad evidence, co-mentioned aliases, crawler observations, and
+  # optional candidate-only VLM parsing.
+  strip_leading_model_year: true
+  strip_context_brand_prefix: true
+  collapse_variants_when_base_observed: true
+  min_unmatched_name_chars: 3
+  context_prefix_min_chars: 3
+  drop_exact:
+    - vehicle
+    - vehicles
+    - truck
+    - trucks
+    - car
+    - cars
+    - suv
+    - suvs
+    - model
+    - models
+    - all models
+  drop_regex:
+    - (?i)\bmodels\b
+  context_prefix_stopwords:
+    - auto
+    - automotive
+    - bank
+    - banking
+    - car
+    - cars
+    - credit
+    - dealer
+    - dealership
+    - finance
+    - financial
+    - insurance
+    - sales
+    - truck
+    - trucks
+    - union
+    - vehicle
+    - vehicles
+  ad_context_category_exact:
+    - automotive_sales
+    - car_dealership
+    - mobile_service
+    - summer sales event
+  ad_context_category_regex:
+    - (?i)\b(dealer|dealership)\b
+    - (?i)\b(sales event|clearance event|promotion)\b

@@ -17,11 +17,16 @@ import type {
   EntityGraphPayload,
   EntityNode,
   EntityTaxonomyMappingSummary,
+  CrawlerResult,
+  AdChangeSuggestion,
+  IngestAssistMode,
+  IngestAssistResult,
   FrameRecord,
   JobStreamEvent,
   JobRecord,
   OcrItemDetail,
   ProductPage,
+  ProductEntityUpdatePayload,
   ProductSummary,
   RelatedAds,
   ResolverResult,
@@ -29,6 +34,7 @@ import type {
   SettingsConfig,
   SettingsSnapshot,
   StatsResponse,
+  SubmittedAdCrawlQueueItem,
   TranscriptSegment
 } from "./types";
 
@@ -363,6 +369,17 @@ export const api = {
   getEntityProduct: (productId: string) =>
     apiFetch<ProductPage>(`/api/entity-graph/products/${encodeURIComponent(productId)}`),
 
+  updateEntityProduct: (productId: string, body: ProductEntityUpdatePayload) =>
+    apiFetch<ProductPage>(`/api/entity-graph/products/${encodeURIComponent(productId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+
+  lookupEntityNodes: (query: { entity_type: string; q?: string; limit?: number }) =>
+    apiFetch<{ items: EntityNode[]; limit: number }>(
+      `/api/entity-graph/nodes/lookup${params(query)}`
+    ),
+
   getEntityGraph: (limit = 400) =>
     apiFetch<EntityGraphPayload>(`/api/entity-graph/graph${params({ limit })}`),
 
@@ -385,6 +402,47 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body)
     }),
+
+  runEntityCrawler: (body: {
+    limit?: number;
+    ad_ids?: string[];
+    targets?: Array<{ ad_id: string; url: string }>;
+  } = {}) =>
+    apiFetch<CrawlerResult>("/api/entity-graph/crawler/run", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  listEntityCrawlerQueue: (query: { q?: string; limit?: number } = {}) =>
+    apiFetch<{ items: SubmittedAdCrawlQueueItem[]; limit: number }>(
+      `/api/entity-graph/crawler/queue${params(query)}`
+    ),
+
+  listAdChangeSuggestions: (args: { status?: string; ad_id?: string; limit?: number } = {}) =>
+    apiFetch<{ items: AdChangeSuggestion[]; limit: number }>(
+      `/api/entity-graph/ad-change-suggestions${params(args)}`
+    ),
+
+  approveAdChangeSuggestion: (suggestionId: string) =>
+    apiFetch<AdChangeSuggestion>(
+      `/api/entity-graph/ad-change-suggestions/${encodeURIComponent(suggestionId)}/approve`,
+      { method: "POST" }
+    ),
+
+  rejectAdChangeSuggestion: (suggestionId: string) =>
+    apiFetch<AdChangeSuggestion>(
+      `/api/entity-graph/ad-change-suggestions/${encodeURIComponent(suggestionId)}/reject`,
+      { method: "POST" }
+    ),
+
+  applyAdChangeSuggestion: (suggestionId: string, value?: string) =>
+    apiFetch<AdChangeSuggestion>(
+      `/api/entity-graph/ad-change-suggestions/${encodeURIComponent(suggestionId)}/apply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ value: value || undefined })
+      }
+    ),
 
   promoteEntity: (entityId: string) =>
     apiFetch<EntityNode>(`/api/entity-graph/entities/${encodeURIComponent(entityId)}/promote`, {
@@ -411,6 +469,17 @@ export const api = {
     confidence?: number;
   }) =>
     apiFetch<EntityNode>("/api/entity-graph/discovery-candidates", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  previewIngestAssist: (body: {
+    mode?: IngestAssistMode;
+    products?: string[];
+    brand_name?: string | null;
+    category_name?: string | null;
+  }) =>
+    apiFetch<IngestAssistResult>("/api/entity-graph/ingest-assist/preview", {
       method: "POST",
       body: JSON.stringify(body)
     })

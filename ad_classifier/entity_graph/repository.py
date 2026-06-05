@@ -6,7 +6,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ad_classifier.entity_graph import rows
+from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig, product_resolution_key
 from ad_classifier.entity_graph.models import (
+    AdChangeSuggestion,
+    AdChangeSuggestionStatus,
     EntityAlias,
     EntityEdge,
     EntityNode,
@@ -20,7 +24,6 @@ from ad_classifier.entity_graph.models import (
     TaxonomyMapping,
     TaxonomyMappingSummary,
 )
-from ad_classifier.entity_graph import rows
 from ad_classifier.entity_graph.schema import initialize_entity_graph_db
 from ad_classifier.entity_graph.utils import (
     edge_id,
@@ -29,6 +32,9 @@ from ad_classifier.entity_graph.utils import (
     node_id,
     normalize_name,
     observation_id,
+    suggestion_id,
+)
+from ad_classifier.entity_graph.utils import (
     source_id as make_source_id,
 )
 
@@ -168,6 +174,311 @@ class EntityGraphRepository:
         )
         return self.get_node(conn, node_id)
 
+    def update_node_fields(
+        self,
+        conn: sqlite3.Connection,
+        node_id: str,
+        *,
+        canonical_name: str | None = None,
+        description: str | None = None,
+        status: EntityStatus | None = None,
+        confidence: float | None = None,
+        generated_from: dict | None = None,
+    ) -> EntityNode:
+        current = self.get_node(conn, node_id)
+        next_name = canonical_name.strip() if canonical_name is not None and canonical_name.strip() else current.canonical_name
+        next_normalized = normalize_name(next_name)
+        duplicate = conn.execute(
+            """
+            SELECT id
+            FROM entity_nodes
+            WHERE type = ? AND normalized_name = ? AND id <> ?
+            """,
+            (current.type, next_normalized, node_id),
+        ).fetchone()
+        if duplicate is not None:
+            raise ValueError(f"{current.type} entity already exists for {next_name!r}")
+        conn.execute(
+            """
+            UPDATE entity_nodes
+            SET canonical_name = ?,
+                normalized_name = ?,
+                description = ?,
+                status = ?,
+                confidence = ?,
+                generated_from_json = ?,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (
+                next_name,
+                next_normalized,
+                description if description is not None else current.description,
+                status or current.status,
+                confidence if confidence is not None else current.confidence,
+                rows.to_json(generated_from or current.generated_from),
+                node_id,
+            ),
+        )
+        return self.get_node(conn, node_id)
+
+    def replace_relation(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        source_node_id: str,
+        relation: str,
+        entity_type: EntityType,
+        canonical_name: str | None,
+        source_id: str | None,
+        status: EntityStatus = "confirmed_reviewed",
+        confidence: float = 0.98,
+    ) -> EntityNode | None:
+        if canonical_name is not None and not canonical_name.strip():
+            canonical_name = None
+        conn.execute(
+            """
+            UPDATE entity_edges
+            SET status = 'rejected'
+            WHERE source_node_id = ? AND relation = ?
+            """,
+            (source_node_id, relation),
+        )
+        if canonical_name is None:
+            return None
+        target, _created = self.upsert_node(
+            conn,
+            entity_type=entity_type,
+            canonical_name=canonical_name,
+            status=status,
+            confidence=confidence,
+            generated_from={"source": "user_edit"},
+        )
+        self.upsert_edge(
+            conn,
+            source_node_id=source_node_id,
+            target_node_id=target.id,
+            relation=relation,
+            confidence=confidence,
+            status=status,
+            source_id=source_id,
+            evidence={"source": "user_edit"},
+        )
+        return target
+
+    def clear_experimental_graph(self, conn: sqlite3.Connection) -> None:
+        for table in (
+            "taxonomy_mappings",
+            "entity_observations",
+            "entity_edges",
+            "entity_aliases",
+            "ad_change_suggestions",
+            "entity_sources",
+            "entity_nodes",
+            "resolver_runs",
+        ):
+            conn.execute(f"DELETE FROM {table}")
+
+    def upsert_ad_change_suggestion(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        ad_id: str,
+        source_id: str | None,
+        field_path: str,
+        current_value: str | None,
+        suggested_value: str,
+        confidence: float,
+        reason: str,
+        evidence_text: str | None,
+        apply_safety: str,
+        payload: dict | None = None,
+    ) -> AdChangeSuggestion:
+        sid = suggestion_id(ad_id, field_path, suggested_value, source_id)
+        conn.execute(
+            """
+            INSERT INTO ad_change_suggestions (
+              id, ad_id, source_id, field_path, current_value, suggested_value,
+              confidence, reason, evidence_text, apply_safety, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ad_id, field_path, suggested_value, source_id) DO UPDATE SET
+              current_value = excluded.current_value,
+              confidence = max(ad_change_suggestions.confidence, excluded.confidence),
+              reason = excluded.reason,
+              evidence_text = excluded.evidence_text,
+              apply_safety = excluded.apply_safety,
+              payload_json = excluded.payload_json,
+              status = CASE
+                WHEN ad_change_suggestions.status IN ('approved', 'rejected', 'applied')
+                THEN ad_change_suggestions.status
+                ELSE 'pending'
+              END
+            """,
+            (
+                sid,
+                ad_id,
+                source_id,
+                field_path,
+                current_value,
+                suggested_value,
+                confidence,
+                reason,
+                evidence_text,
+                apply_safety,
+                rows.to_json(payload),
+            ),
+        )
+        row = conn.execute("SELECT * FROM ad_change_suggestions WHERE id = ?", (sid,)).fetchone()
+        return rows.suggestion(row)
+
+    def list_ad_change_suggestions(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        status: AdChangeSuggestionStatus | None = None,
+        ad_id: str | None = None,
+        limit: int = 200,
+    ) -> list[AdChangeSuggestion]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if ad_id:
+            clauses.append("ad_id = ?")
+            params.append(ad_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        result = conn.execute(
+            f"""
+            SELECT *
+            FROM ad_change_suggestions
+            {where}
+            ORDER BY
+              CASE status
+                WHEN 'pending' THEN 0
+                WHEN 'approved' THEN 1
+                WHEN 'applied' THEN 2
+                ELSE 3
+              END,
+              confidence DESC,
+              created_at DESC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+        return [rows.suggestion(row) for row in result]
+
+    def crawl_queue_metadata(self, conn: sqlite3.Connection, ad_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not ad_ids:
+            return {}
+        placeholders = ",".join("?" for _ in ad_ids)
+        metadata = {
+            ad_id: {"pending_suggestion_count": 0, "last_crawled_at": None}
+            for ad_id in ad_ids
+        }
+        for row in conn.execute(
+            f"""
+            SELECT ad_id, COUNT(*) AS count
+            FROM ad_change_suggestions
+            WHERE status = 'pending' AND ad_id IN ({placeholders})
+            GROUP BY ad_id
+            """,
+            ad_ids,
+        ).fetchall():
+            metadata[str(row["ad_id"])]["pending_suggestion_count"] = int(row["count"] or 0)
+        for row in conn.execute(
+            f"""
+            SELECT ad_id, MAX(created_at) AS last_crawled_at
+            FROM entity_sources
+            WHERE source_type = 'discovery_only' AND ad_id IN ({placeholders})
+            GROUP BY ad_id
+            """,
+            ad_ids,
+        ).fetchall():
+            metadata[str(row["ad_id"])]["last_crawled_at"] = row["last_crawled_at"]
+        return metadata
+
+    def lookup_nodes(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        entity_type: EntityType,
+        q: str | None = None,
+        limit: int = 20,
+    ) -> list[EntityNode]:
+        clauses = ["type = ?", "status <> 'rejected'"]
+        params: list[object] = [entity_type]
+        if q:
+            clauses.append("(canonical_name LIKE ? OR normalized_name LIKE ?)")
+            params.extend([f"%{q}%", f"%{normalize_name(q)}%"])
+        params.append(limit)
+        rows_ = conn.execute(
+            f"""
+            SELECT *
+            FROM entity_nodes
+            WHERE {' AND '.join(clauses)}
+            ORDER BY confidence DESC, canonical_name
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [rows.node(row) for row in rows_]
+
+    def first_related(
+        self,
+        conn: sqlite3.Connection,
+        source_id: str,
+        relation: str,
+    ) -> EntityNode | None:
+        return _first_related(conn, source_id, relation)
+
+    def get_ad_change_suggestion(
+        self, conn: sqlite3.Connection, suggestion_id_: str
+    ) -> AdChangeSuggestion:
+        row = conn.execute(
+            "SELECT * FROM ad_change_suggestions WHERE id = ?",
+            (suggestion_id_,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(suggestion_id_)
+        return rows.suggestion(row)
+
+    def set_ad_change_suggestion_status(
+        self,
+        conn: sqlite3.Connection,
+        suggestion_id_: str,
+        status: AdChangeSuggestionStatus,
+    ) -> AdChangeSuggestion:
+        conn.execute(
+            """
+            UPDATE ad_change_suggestions
+            SET status = ?,
+                reviewed_at = coalesce(reviewed_at, datetime('now'))
+            WHERE id = ?
+            """,
+            (status, suggestion_id_),
+        )
+        return self.get_ad_change_suggestion(conn, suggestion_id_)
+
+    def mark_ad_change_suggestion_applied(
+        self,
+        conn: sqlite3.Connection,
+        suggestion_id_: str,
+        applied_value: str,
+    ) -> AdChangeSuggestion:
+        conn.execute(
+            """
+            UPDATE ad_change_suggestions
+            SET status = 'applied',
+                suggested_value = ?,
+                reviewed_at = coalesce(reviewed_at, datetime('now')),
+                applied_at = datetime('now')
+            WHERE id = ?
+            """,
+            (applied_value, suggestion_id_),
+        )
+        return self.get_ad_change_suggestion(conn, suggestion_id_)
+
     def upsert_alias(
         self,
         conn: sqlite3.Connection,
@@ -251,6 +562,46 @@ class EntityGraphRepository:
         time_ms: int | None = None,
         frame_index: int | None = None,
     ) -> EntityObservation:
+        if source_id and source in {"web_crawl", "web_vlm"}:
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM entity_observations
+                WHERE node_id = ?
+                  AND ad_id = ?
+                  AND field = ?
+                  AND source = ?
+                  AND source_id = ?
+                ORDER BY created_at, id
+                """,
+                (node_id, ad_id, field, source, source_id),
+            ).fetchall()
+            if existing:
+                existing_id = str(existing[0]["id"])
+                conn.execute(
+                    """
+                    UPDATE entity_observations
+                    SET evidence_text = ?,
+                        confidence = max(confidence, ?),
+                        time_ms = coalesce(time_ms, ?),
+                        frame_index = coalesce(frame_index, ?)
+                    WHERE id = ?
+                    """,
+                    (evidence_text, confidence, time_ms, frame_index, existing_id),
+                )
+                duplicate_ids = [str(row["id"]) for row in existing[1:]]
+                if duplicate_ids:
+                    placeholders = ",".join("?" for _ in duplicate_ids)
+                    conn.execute(
+                        f"DELETE FROM entity_observations WHERE id IN ({placeholders})",
+                        duplicate_ids,
+                    )
+                row = conn.execute(
+                    "SELECT * FROM entity_observations WHERE id = ?",
+                    (existing_id,),
+                ).fetchone()
+                return rows.observation(row)
+
         obs_id = observation_id(node_id, ad_id, field, evidence_text, source)
         conn.execute(
             """
@@ -328,6 +679,7 @@ class EntityGraphRepository:
         q: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        crawler_config: EntityCrawlerConfig | None = None,
     ) -> list[ProductSummary]:
         clauses = ["type = 'product'"]
         params: list[Any] = []
@@ -337,6 +689,11 @@ class EntityGraphRepository:
         if q:
             clauses.append("(canonical_name LIKE ? OR normalized_name LIKE ?)")
             params.extend([f"%{q}%", f"%{normalize_name(q)}%"])
+        query_limit = limit
+        query_offset = offset
+        if crawler_config is not None:
+            query_limit = min(max((limit + offset) * 8, 250), 2000)
+            query_offset = 0
         result_rows = conn.execute(
             f"""
             SELECT * FROM entity_nodes
@@ -344,9 +701,13 @@ class EntityGraphRepository:
             ORDER BY status DESC, canonical_name
             LIMIT ? OFFSET ?
             """,
-            (*params, limit, offset),
+            (*params, query_limit, query_offset),
         ).fetchall()
-        return [self._product_summary(conn, rows.node(row)) for row in result_rows]
+        summaries = [self._product_summary(conn, rows.node(row)) for row in result_rows]
+        if crawler_config is not None:
+            summaries = _dedupe_product_summaries(summaries, crawler_config)
+            return summaries[offset : offset + limit]
+        return summaries
 
     def get_product_page(self, conn: sqlite3.Connection, product_id: str) -> ProductPage | None:
         row = conn.execute(
@@ -355,13 +716,19 @@ class EntityGraphRepository:
         if row is None:
             return None
         summary = self._product_summary(conn, rows.node(row))
-        aliases = [
-            rows.alias(item)
-            for item in conn.execute(
-                "SELECT * FROM entity_aliases WHERE node_id = ? ORDER BY status DESC, alias",
-                (product_id,),
-            ).fetchall()
-        ]
+        aliases = _dedupe_aliases(
+            [
+                rows.alias(item)
+                for item in conn.execute(
+                    """
+                    SELECT * FROM entity_aliases
+                    WHERE node_id = ?
+                    ORDER BY normalized_alias, confidence DESC, status DESC, alias
+                    """,
+                    (product_id,),
+                ).fetchall()
+            ]
+        )
         mappings = [
             rows.mapping(item)
             for item in conn.execute(
@@ -466,22 +833,36 @@ class EntityGraphRepository:
             """
             SELECT
               (SELECT COUNT(*) FROM entity_aliases WHERE node_id = ?) AS aliases_count,
+              (SELECT COUNT(DISTINCT normalized_alias) FROM entity_aliases WHERE node_id = ?) AS distinct_aliases_count,
               (SELECT COUNT(*) FROM entity_observations WHERE node_id = ?) AS evidence_count,
               (SELECT COUNT(DISTINCT ad_id) FROM entity_observations WHERE node_id = ?) AS ads_count,
               (SELECT COUNT(*) FROM taxonomy_mappings WHERE entity_id = ?) AS mapping_count
             """,
-            (node.id, node.id, node.id, node.id),
+            (node.id, node.id, node.id, node.id, node.id),
         ).fetchone()
         return ProductSummary(
             node=node,
             brand=brand,
             owner=owner,
             category=category,
-            aliases_count=int(counts["aliases_count"] or 0),
+            aliases_count=int(counts["distinct_aliases_count"] or counts["aliases_count"] or 0),
             evidence_count=int(counts["evidence_count"] or 0),
             related_ads_count=int(counts["ads_count"] or 0),
             taxonomy_mappings_count=int(counts["mapping_count"] or 0),
         )
+
+
+def _dedupe_aliases(aliases: list[EntityAlias]) -> list[EntityAlias]:
+    by_key: dict[str, EntityAlias] = {}
+    for alias in aliases:
+        current = by_key.get(alias.normalized_alias)
+        if current is None or (alias.confidence, alias.status) > (
+            current.confidence,
+            current.status,
+        ):
+            by_key[alias.normalized_alias] = alias
+    return sorted(by_key.values(), key=lambda item: item.alias.lower())
+
 
 def _first_related(conn: sqlite3.Connection, source_id: str, relation: str) -> EntityNode | None:
     row = conn.execute(
@@ -496,3 +877,35 @@ def _first_related(conn: sqlite3.Connection, source_id: str, relation: str) -> E
         (source_id, relation),
     ).fetchone()
     return rows.node(row) if row else None
+
+
+def _dedupe_product_summaries(
+    summaries: list[ProductSummary], crawler_config: EntityCrawlerConfig
+) -> list[ProductSummary]:
+    grouped: dict[str, ProductSummary] = {}
+    grouped_scores: dict[str, tuple[int, int, int, int, int]] = {}
+    for summary in summaries:
+        key = product_resolution_key(summary.node.canonical_name, crawler_config)
+        if not key:
+            continue
+        score = _product_summary_score(summary, key)
+        current = grouped_scores.get(key)
+        if current is None or score > current:
+            grouped[key] = summary
+            grouped_scores[key] = score
+    return sorted(
+        grouped.values(),
+        key=lambda item: (item.node.status, item.node.canonical_name.lower()),
+        reverse=True,
+    )
+
+
+def _product_summary_score(summary: ProductSummary, family_key: str) -> tuple[int, int, int, int, int]:
+    exact_name = int(normalize_name(summary.node.canonical_name) == family_key)
+    return (
+        exact_name,
+        summary.related_ads_count,
+        summary.evidence_count,
+        summary.aliases_count,
+        -len(summary.node.canonical_name),
+    )

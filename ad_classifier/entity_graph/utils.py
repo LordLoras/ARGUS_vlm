@@ -43,6 +43,10 @@ def mapping_id(entity_id: str, taxonomy_type: str, taxonomy_id: str, source_id_:
     return "map_" + digest(entity_id, taxonomy_type, taxonomy_id, source_id_ or "")[:20]
 
 
+def suggestion_id(ad_id: str, field_path: str, suggested_value: str, source_id_: str | None) -> str:
+    return "sug_" + digest(ad_id, field_path, suggested_value, source_id_ or "")[:20]
+
+
 def digest(*parts: str) -> str:
     h = hashlib.sha1()
     h.update("\x1f".join(parts).encode("utf-8"))

@@ -27,6 +27,14 @@ const EntityResolver = lazy(() =>
   import("./pages/EntityResolver").then((m) => ({ default: m.EntityResolver }))
 );
 
+const CrawlerReview = lazy(() =>
+  import("./pages/CrawlerReview").then((m) => ({ default: m.CrawlerReview }))
+);
+
+const ExperimentalAbout = lazy(() =>
+  import("./pages/ExperimentalAbout").then((m) => ({ default: m.ExperimentalAbout }))
+);
+
 const Jobs = lazy(() =>
   import("./pages/Jobs").then((m) => ({ default: m.Jobs }))
 );
@@ -109,8 +117,10 @@ export default function App() {
         <Route path="/embeddings" element={route(<Embeddings />)} />
         <Route path="/benchmark" element={route(<ModelBenchmark />)} />
         <Route path="/settings" element={route(<Settings />)} />
+        <Route path="/experimental/about" element={route(<ExperimentalAbout />)} />
         <Route path="/experimental/products" element={route(<ProductEntities />)} />
         <Route path="/experimental/products/:productId" element={route(<ProductEntityDetail />)} />
+        <Route path="/experimental/crawler" element={route(<CrawlerReview />)} />
         <Route path="/experimental/brand-graph" element={route(<BrandGraph />)} />
         <Route path="/experimental/entity-resolver" element={route(<EntityResolver />)} />
         <Route path="/experimental/taxonomy-mapping" element={route(<TaxonomyMapping />)} />

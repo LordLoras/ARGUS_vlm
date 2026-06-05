@@ -16,6 +16,8 @@ paths:
   # Experimental product entity graph. This store can read ad_classifier.db
   # through read-only adapters but must not mutate submitted demo records.
   entity_graph_path: ./entity_graph.db
+  # Separate crawler/resolver config for experimental entity discovery.
+  entity_crawler_config_path: ./entity_crawler.yaml
   qdrant_path: ./qdrant_db
 
 ingest:
