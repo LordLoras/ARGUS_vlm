@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from collections.abc import Generator
@@ -12,6 +13,10 @@ from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig, produ
 from ad_classifier.entity_graph.models import (
     AdChangeSuggestion,
     AdChangeSuggestionStatus,
+    CrawlerRerunMode,
+    CrawlerResult,
+    CrawlerRunRecord,
+    CrawlerRunStatus,
     CrawlerTraceItem,
     EntityAlias,
     EntityEdge,
@@ -492,6 +497,107 @@ class EntityGraphRepository:
             metadata[str(row["ad_id"])]["last_crawled_at"] = row["last_crawled_at"]
             metadata[str(row["ad_id"])]["crawled_source_count"] = int(row["count"] or 0)
         return metadata
+
+    def create_crawler_run(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        run_id: str,
+        limit: int,
+        ad_ids: list[str],
+        target_urls: dict[str, list[str]],
+        rerun_mode: CrawlerRerunMode,
+    ) -> CrawlerRunRecord:
+        cleaned_ad_ids = [ad_id.strip() for ad_id in ad_ids if ad_id.strip()]
+        cleaned_targets = {
+            ad_id.strip(): [url.strip() for url in urls if url.strip()]
+            for ad_id, urls in target_urls.items()
+            if ad_id.strip()
+        }
+        conn.execute(
+            """
+            INSERT INTO crawler_runs (
+              id, status, rerun_mode, limit_value, ad_ids_json, target_urls_json
+            ) VALUES (?, 'queued', ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                rerun_mode,
+                limit,
+                json.dumps(cleaned_ad_ids, sort_keys=True),
+                json.dumps(cleaned_targets, sort_keys=True),
+            ),
+        )
+        run = self.get_crawler_run(conn, run_id)
+        if run is None:
+            raise RuntimeError(f"crawler run was not created: {run_id}")
+        return run
+
+    def get_crawler_run(self, conn: sqlite3.Connection, run_id: str) -> CrawlerRunRecord | None:
+        row = conn.execute("SELECT * FROM crawler_runs WHERE id = ?", (run_id,)).fetchone()
+        return rows.crawler_run(row) if row else None
+
+    def list_crawler_runs(self, conn: sqlite3.Connection, *, limit: int = 20) -> list[CrawlerRunRecord]:
+        rows_ = conn.execute(
+            """
+            SELECT *
+            FROM crawler_runs
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [rows.crawler_run(row) for row in rows_]
+
+    def update_crawler_run_status(
+        self,
+        conn: sqlite3.Connection,
+        run_id: str,
+        *,
+        status: CrawlerRunStatus,
+        result: CrawlerResult | None = None,
+        error: str | None = None,
+    ) -> CrawlerRunRecord:
+        if status == "running":
+            conn.execute(
+                """
+                UPDATE crawler_runs
+                SET status = 'running',
+                    started_at = coalesce(started_at, datetime('now')),
+                    error = NULL
+                WHERE id = ?
+                """,
+                (run_id,),
+            )
+        elif status == "completed":
+            conn.execute(
+                """
+                UPDATE crawler_runs
+                SET status = 'completed',
+                    result_json = ?,
+                    error = NULL,
+                    finished_at = datetime('now')
+                WHERE id = ?
+                """,
+                (json.dumps(result.model_dump(mode="json"), sort_keys=True) if result else None, run_id),
+            )
+        elif status == "failed":
+            conn.execute(
+                """
+                UPDATE crawler_runs
+                SET status = 'failed',
+                    error = ?,
+                    finished_at = datetime('now')
+                WHERE id = ?
+                """,
+                (error or "crawler run failed", run_id),
+            )
+        else:
+            conn.execute("UPDATE crawler_runs SET status = 'queued' WHERE id = ?", (run_id,))
+        run = self.get_crawler_run(conn, run_id)
+        if run is None:
+            raise KeyError(run_id)
+        return run
 
     def clear_crawl_artifacts(self, conn: sqlite3.Connection, ad_ids: list[str]) -> int:
         cleaned_ad_ids = [ad_id.strip() for ad_id in ad_ids if ad_id.strip()]

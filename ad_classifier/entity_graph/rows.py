@@ -5,6 +5,8 @@ import sqlite3
 
 from ad_classifier.entity_graph.models import (
     AdChangeSuggestion,
+    CrawlerResult,
+    CrawlerRunRecord,
     EntityAlias,
     EntityEdge,
     EntityNode,
@@ -23,6 +25,30 @@ def loads_dict(value: str | None) -> dict | None:
         return None
     parsed = json.loads(value)
     return parsed if isinstance(parsed, dict) else None
+
+
+def loads_list(value: str | None) -> list | None:
+    if not value:
+        return None
+    parsed = json.loads(value)
+    return parsed if isinstance(parsed, list) else None
+
+
+def crawler_run(row: sqlite3.Row) -> CrawlerRunRecord:
+    result_payload = loads_dict(row["result_json"])
+    return CrawlerRunRecord(
+        id=row["id"],
+        status=row["status"],
+        rerun_mode=row["rerun_mode"],
+        limit=int(row["limit_value"] or 100),
+        ad_ids=[str(item) for item in (loads_list(row["ad_ids_json"]) or [])],
+        target_urls=loads_dict(row["target_urls_json"]) or {},
+        result=CrawlerResult.model_validate(result_payload) if result_payload else None,
+        error=row["error"],
+        created_at=row["created_at"],
+        started_at=row["started_at"],
+        finished_at=row["finished_at"],
+    )
 
 
 def source(row: sqlite3.Row) -> EntitySource:

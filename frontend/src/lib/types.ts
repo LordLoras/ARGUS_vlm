@@ -931,6 +931,7 @@ export type CrawlerItem = {
   ad_id: string;
   url: string;
   status: "visited" | "skipped" | "failed";
+  blocked: boolean;
   target_source?: string | null;
   target_evidence_text?: string | null;
   source_id?: string | null;
@@ -949,6 +950,20 @@ export type CrawlerResult = {
   rerun_mode: "skip_crawled" | "rerun_crawled" | "refresh";
   refreshed_ad_count: number;
   items: CrawlerItem[];
+};
+
+export type CrawlerRunRecord = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  rerun_mode: "skip_crawled" | "rerun_crawled" | "refresh";
+  limit: number;
+  ad_ids: string[];
+  target_urls: Record<string, string[]>;
+  result?: CrawlerResult | null;
+  error?: string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
 };
 
 export type CrawlerTraceItem = {

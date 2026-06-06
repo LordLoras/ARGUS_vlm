@@ -20,8 +20,10 @@ from ad_classifier.entity_graph.crawler import (
     _ad_suggestion_apply_safety,
     _clean_search_url,
     _dedupe_targets,
+    _failure_reason_is_blocked,
     _fallback_reference_urls,
     _looks_blocked_or_challenged,
+    _manufacturer_reference_followup_targets,
     _owner_supported_by_evidence,
     _product_followup_targets,
 )
@@ -821,6 +823,8 @@ def test_blocked_page_detection_catches_access_denied_without_product_false_posi
 
     assert _looks_blocked_or_challenged(denied)
     assert not _looks_blocked_or_challenged(challenger)
+    assert _failure_reason_is_blocked("http fetch returned a blocked/challenge page: Access Denied")
+    assert not _failure_reason_is_blocked("fetch returned HTTP 404")
 
 
 def test_default_fetcher_uses_browser_fallback_for_access_denied(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -949,6 +953,49 @@ def test_product_followup_targets_allow_carrier_product_links() -> None:
     assert [target.url for target in followups] == [
         "https://www.t-mobile.com/coverage/satellite-phone-service?icid=home"
     ]
+
+
+def test_manufacturer_reference_followup_targets_use_extracted_brand() -> None:
+    result = DiscoveryVLMResult(
+        source_url="https://www.t-mobile.com/iphone-17-pro-deals",
+        source_kind="carrier",
+        product_facts=[
+            DiscoveryProductFact(
+                matched_submitted_product="iPhone 17 Pro",
+                product_name="iPhone 17 Pro",
+                brand_name="Apple",
+                product_description="Premium smartphone sold through a carrier offer.",
+                confidence=0.86,
+            )
+        ],
+    )
+
+    followups = _manufacturer_reference_followup_targets(
+        target=SubmittedAdWebTarget(
+            ad_id="ad_tmobile_iphone",
+            url="https://www.t-mobile.com/iphone-17-pro-deals",
+            domain="www.t-mobile.com",
+            source="product_page_followup",
+        ),
+        products=[
+            EntityNode(
+                id="n_product_iphone",
+                type="product",
+                canonical_name="iPhone 17 Pro",
+                normalized_name="iphone 17 pro",
+                status="candidate",
+                confidence=0.6,
+            )
+        ],
+        result=result,
+        config=EntityCrawlerConfig(crawler={"reference_search_enabled": False}),
+        visited_count=1,
+    )
+
+    assert followups
+    assert followups[0].source == "manufacturer_reference_followup"
+    assert followups[0].domain == "www.apple.com"
+    assert followups[0].url.startswith("https://www.apple.com/")
 
 
 def test_product_variant_suggestions_are_review_only() -> None:
@@ -1443,6 +1490,42 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
         assert row["subcategory"] == "pickup truck"
     finally:
         readonly.close()
+
+
+def test_crawler_run_record_executes_to_stored_result(config_path: Path) -> None:
+    create_app(config_path=config_path)
+    _seed_noisy_products(config_path)
+    submitted_db, graph_db = _paths(config_path)
+    crawler_config_path = _write_entity_crawler_config(config_path)
+    manager = EntityGraphManager(
+        graph_db,
+        submitted_db,
+        crawler_config_path=crawler_config_path,
+    )
+    manager.web_crawler = EntityWebCrawler(
+        manager.graph,
+        manager.submitted_ads,
+        manager.crawler_config,
+        fetcher=_FakeFetcher(),
+        verifier=_FakeDiscoveryVerifier(),
+    )
+
+    run = manager.start_crawler_run(
+        limit=10,
+        ad_ids=["ad_ford_trucks"],
+        rerun_mode="rerun_crawled",
+    )
+    assert run.status == "queued"
+
+    completed = manager.execute_crawler_run(run.id)
+
+    assert completed.status == "completed"
+    assert completed.result is not None
+    assert completed.result.visited_count >= 1
+    stored = manager.get_crawler_run(run.id)
+    assert stored is not None
+    assert stored.result is not None
+    assert stored.result.visited_count == completed.result.visited_count
 
 
 def test_crawl_queue_product_edit_and_ingest_assist(config_path: Path) -> None:

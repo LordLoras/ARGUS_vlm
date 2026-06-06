@@ -51,7 +51,7 @@ const WORKBENCH_CARDS: CardItem[] = [
   },
   {
     title: "Evidence-aware automation",
-    body: "Uses resolver, crawler, search, manual targets, rerun modes, and VLM verification to improve entity quality while preserving provenance and candidate states for weak signals.",
+    body: "Uses resolver, background crawler runs, search, manual targets, rerun modes, and VLM verification to improve entity quality while preserving provenance and candidate states for weak signals.",
     icon: Bot,
     color: "var(--amber)",
   },
@@ -84,7 +84,7 @@ const PRINCIPLE_CARDS: CardItem[] = [
   },
   {
     title: "Browser evidence as escalation",
-    body: "Playwright-rendered pages and screenshots are escalation paths when HTTP text is thin, JavaScript hides product details, or anti-bot/4xx responses prevent useful evidence.",
+    body: "Playwright-rendered pages and screenshots are escalation paths when HTTP text is thin, JavaScript hides product details, or anti-bot/4xx responses prevent useful evidence; blocked targets are flagged explicitly.",
     icon: Camera,
     color: "var(--amber)",
   },
@@ -100,7 +100,7 @@ const ROUTE_LINKS: RouteItem[] = [
   {
     label: "Crawler Review",
     to: "/experimental/crawler",
-    note: "Run submitted, manual, and search-backed targets with skip, idempotent rerun, or refresh modes.",
+    note: "Start background crawler runs with skip, idempotent rerun, refresh, blocked-target, and official follow-up handling.",
     icon: ScanSearch,
   },
   {
@@ -125,8 +125,9 @@ const ROUTE_LINKS: RouteItem[] = [
 
 const ROADMAP = [
   ["Search targets", "Continue improving generated brand-product and brand-only search queries, while exposing query metadata, parsed result URLs, and manual official-target overrides."],
+  ["Crawler runs", "Keep long crawler work in persisted background run records so hosted requests do not depend on a single browser tab or proxy timeout."],
   ["Crawler reruns", "Use skip, idempotent rerun, and selected refresh modes so stale crawler artifacts can be replaced without resetting the full experimental graph."],
-  ["Crawler evidence", "Improve target selection, blocked-page detection, official-page ranking, and VLM JSON verification so product and brand facts are cleaner before review."],
+  ["Crawler evidence", "Improve target selection, blocked-page detection, official-page follow-ups, and VLM JSON verification so product and brand facts are cleaner before review."],
   ["Browser escalation", "Use optional Playwright rendering and screenshot-to-VLM verification for pages where HTML text, metadata, or static fetches are insufficient."],
   ["Data quality", "Use suggested corrections to repair incorrect projected ad fields only after explicit approval, with an audit trail."],
   ["Taxonomy", "Align graph categories to IAB product and content taxonomy IDs, keeping free-text category names as unmapped hints."],
@@ -154,7 +155,8 @@ export function ExperimentalAbout() {
               owner, category, and taxonomy records. The workflow now supports submitted URLs,
               manual reference targets, and search-backed discovery while keeping experimental
               graph writes separate from submitted ad records. Crawler runs can now skip completed
-              ads, rerun idempotently, or refresh selected discovery artifacts.
+              ads, rerun idempotently, refresh selected discovery artifacts, and continue as
+              background work beyond a proxy response timeout.
             </p>
             <div className="about-hero-actions">
               <Link to="/experimental/products" className="about-btn about-btn-primary">
@@ -203,7 +205,7 @@ export function ExperimentalAbout() {
               </div>
               <div>
                 <Globe2 size={16} />
-                <span>No-URL ads can be researched through generated brand/product queries and parsed search results.</span>
+                <span>No-URL ads and carrier offers can trigger generated queries, parsed results, and official manufacturer follow-ups.</span>
               </div>
             </div>
           </div>
@@ -226,7 +228,9 @@ export function ExperimentalAbout() {
             Current crawler work focuses on making missing targets explicit: an ad can use submitted
             URLs, a user-provided official URL, or generated brand/product search queries. Reruns
             are now explicit: skip already-crawled ads, rerun without clearing prior evidence, or
-            refresh selected crawler artifacts when stale rows need to be replaced.
+            refresh selected crawler artifacts when stale rows need to be replaced. Long crawls
+            are represented as background runs so navigation, Cloudflare timeouts, and browser
+            refreshes do not lose the run state.
           </p>
         </div>
         <CardGrid items={WORKBENCH_CARDS} />

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from ad_classifier.entity_graph import targets as target_utils
@@ -10,6 +11,7 @@ from ad_classifier.entity_graph.models import (
     AdChangeSuggestionStatus,
     CrawlerRerunMode,
     CrawlerResult,
+    CrawlerRunRecord,
     CrawlerTraceItem,
     DiscoveryCandidateRequest,
     EntityNode,
@@ -140,6 +142,66 @@ class EntityGraphManager:
             extra_targets=extra_targets,
             rerun_mode=rerun_mode,
         )
+
+    def start_crawler_run(
+        self,
+        *,
+        limit: int = 100,
+        ad_ids: list[str] | None = None,
+        target_urls: dict[str, list[str]] | None = None,
+        rerun_mode: CrawlerRerunMode = "rerun_crawled",
+    ) -> CrawlerRunRecord:
+        run_id = f"crawler_{uuid.uuid4().hex[:12]}"
+        with self.graph.connect() as conn:
+            run = self.graph.create_crawler_run(
+                conn,
+                run_id=run_id,
+                limit=limit,
+                ad_ids=ad_ids or [],
+                target_urls=target_urls or {},
+                rerun_mode=rerun_mode,
+            )
+            conn.commit()
+            return run
+
+    def execute_crawler_run(self, run_id: str) -> CrawlerRunRecord:
+        with self.graph.connect() as conn:
+            run = self.graph.update_crawler_run_status(conn, run_id, status="running")
+            conn.commit()
+        try:
+            result = self.run_crawler(
+                limit=run.limit,
+                ad_ids=run.ad_ids or None,
+                target_urls=run.target_urls,
+                rerun_mode=run.rerun_mode,
+            )
+        except Exception as exc:
+            with self.graph.connect() as conn:
+                failed = self.graph.update_crawler_run_status(
+                    conn,
+                    run_id,
+                    status="failed",
+                    error=str(exc)[:1000],
+                )
+                conn.commit()
+                return failed
+        with self.graph.connect() as conn:
+            completed = self.graph.update_crawler_run_status(
+                conn,
+                run_id,
+                status="completed",
+                result=result,
+            )
+            conn.commit()
+            return completed
+
+    def get_crawler_run(self, run_id: str) -> CrawlerRunRecord | None:
+        with self.graph.connect(readonly=True) as conn:
+            return self.graph.get_crawler_run(conn, run_id)
+
+    def list_crawler_runs(self, *, limit: int = 20) -> list[CrawlerRunRecord]:
+        with self.graph.connect(readonly=True) as conn:
+            return self.graph.list_crawler_runs(conn, limit=limit)
 
     def crawl_queue(
         self,

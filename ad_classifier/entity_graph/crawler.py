@@ -189,12 +189,14 @@ class EntityWebCrawler:
                 try:
                     page = self.fetcher.fetch(target, self.crawler_config)
                 except Exception as exc:  # pragma: no cover - exception type depends on transport
+                    reason = str(exc)[:240]
                     items.append(
                         CrawlerItem(
                             ad_id=target.ad_id,
                             url=target.url,
                             status="failed",
-                            reason=str(exc)[:240],
+                            blocked=_failure_reason_is_blocked(reason),
+                            reason=reason,
                             target_source=target.source,
                             target_evidence_text=target.evidence_text,
                         )
@@ -280,6 +282,13 @@ class EntityWebCrawler:
                     matched.extend(_matched_vlm_product_names(products, vlm_result))
                     pending_targets.extend(
                         [
+                            *_manufacturer_reference_followup_targets(
+                                target=target,
+                                products=products,
+                                result=vlm_result,
+                                config=self.crawler_config,
+                                visited_count=visited_count_by_ad[target.ad_id],
+                            ),
                             *_product_followup_targets(
                                 target=target,
                                 page=page,
@@ -487,6 +496,29 @@ def _with_reference_search_targets(
     return _dedupe_targets([*targets, *extra], max_targets=config.crawler.max_targets_per_ad)
 
 
+def _reference_result_urls(
+    *,
+    query: str,
+    product_name: str,
+    brand: str | None,
+    advertiser: str | None,
+    config: EntityCrawlerConfig,
+) -> list[str]:
+    urls: list[str] = []
+    if config.crawler.reference_search_enabled:
+        try:
+            urls = _duckduckgo_urls(query, config)
+        except Exception:
+            urls = []
+    if urls:
+        return urls[: config.crawler.max_reference_results_per_ad]
+    return _fallback_reference_urls(
+        product_name=product_name,
+        brand=brand,
+        advertiser=advertiser,
+    )[: config.crawler.max_reference_results_per_ad]
+
+
 def _skip_already_crawled_targets(
     graph: EntityGraphRepository,
     conn,
@@ -662,6 +694,64 @@ def _product_followup_targets(
     return followups
 
 
+def _manufacturer_reference_followup_targets(
+    *,
+    target: SubmittedAdWebTarget,
+    products: list[EntityNode],
+    result: DiscoveryVLMResult,
+    config: EntityCrawlerConfig,
+    visited_count: int,
+) -> list[SubmittedAdWebTarget]:
+    if visited_count >= config.crawler.max_pages_per_entity:
+        return []
+    if result.source_kind not in {"carrier", "retailer", "marketplace", "search_result"}:
+        return []
+    submitted_names = {normalize_name(product.canonical_name): product.canonical_name for product in products}
+    followups: list[SubmittedAdWebTarget] = []
+    seen: set[str] = set()
+    current_domain = _normalize_domain(target.domain or target.url)
+    for fact in result.product_facts:
+        brand = (fact.brand_name or "").strip()
+        product = (fact.product_name or fact.matched_submitted_product or "").strip()
+        matched_key = normalize_name(fact.matched_submitted_product)
+        if not brand or not product:
+            continue
+        if matched_key and matched_key not in submitted_names:
+            continue
+        urls = _reference_result_urls(
+            query=f'"{brand}" "{product}" official product',
+            product_name=product,
+            brand=brand,
+            advertiser=None,
+            config=config,
+        )
+        for url in urls:
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                continue
+            if _normalize_domain(parsed.netloc) == current_domain:
+                continue
+            key = _target_key(url)
+            if key in seen:
+                continue
+            seen.add(key)
+            followups.append(
+                SubmittedAdWebTarget(
+                    ad_id=target.ad_id,
+                    url=url,
+                    domain=parsed.netloc.lower(),
+                    source="manufacturer_reference_followup",
+                    evidence_text=(
+                        f"Official manufacturer follow-up from {target.url}: "
+                        f"{brand} {product}"
+                    ),
+                )
+            )
+            if len(followups) >= config.crawler.max_followup_links_per_page:
+                return followups
+    return followups
+
+
 def _brand_context_followup_targets(
     *,
     target: SubmittedAdWebTarget,
@@ -785,6 +875,7 @@ def _crawler_target_priority(source: str) -> int:
     priorities = {
         "explicit_reference": 0,
         "product_page_followup": 1,
+        "manufacturer_reference_followup": 1,
         "reference_search": 2,
         "reference_search_fallback": 3,
         "landing_page_json": 4,
@@ -913,6 +1004,23 @@ def _looks_blocked_or_challenged(page: FetchedPage) -> bool:
         "verify you are human",
     ]
     return any(marker in haystack for marker in blocked_markers)
+
+
+def _failure_reason_is_blocked(reason: str | None) -> bool:
+    key = normalize_name(reason or "")
+    markers = [
+        "access denied",
+        "blocked challenge",
+        "blocked page",
+        "bot detection",
+        "captcha",
+        "cloudflare",
+        "permission to access",
+        "request blocked",
+        "security challenge",
+        "verify you are human",
+    ]
+    return any(marker in key for marker in markers)
 
 
 def _is_4xx_page(page: FetchedPage) -> bool:

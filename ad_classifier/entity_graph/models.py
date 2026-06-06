@@ -13,6 +13,7 @@ SourceType = Literal["submitted_ad", "taxonomy", "discovery_only", "user", "reso
 IngestAssistMode = Literal["keep_initial_metadata", "use_graph", "crawl_reinforce"]
 CrawlQueueStatus = Literal["ready", "done", "needs_review", "no_targets"]
 CrawlerRerunMode = Literal["skip_crawled", "rerun_crawled", "refresh"]
+CrawlerRunStatus = Literal["queued", "running", "completed", "failed"]
 RelationType = Literal[
     "BRANDED_BY",
     "OWNED_BY",
@@ -201,6 +202,7 @@ class CrawlerItem(StrictModel):
     ad_id: str
     url: str
     status: Literal["visited", "skipped", "failed"]
+    blocked: bool = False
     target_source: str | None = None
     target_evidence_text: str | None = None
     source_id: str | None = None
@@ -219,6 +221,20 @@ class CrawlerResult(StrictModel):
     rerun_mode: CrawlerRerunMode = "rerun_crawled"
     refreshed_ad_count: int = 0
     items: list[CrawlerItem] = Field(default_factory=list)
+
+
+class CrawlerRunRecord(StrictModel):
+    id: str
+    status: CrawlerRunStatus = "queued"
+    rerun_mode: CrawlerRerunMode = "rerun_crawled"
+    limit: int = 100
+    ad_ids: list[str] = Field(default_factory=list)
+    target_urls: dict[str, list[str]] = Field(default_factory=dict)
+    result: CrawlerResult | None = None
+    error: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
 class CrawlerTraceItem(StrictModel):

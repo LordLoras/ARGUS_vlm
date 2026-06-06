@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
@@ -8,7 +8,12 @@ import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
 import { compactEvidenceText } from "../lib/entity-display";
 import { AlertIcon, CheckIcon, EditIcon, FlowIcon, SearchIcon, XIcon } from "../lib/icons";
-import type { AdChangeSuggestion, CrawlerResult, SubmittedAdCrawlQueueItem } from "../lib/types";
+import type {
+  AdChangeSuggestion,
+  CrawlerResult,
+  CrawlerRunRecord,
+  SubmittedAdCrawlQueueItem
+} from "../lib/types";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All suggestions" },
@@ -44,6 +49,7 @@ export function CrawlerReview() {
   const [status, setStatus] = useState("pending");
   const [filterAdId, setFilterAdId] = useState("");
   const [lastRun, setLastRun] = useState<CrawlerResult | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -64,6 +70,33 @@ export function CrawlerReview() {
       })
   });
 
+  const activeRunQuery = useQuery({
+    queryKey: ["entity-crawler-run", activeRunId],
+    queryFn: () => api.getEntityCrawlerRun(activeRunId || ""),
+    enabled: Boolean(activeRunId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "queued" || status === "running" ? 2500 : false;
+    }
+  });
+
+  const activeRun: CrawlerRunRecord | null = activeRunQuery.data ?? null;
+
+  useEffect(() => {
+    if (!activeRun) return;
+    if (activeRun.status === "completed" && activeRun.result) {
+      setError(null);
+      setLastRun(activeRun.result);
+      void queryClient.invalidateQueries({ queryKey: ["ad-change-suggestions"] });
+      void queryClient.invalidateQueries({ queryKey: ["entity-crawler-queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["entity-products"] });
+      void queryClient.invalidateQueries({ queryKey: ["entity-graph"] });
+    }
+    if (activeRun.status === "failed") {
+      setError(activeRun.error || "Crawler run failed");
+    }
+  }, [activeRun, queryClient]);
+
   const allQueueItems = queueQuery.data?.items ?? [];
   const queueCounts = useMemo(() => summarizeQueue(allQueueItems), [allQueueItems]);
   const queueItems = useMemo(
@@ -83,23 +116,21 @@ export function CrawlerReview() {
 
   const runMutation = useMutation({
     mutationFn: ({ ids, referenceText }: { ids: string[]; referenceText?: string }) => {
-      return api.runEntityCrawler({
+      return api.startEntityCrawlerRun({
         limit,
         ad_ids: ids,
         targets: buildTargets(ids, referenceText ?? referenceUrls),
         rerun_mode: rerunMode
       });
     },
-    onSuccess: async (result) => {
+    onSuccess: (run) => {
       setError(null);
-      setLastRun(result);
-      await queryClient.invalidateQueries({ queryKey: ["ad-change-suggestions"] });
-      await queryClient.invalidateQueries({ queryKey: ["entity-crawler-queue"] });
-      await queryClient.invalidateQueries({ queryKey: ["entity-products"] });
-      await queryClient.invalidateQueries({ queryKey: ["entity-graph"] });
+      setActiveRunId(run.id);
     },
     onError: (nextError) => setError(errorMessage(nextError))
   });
+  const crawlerBusy =
+    runMutation.isPending || activeRun?.status === "queued" || activeRun?.status === "running";
 
   const suggestionSuccess = async () => {
     setError(null);
@@ -217,19 +248,19 @@ export function CrawlerReview() {
             <div className="crawler-run-actions">
               <button
                 className="btn"
-                disabled={runMutation.isPending || visibleAdIds.length === 0}
+                disabled={crawlerBusy || visibleAdIds.length === 0}
                 onClick={() => runMutation.mutate({ ids: visibleAdIds })}
               >
                 <FlowIcon size={12} />
-                <span>{runMutation.isPending ? "Running" : "Run visible queue"}</span>
+                <span>{crawlerBusy ? "Running" : "Run visible queue"}</span>
               </button>
               <button
                 className="btn btn-primary"
-                disabled={runMutation.isPending || selectedForRun.length === 0}
+                disabled={crawlerBusy || selectedForRun.length === 0}
                 onClick={() => runMutation.mutate({ ids: selectedForRun })}
               >
                 <SearchIcon size={12} />
-                <span>{runMutation.isPending ? "Running" : "Run selected"}</span>
+                <span>{crawlerBusy ? "Running" : "Run selected"}</span>
               </button>
             </div>
           </div>
@@ -269,6 +300,14 @@ export function CrawlerReview() {
               {selectedVisibleCount} selected from {visibleAdIds.length} loaded ads
             </span>
           </div>
+          {activeRun ? (
+            <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
+              <Metric label="Run" value={shortRunId(activeRun.id)} />
+              <Metric label="Status" value={activeRun.status} />
+              <Metric label="Mode" value={formatRerunMode(activeRun.rerun_mode)} />
+              <Metric label="Ads" value={activeRun.ad_ids.length || visibleAdIds.length} />
+            </div>
+          ) : null}
           {lastRun ? (
             <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
               <Metric label="Visited" value={lastRun.visited_count} />
@@ -299,7 +338,7 @@ export function CrawlerReview() {
                   : ""
               })
             }
-            running={runMutation.isPending}
+            running={crawlerBusy}
             toggle={(adId) =>
               setSelectedAdIds((current) => {
                 const next = new Set(current);
@@ -528,6 +567,7 @@ function CrawlerRunItems({ items }: { items: CrawlerResult["items"] }) {
               <span className={`entity-status entity-status-${item.status}`}>
                 {item.status}
               </span>
+              {item.blocked ? <span className="entity-status entity-status-failed">blocked</span> : null}
               <span className="entity-row-sub">{item.target_source || "target"}</span>
             </div>
             <div className="entity-link-strong">{item.ad_id}</div>
@@ -540,6 +580,7 @@ function CrawlerRunItems({ items }: { items: CrawlerResult["items"] }) {
                 Matched: {item.matched_products.join(", ")}
               </div>
             ) : null}
+            {item.reason ? <div className="entity-row-sub">{item.reason}</div> : null}
           </div>
         ))}
       </div>
@@ -632,6 +673,10 @@ function formatQueueStatus(value: SubmittedAdCrawlQueueItem["crawl_status"]) {
 
 function formatRerunMode(value: CrawlerResult["rerun_mode"]) {
   return RERUN_MODE_OPTIONS.find((option) => option.value === value)?.label ?? value.replace(/_/g, " ");
+}
+
+function shortRunId(value: string) {
+  return value.replace(/^crawler_/, "");
 }
 
 function parseAdIds(value: string) {

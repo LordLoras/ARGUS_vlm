@@ -18,6 +18,7 @@ import type {
   EntityNode,
   EntityTaxonomyMappingSummary,
   CrawlerResult,
+  CrawlerRunRecord,
   CrawlerTraceItem,
   AdChangeSuggestion,
   IngestAssistMode,
@@ -419,6 +420,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body)
     }),
+
+  startEntityCrawlerRun: (body: {
+    limit?: number;
+    ad_ids?: string[];
+    targets?: Array<{ ad_id: string; url: string }>;
+    rerun_mode?: "skip_crawled" | "rerun_crawled" | "refresh";
+  } = {}) =>
+    apiFetch<CrawlerRunRecord>("/api/entity-graph/crawler/runs", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  getEntityCrawlerRun: (runId: string) =>
+    apiFetch<CrawlerRunRecord>(`/api/entity-graph/crawler/runs/${encodeURIComponent(runId)}`),
+
+  listEntityCrawlerRuns: (limit = 20) =>
+    apiFetch<{ items: CrawlerRunRecord[]; limit: number }>(
+      `/api/entity-graph/crawler/runs${params({ limit })}`
+    ),
 
   listEntityCrawlerQueue: (query: { q?: string; limit?: number } = {}) =>
     apiFetch<{ items: SubmittedAdCrawlQueueItem[]; limit: number }>(

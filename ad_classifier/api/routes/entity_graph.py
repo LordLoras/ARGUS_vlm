@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ad_classifier.entity_graph.manager import EntityGraphManager
@@ -175,6 +175,52 @@ def run_resolver(request: Request, payload: ResolverPayload | None = None) -> di
 @router.post("/entity-graph/crawler/run")
 def run_crawler(request: Request, payload: CrawlerPayload | None = None) -> dict[str, Any]:
     body = payload or CrawlerPayload()
+    ad_ids, target_urls = _crawler_payload_inputs(body)
+    return _manager(request).run_crawler(
+        limit=body.limit,
+        ad_ids=ad_ids,
+        target_urls=target_urls,
+        rerun_mode=body.rerun_mode,
+    ).model_dump(mode="json")
+
+
+@router.post("/entity-graph/crawler/runs")
+def start_crawler_run(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    payload: CrawlerPayload | None = None,
+) -> dict[str, Any]:
+    body = payload or CrawlerPayload()
+    ad_ids, target_urls = _crawler_payload_inputs(body)
+    manager = _manager(request)
+    run = manager.start_crawler_run(
+        limit=body.limit,
+        ad_ids=ad_ids,
+        target_urls=target_urls,
+        rerun_mode=body.rerun_mode,
+    )
+    background_tasks.add_task(_execute_crawler_run, manager, run.id)
+    return run.model_dump(mode="json")
+
+
+@router.get("/entity-graph/crawler/runs")
+def list_crawler_runs(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, Any]:
+    runs = _manager(request).list_crawler_runs(limit=limit)
+    return {"items": [run.model_dump(mode="json") for run in runs], "limit": limit}
+
+
+@router.get("/entity-graph/crawler/runs/{run_id}")
+def get_crawler_run(request: Request, run_id: str) -> dict[str, Any]:
+    run = _manager(request).get_crawler_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="crawler run not found")
+    return run.model_dump(mode="json")
+
+
+def _crawler_payload_inputs(body: CrawlerPayload) -> tuple[list[str], dict[str, list[str]]]:
     ad_ids = [item.strip() for item in body.ad_ids if item.strip()]
     target_urls: dict[str, list[str]] = {}
     for target in body.targets:
@@ -183,12 +229,11 @@ def run_crawler(request: Request, payload: CrawlerPayload | None = None) -> dict
         if not ad_id or not url:
             continue
         target_urls.setdefault(ad_id, []).append(url)
-    return _manager(request).run_crawler(
-        limit=body.limit,
-        ad_ids=ad_ids,
-        target_urls=target_urls,
-        rerun_mode=body.rerun_mode,
-    ).model_dump(mode="json")
+    return ad_ids, target_urls
+
+
+def _execute_crawler_run(manager: EntityGraphManager, run_id: str) -> None:
+    manager.execute_crawler_run(run_id)
 
 
 @router.get("/entity-graph/crawler/queue")

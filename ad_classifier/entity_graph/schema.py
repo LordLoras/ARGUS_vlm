@@ -164,6 +164,28 @@ CREATE INDEX IF NOT EXISTS idx_ad_change_suggestions_ad
 """
 
 
+MIGRATION_003 = """
+CREATE TABLE IF NOT EXISTS crawler_runs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL
+    CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+  rerun_mode TEXT NOT NULL DEFAULT 'rerun_crawled'
+    CHECK (rerun_mode IN ('skip_crawled', 'rerun_crawled', 'refresh')),
+  limit_value INTEGER NOT NULL DEFAULT 100,
+  ad_ids_json TEXT,
+  target_urls_json TEXT,
+  result_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at TEXT,
+  finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_crawler_runs_status_created
+  ON crawler_runs(status, created_at);
+"""
+
+
 def initialize_entity_graph_db(path: Path) -> list[str]:
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +208,12 @@ def initialize_entity_graph_db(path: Path) -> list[str]:
                 "INSERT OR IGNORE INTO entity_graph_migrations (version) VALUES ('002_ad_change_suggestions')"
             )
             migrations.append("002_ad_change_suggestions")
+        if "003_crawler_runs" not in applied:
+            conn.executescript(MIGRATION_003)
+            conn.execute(
+                "INSERT OR IGNORE INTO entity_graph_migrations (version) VALUES ('003_crawler_runs')"
+            )
+            migrations.append("003_crawler_runs")
         conn.commit()
         return migrations
     finally:
