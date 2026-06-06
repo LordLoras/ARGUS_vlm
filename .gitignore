@@ -57,6 +57,19 @@ logs/
 *.log
 *.tmp
 *.bak
+tmp/
+
+# Generated presentation/document artifacts
+output/
+outputs/
+presentation-output/
+presentation-outputs/
+document-output/
+document-outputs/
+*.pptx.render/
+*.docx.render/
+*-contact-sheet.png
+*-scorecard.txt
 
 # IDE
 .vscode/
