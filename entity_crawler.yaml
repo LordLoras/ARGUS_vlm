@@ -19,6 +19,7 @@ crawler:
   recursive_source_kinds:
     - manufacturer
     - brand
+    - carrier
   brand_context_link_terms:
     - about
     - about us

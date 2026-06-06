@@ -39,7 +39,9 @@ class EntityCrawlerSettings(BaseModel):
     max_followup_links_per_page: int = Field(default=3, ge=0, le=10)
     follow_brand_context_links: bool = True
     max_brand_context_links_per_page: int = Field(default=2, ge=0, le=5)
-    recursive_source_kinds: list[str] = Field(default_factory=lambda: ["manufacturer", "brand"])
+    recursive_source_kinds: list[str] = Field(
+        default_factory=lambda: ["manufacturer", "brand", "carrier"]
+    )
     brand_context_link_terms: list[str] = Field(
         default_factory=lambda: [
             "about",

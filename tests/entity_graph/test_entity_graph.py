@@ -23,11 +23,12 @@ from ad_classifier.entity_graph.crawler import (
     _fallback_reference_urls,
     _looks_blocked_or_challenged,
     _owner_supported_by_evidence,
+    _product_followup_targets,
 )
 from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
 from ad_classifier.entity_graph.discovery_vlm import DiscoveryProductFact, DiscoveryVLMResult
 from ad_classifier.entity_graph.manager import EntityGraphManager
-from ad_classifier.entity_graph.models import IngestAssistRequest, SubmittedAdWebTarget
+from ad_classifier.entity_graph.models import EntityNode, IngestAssistRequest, SubmittedAdWebTarget
 from ad_classifier.entity_graph.repository import (
     EntityGraphRepository,
     _best_product_blurb,
@@ -857,6 +858,97 @@ def test_default_fetcher_uses_browser_fallback_for_access_denied(monkeypatch: py
 
     assert page.fetcher == "browser"
     assert page.status_code == 200
+
+
+def test_default_fetcher_rejects_404_after_browser_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    http_page = FetchedPage(
+        url="https://www.tmobile.com/t-satellite/",
+        final_url="https://www.tmobile.com/t-satellite/",
+        status_code=403,
+        title="Access Denied",
+        description=None,
+        text='Access Denied. You do not have permission to access "http://www.tmobile.com/t-satellite/".',
+        fetcher="http",
+    )
+    browser_page = FetchedPage(
+        url="https://www.tmobile.com/t-satellite/",
+        final_url="https://www.t-mobile.com/t-satellite/",
+        status_code=404,
+        title="Back Button Search Icon Filter Icon",
+        description=None,
+        text="No matching product page was found.",
+        fetcher="browser",
+    )
+
+    monkeypatch.setattr("ad_classifier.entity_graph.crawler._fetch_with_http", lambda _url, _config: http_page)
+    monkeypatch.setattr("ad_classifier.entity_graph.crawler._fetch_with_browser", lambda _url, _config: browser_page)
+
+    with pytest.raises(RuntimeError, match="blocked/challenge page"):
+        DefaultPageFetcher().fetch(
+            SubmittedAdWebTarget(
+                ad_id="ad_one",
+                url="https://www.tmobile.com/t-satellite/",
+                domain="www.tmobile.com",
+                source="reference_search_fallback",
+            ),
+            EntityCrawlerConfig(crawler={"use_browser_fallback": True}),
+        )
+
+
+def test_product_followup_targets_allow_carrier_product_links() -> None:
+    page = FetchedPage(
+        url="https://www.t-mobile.com/",
+        final_url="https://www.t-mobile.com/",
+        status_code=200,
+        title="T-Mobile",
+        description=None,
+        text="No Towers? No Problem. Off-grid coverage with T-Satellite.",
+        fetcher="browser",
+        links=[
+            PageLink(
+                text="No Towers? No Problem. Off-grid coverage with T-Satellite.",
+                url="/coverage/satellite-phone-service?icid=home",
+            )
+        ],
+    )
+    product = DiscoveryProductFact(
+        matched_submitted_product="T-Satellite",
+        product_name="T-Satellite",
+        product_description="Satellite phone service.",
+        confidence=0.86,
+    )
+    result = DiscoveryVLMResult(
+        source_url="https://www.t-mobile.com/",
+        source_kind="carrier",
+        product_facts=[product],
+    )
+
+    followups = _product_followup_targets(
+        target=SubmittedAdWebTarget(
+            ad_id="ad_one",
+            url="https://www.tmobile.com/",
+            domain="www.tmobile.com",
+            source="reference_search_fallback",
+        ),
+        page=page,
+        products=[
+            EntityNode(
+                id="n_product_tsat",
+                type="product",
+                canonical_name="T-Satellite",
+                normalized_name="t satellite",
+                status="candidate",
+                confidence=0.6,
+            )
+        ],
+        result=result,
+        config=EntityCrawlerConfig(),
+        visited_count=1,
+    )
+
+    assert [target.url for target in followups] == [
+        "https://www.t-mobile.com/coverage/satellite-phone-service?icid=home"
+    ]
 
 
 def test_product_variant_suggestions_are_review_only() -> None:

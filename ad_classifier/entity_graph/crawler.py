@@ -5,6 +5,7 @@ import re
 import ssl
 import urllib.error
 import urllib.request
+from contextlib import suppress
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Protocol
@@ -750,32 +751,41 @@ def _crawler_target_priority(source: str) -> int:
 class DefaultPageFetcher:
     def fetch(self, target: SubmittedAdWebTarget, config: EntityCrawlerConfig) -> FetchedPage:
         if config.crawler.provider == "browser":
-            return _fetch_with_browser(target.url, config)
+            page = _fetch_with_browser(target.url, config)
+            _raise_if_unusable_page(page)
+            return page
         try:
             page = _fetch_with_http(target.url, config)
         except Exception as http_exc:
             if config.crawler.use_browser_fallback:
                 try:
-                    return _fetch_with_browser(target.url, config)
+                    page = _fetch_with_browser(target.url, config)
+                    _raise_if_unusable_page(page)
+                    return page
                 except Exception as browser_exc:
                     raise RuntimeError(
                         f"http fetch failed: {http_exc}; browser fallback failed: {browser_exc}"
                     ) from browser_exc
             raise
-        needs_fallback = len(page.text) < 200 or _looks_blocked_or_challenged(page)
+        needs_fallback = len(page.text) < 200 or _looks_blocked_or_challenged(page) or _is_4xx_page(page)
         if needs_fallback and config.crawler.use_browser_fallback:
             try:
-                return _fetch_with_browser(target.url, config)
+                browser_page = _fetch_with_browser(target.url, config)
+                _raise_if_unusable_page(browser_page)
+                return browser_page
             except Exception as browser_exc:
                 if _looks_blocked_or_challenged(page):
                     raise RuntimeError(
                         "http fetch returned a blocked/challenge page; "
                         f"browser fallback failed: {browser_exc}"
                     ) from browser_exc
+                if _is_4xx_page(page):
+                    raise RuntimeError(
+                        f"http fetch returned HTTP {page.status_code}; "
+                        f"browser fallback failed: {browser_exc}"
+                    ) from browser_exc
                 return page
-        if _looks_blocked_or_challenged(page):
-            title = page.title or f"HTTP {page.status_code}"
-            raise RuntimeError(f"http fetch returned a blocked/challenge page: {title}")
+        _raise_if_unusable_page(page)
         return page
 
 
@@ -857,6 +867,20 @@ def _looks_blocked_or_challenged(page: FetchedPage) -> bool:
     return any(marker in haystack for marker in blocked_markers)
 
 
+def _is_4xx_page(page: FetchedPage) -> bool:
+    return 400 <= page.status_code < 500
+
+
+def _raise_if_unusable_page(page: FetchedPage) -> None:
+    if _looks_blocked_or_challenged(page):
+        title = page.title or f"HTTP {page.status_code}"
+        raise RuntimeError(f"fetch returned a blocked/challenge page: {title}")
+    if _is_4xx_page(page):
+        title = page.title or ""
+        suffix = f" ({title})" if title else ""
+        raise RuntimeError(f"fetch returned HTTP {page.status_code}{suffix}")
+
+
 def _ssl_context() -> ssl.SSLContext:
     try:
         import certifi
@@ -878,9 +902,15 @@ def _fetch_with_browser(url: str, config: EntityCrawlerConfig) -> FetchedPage:
             page = browser.new_page(user_agent=config.crawler.user_agent)
             response = page.goto(
                 url,
-                wait_until="networkidle",
+                wait_until="domcontentloaded",
                 timeout=int(config.crawler.timeout_s * 1000),
             )
+            with suppress(Exception):
+                page.wait_for_load_state(
+                    "load",
+                    timeout=min(5000, max(1000, int(config.crawler.timeout_s * 1000 / 2))),
+                )
+            page.wait_for_timeout(750)
             html = page.content()
             parsed = _parse_html(html)
             return FetchedPage(
