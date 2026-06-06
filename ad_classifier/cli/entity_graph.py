@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from ad_classifier.entity_graph.manager import EntityGraphManager
+from ad_classifier.entity_graph.models import CrawlerRerunMode
 from ad_classifier.entity_graph.targets import from_ad_url_mapping
 
 entity_graph_app = typer.Typer(
@@ -88,6 +89,13 @@ def crawl_web_targets(
             help="Explicit crawl target in ad_id=url form. Repeatable.",
         ),
     ] = None,
+    rerun_mode: Annotated[
+        CrawlerRerunMode,
+        typer.Option(
+            "--rerun-mode",
+            help="skip_crawled, rerun_crawled, or refresh selected ad crawl artifacts first.",
+        ),
+    ] = "rerun_crawled",
 ) -> None:
     """Visit submitted ad website targets and write discovery-only graph evidence."""
     manager = _manager_from_config(config)
@@ -95,6 +103,7 @@ def crawl_web_targets(
         limit=limit,
         ad_ids=ad_id or None,
         target_urls=_parse_target_options(target or []),
+        rerun_mode=rerun_mode,
     )
     typer.echo(result.model_dump_json(indent=2))
 

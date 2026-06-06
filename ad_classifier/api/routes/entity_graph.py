@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from ad_classifier.entity_graph.manager import EntityGraphManager
 from ad_classifier.entity_graph.models import (
     AdChangeSuggestionStatus,
+    CrawlerRerunMode,
     DiscoveryCandidateRequest,
     EntityStatus,
     EntityType,
@@ -32,6 +33,7 @@ class CrawlerPayload(BaseModel):
     limit: int = Field(default=100, ge=1, le=10000)
     ad_ids: list[str] = Field(default_factory=list, max_length=10000)
     targets: list[CrawlerTargetPayload] = Field(default_factory=list, max_length=2000)
+    rerun_mode: CrawlerRerunMode = "rerun_crawled"
 
 
 class StatusPayload(BaseModel):
@@ -185,6 +187,7 @@ def run_crawler(request: Request, payload: CrawlerPayload | None = None) -> dict
         limit=body.limit,
         ad_ids=ad_ids,
         target_urls=target_urls,
+        rerun_mode=body.rerun_mode,
     ).model_dump(mode="json")
 
 

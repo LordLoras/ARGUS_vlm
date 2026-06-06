@@ -215,7 +215,7 @@ select:focus-visible {
 }
 
 .crawler-run-grid-queue {
-  grid-template-columns: minmax(90px, 110px) minmax(220px, 1fr) minmax(220px, 1fr) minmax(260px, 1.2fr) auto;
+  grid-template-columns: minmax(90px, 110px) minmax(150px, 180px) minmax(200px, 1fr) minmax(200px, 1fr) minmax(260px, 1.2fr) auto;
 }
 
 .entity-field {

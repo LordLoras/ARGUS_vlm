@@ -1089,6 +1089,78 @@ def test_product_blurb_falls_back_from_malformed_generated_copy(tmp_path: Path) 
         )
 
 
+def test_upsert_observation_merges_web_source_unique_conflict(tmp_path: Path) -> None:
+    repo = EntityGraphRepository(tmp_path / "entity_graph.db")
+    with repo.connect() as conn:
+        product, _ = repo.upsert_node(
+            conn,
+            entity_type="product",
+            canonical_name="T-Satellite",
+            status="confirmed_unreviewed",
+            confidence=0.88,
+        )
+        source_one = repo.upsert_source(
+            conn,
+            source_type="discovery_only",
+            label="Root",
+            url="https://www.t-mobile.com/",
+            ad_id="ad_one",
+            payload={"target_source": "reference_search_fallback"},
+        )
+        source_two = repo.upsert_source(
+            conn,
+            source_type="discovery_only",
+            label="Product",
+            url="https://www.t-mobile.com/coverage/satellite-phone-service",
+            ad_id="ad_one",
+            payload={"target_source": "product_page_followup"},
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_discovery",
+            evidence_text="T-Satellite is a satellite phone service from T-Mobile.",
+            source="web_crawl",
+            confidence=0.30,
+            source_id=source_one.id,
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_discovery",
+            evidence_text="T-Satellite appears on the T-Mobile home page.",
+            source="web_crawl",
+            confidence=0.25,
+            source_id=source_two.id,
+        )
+
+        merged = repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_discovery",
+            evidence_text="T-Satellite is a satellite phone service from T-Mobile.",
+            source="web_crawl",
+            confidence=0.45,
+            source_id=source_two.id,
+        )
+
+        rows = conn.execute(
+            """
+            SELECT evidence_text, confidence
+            FROM entity_observations
+            WHERE node_id = ? AND ad_id = ? AND field = ? AND source = ?
+            """,
+            (product.id, "ad_one", "web_discovery", "web_crawl"),
+        ).fetchall()
+
+    assert merged.evidence_text == "T-Satellite is a satellite phone service from T-Mobile."
+    assert len(rows) == 1
+    assert rows[0]["confidence"] == pytest.approx(0.45)
+
+
 def test_owner_filter_rejects_vendor_copyright_only_evidence() -> None:
     assert not _owner_supported_by_evidence(
         owner_name="Blotout, Inc.",
@@ -1283,9 +1355,17 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
             {"ad_tmobile_iphone": ["https://www.apple.example/iphone-17-pro"]}
         ),
     )
+    skip_result = crawler.run(limit=10, ad_ids=["ad_ford_trucks"], rerun_mode="skip_crawled")
+    refresh_result = crawler.run(limit=10, ad_ids=["ad_ford_trucks"], rerun_mode="refresh")
     assert result.visited_count >= 1
     assert any(item.url.endswith("/f-150") for item in result.items)
     assert repeat_result.visited_count >= 1
+    assert skip_result.visited_count == 0
+    assert skip_result.skipped_count >= 1
+    assert skip_result.rerun_mode == "skip_crawled"
+    assert refresh_result.refreshed_ad_count == 1
+    assert refresh_result.visited_count >= 1
+    assert refresh_result.rerun_mode == "refresh"
     assert result.observation_count >= 2
     assert result.suggestion_count >= 1
 

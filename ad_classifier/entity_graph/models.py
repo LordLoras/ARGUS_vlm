@@ -12,6 +12,7 @@ AdChangeSuggestionStatus = Literal["pending", "approved", "rejected", "applied"]
 SourceType = Literal["submitted_ad", "taxonomy", "discovery_only", "user", "resolver"]
 IngestAssistMode = Literal["keep_initial_metadata", "use_graph", "crawl_reinforce"]
 CrawlQueueStatus = Literal["ready", "done", "needs_review", "no_targets"]
+CrawlerRerunMode = Literal["skip_crawled", "rerun_crawled", "refresh"]
 RelationType = Literal[
     "BRANDED_BY",
     "OWNED_BY",
@@ -215,6 +216,8 @@ class CrawlerResult(StrictModel):
     failed_count: int = 0
     observation_count: int = 0
     suggestion_count: int = 0
+    rerun_mode: CrawlerRerunMode = "rerun_crawled"
+    refreshed_ad_count: int = 0
     items: list[CrawlerItem] = Field(default_factory=list)
 
 

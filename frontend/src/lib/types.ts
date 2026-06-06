@@ -946,6 +946,8 @@ export type CrawlerResult = {
   failed_count: number;
   observation_count: number;
   suggestion_count: number;
+  rerun_mode: "skip_crawled" | "rerun_crawled" | "refresh";
+  refreshed_ad_count: number;
   items: CrawlerItem[];
 };
 

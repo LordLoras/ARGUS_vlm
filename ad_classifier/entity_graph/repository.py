@@ -493,6 +493,70 @@ class EntityGraphRepository:
             metadata[str(row["ad_id"])]["crawled_source_count"] = int(row["count"] or 0)
         return metadata
 
+    def clear_crawl_artifacts(self, conn: sqlite3.Connection, ad_ids: list[str]) -> int:
+        cleaned_ad_ids = [ad_id.strip() for ad_id in ad_ids if ad_id.strip()]
+        if not cleaned_ad_ids:
+            return 0
+        placeholders = ",".join("?" for _ in cleaned_ad_ids)
+        source_rows = conn.execute(
+            f"""
+            SELECT id
+            FROM entity_sources
+            WHERE source_type = 'discovery_only'
+              AND ad_id IN ({placeholders})
+            """,
+            cleaned_ad_ids,
+        ).fetchall()
+        source_ids = [str(row["id"]) for row in source_rows]
+        if source_ids:
+            source_placeholders = ",".join("?" for _ in source_ids)
+            conn.execute(
+                f"DELETE FROM entity_aliases WHERE source_id IN ({source_placeholders})",
+                source_ids,
+            )
+            conn.execute(
+                f"DELETE FROM taxonomy_mappings WHERE source_id IN ({source_placeholders})",
+                source_ids,
+            )
+            conn.execute(
+                f"DELETE FROM entity_edges WHERE source_id IN ({source_placeholders})",
+                source_ids,
+            )
+            conn.execute(
+                f"DELETE FROM entity_observations WHERE source_id IN ({source_placeholders})",
+                source_ids,
+            )
+            conn.execute(
+                f"""
+                DELETE FROM ad_change_suggestions
+                WHERE source_id IN ({source_placeholders})
+                  AND status = 'pending'
+                """,
+                source_ids,
+            )
+            conn.execute(
+                f"DELETE FROM entity_sources WHERE id IN ({source_placeholders})",
+                source_ids,
+            )
+        conn.execute(
+            f"""
+            DELETE FROM entity_observations
+            WHERE ad_id IN ({placeholders})
+              AND source IN ('web_crawl', 'web_vlm')
+            """,
+            cleaned_ad_ids,
+        )
+        conn.execute(
+            f"""
+            DELETE FROM ad_change_suggestions
+            WHERE ad_id IN ({placeholders})
+              AND status = 'pending'
+              AND source_id IS NULL
+            """,
+            cleaned_ad_ids,
+        )
+        return len(set(cleaned_ad_ids))
+
     def list_product_crawl_trace(
         self,
         conn: sqlite3.Connection,
@@ -697,6 +761,52 @@ class EntityGraphRepository:
         time_ms: int | None = None,
         frame_index: int | None = None,
     ) -> EntityObservation:
+        unique_existing = conn.execute(
+            """
+            SELECT id
+            FROM entity_observations
+            WHERE node_id = ?
+              AND ad_id = ?
+              AND field = ?
+              AND evidence_text = ?
+              AND source = ?
+            ORDER BY created_at, id
+            LIMIT 1
+            """,
+            (node_id, ad_id, field, evidence_text, source),
+        ).fetchone()
+        if unique_existing:
+            existing_id = str(unique_existing["id"])
+            conn.execute(
+                """
+                UPDATE entity_observations
+                SET confidence = max(confidence, ?),
+                    time_ms = coalesce(time_ms, ?),
+                    frame_index = coalesce(frame_index, ?),
+                    source_id = coalesce(source_id, ?)
+                WHERE id = ?
+                """,
+                (confidence, time_ms, frame_index, source_id, existing_id),
+            )
+            if source_id and source in {"web_crawl", "web_vlm"}:
+                conn.execute(
+                    """
+                    DELETE FROM entity_observations
+                    WHERE node_id = ?
+                      AND ad_id = ?
+                      AND field = ?
+                      AND source = ?
+                      AND source_id = ?
+                      AND id <> ?
+                    """,
+                    (node_id, ad_id, field, source, source_id, existing_id),
+                )
+            row = conn.execute(
+                "SELECT * FROM entity_observations WHERE id = ?",
+                (existing_id,),
+            ).fetchone()
+            return rows.observation(row)
+
         if source_id and source in {"web_crawl", "web_vlm"}:
             existing = conn.execute(
                 """
@@ -713,6 +823,13 @@ class EntityGraphRepository:
             ).fetchall()
             if existing:
                 existing_id = str(existing[0]["id"])
+                duplicate_ids = [str(row["id"]) for row in existing[1:]]
+                if duplicate_ids:
+                    placeholders = ",".join("?" for _ in duplicate_ids)
+                    conn.execute(
+                        f"DELETE FROM entity_observations WHERE id IN ({placeholders})",
+                        duplicate_ids,
+                    )
                 conn.execute(
                     """
                     UPDATE entity_observations
@@ -724,13 +841,6 @@ class EntityGraphRepository:
                     """,
                     (evidence_text, confidence, time_ms, frame_index, existing_id),
                 )
-                duplicate_ids = [str(row["id"]) for row in existing[1:]]
-                if duplicate_ids:
-                    placeholders = ",".join("?" for _ in duplicate_ids)
-                    conn.execute(
-                        f"DELETE FROM entity_observations WHERE id IN ({placeholders})",
-                        duplicate_ids,
-                    )
                 row = conn.execute(
                     "SELECT * FROM entity_observations WHERE id = ?",
                     (existing_id,),
@@ -747,7 +857,8 @@ class EntityGraphRepository:
             ON CONFLICT(node_id, ad_id, field, evidence_text, source) DO UPDATE SET
               confidence = max(entity_observations.confidence, excluded.confidence),
               time_ms = coalesce(entity_observations.time_ms, excluded.time_ms),
-              frame_index = coalesce(entity_observations.frame_index, excluded.frame_index)
+              frame_index = coalesce(entity_observations.frame_index, excluded.frame_index),
+              source_id = coalesce(entity_observations.source_id, excluded.source_id)
             """,
             (
                 obs_id,
@@ -763,6 +874,19 @@ class EntityGraphRepository:
             ),
         )
         row = conn.execute("SELECT * FROM entity_observations WHERE id = ?", (obs_id,)).fetchone()
+        if row is None:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM entity_observations
+                WHERE node_id = ?
+                  AND ad_id = ?
+                  AND field = ?
+                  AND evidence_text = ?
+                  AND source = ?
+                """,
+                (node_id, ad_id, field, evidence_text, source),
+            ).fetchone()
         return rows.observation(row)
 
     def upsert_taxonomy_mapping(

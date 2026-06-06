@@ -26,8 +26,15 @@ const QUEUE_STATUS_OPTIONS = [
   { value: "", label: "All" }
 ];
 
+const RERUN_MODE_OPTIONS: Array<{ value: CrawlerResult["rerun_mode"]; label: string }> = [
+  { value: "skip_crawled", label: "Skip done" },
+  { value: "rerun_crawled", label: "Rerun idempotent" },
+  { value: "refresh", label: "Refresh selected" }
+];
+
 export function CrawlerReview() {
   const [limit, setLimit] = useState(1000);
+  const [rerunMode, setRerunMode] = useState<CrawlerResult["rerun_mode"]>("skip_crawled");
   const [queueSearch, setQueueSearch] = useState("");
   const [queueStatus, setQueueStatus] = useState("ready");
   const [adIds, setAdIds] = useState("");
@@ -79,7 +86,8 @@ export function CrawlerReview() {
       return api.runEntityCrawler({
         limit,
         ad_ids: ids,
-        targets: buildTargets(ids, referenceText ?? referenceUrls)
+        targets: buildTargets(ids, referenceText ?? referenceUrls),
+        rerun_mode: rerunMode
       });
     },
     onSuccess: async (result) => {
@@ -164,6 +172,20 @@ export function CrawlerReview() {
                 value={limit}
                 onChange={(event) => setLimit(Number(event.target.value) || 1)}
               />
+            </label>
+            <label className="entity-field">
+              <span>Run mode</span>
+              <select
+                className="input"
+                value={rerunMode}
+                onChange={(event) => setRerunMode(event.target.value as CrawlerResult["rerun_mode"])}
+              >
+                {RERUN_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="entity-field crawler-ad-field">
               <span>Search queue</span>
@@ -254,6 +276,10 @@ export function CrawlerReview() {
               <Metric label="Failed" value={lastRun.failed_count} />
               <Metric label="Observations" value={lastRun.observation_count} />
               <Metric label="Suggestions" value={lastRun.suggestion_count} />
+              <Metric label="Mode" value={formatRerunMode(lastRun.rerun_mode)} />
+              {lastRun.refreshed_ad_count ? (
+                <Metric label="Refreshed" value={lastRun.refreshed_ad_count} />
+              ) : null}
             </div>
           ) : null}
           {lastRun?.items.length ? <CrawlerRunItems items={lastRun.items} /> : null}
@@ -604,6 +630,10 @@ function formatQueueStatus(value: SubmittedAdCrawlQueueItem["crawl_status"]) {
   return value.replace(/_/g, " ");
 }
 
+function formatRerunMode(value: CrawlerResult["rerun_mode"]) {
+  return RERUN_MODE_OPTIONS.find((option) => option.value === value)?.label ?? value.replace(/_/g, " ");
+}
+
 function parseAdIds(value: string) {
   return value
     .split(/[,\s]+/)
@@ -648,10 +678,10 @@ function summarizeSuggestions(suggestions: AdChangeSuggestion[]) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="entity-metric">
-      <strong>{value.toLocaleString()}</strong>
+      <strong>{typeof value === "number" ? value.toLocaleString() : value}</strong>
       <span>{label}</span>
     </div>
   );

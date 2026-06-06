@@ -23,6 +23,7 @@ from ad_classifier.entity_graph.discovery_vlm import (
 )
 from ad_classifier.entity_graph.models import (
     CrawlerItem,
+    CrawlerRerunMode,
     CrawlerResult,
     EntityNode,
     EntityStatus,
@@ -85,6 +86,7 @@ class EntityWebCrawler:
         limit: int = 100,
         ad_ids: list[str] | None = None,
         extra_targets: list[SubmittedAdWebTarget] | None = None,
+        rerun_mode: CrawlerRerunMode = "rerun_crawled",
     ) -> CrawlerResult:
         targets = [
             *self.submitted_ads.list_web_targets(limit=limit, ad_ids=ad_ids),
@@ -95,6 +97,7 @@ class EntityWebCrawler:
         suggestion_count_total = 0
         if not self.crawler_config.crawler.enabled or self.crawler_config.crawler.provider == "disabled":
             return CrawlerResult(
+                rerun_mode=rerun_mode,
                 skipped_count=len(targets),
                 items=[
                     CrawlerItem(
@@ -111,6 +114,9 @@ class EntityWebCrawler:
 
         with self.graph.connect() as conn:
             target_ad_ids = _target_ad_ids(ad_ids, targets)
+            refreshed_ad_count = 0
+            if rerun_mode == "refresh":
+                refreshed_ad_count = self.graph.clear_crawl_artifacts(conn, target_ad_ids)
             _ensure_submitted_product_nodes(
                 self.graph,
                 self.submitted_ads,
@@ -118,7 +124,28 @@ class EntityWebCrawler:
                 target_ad_ids,
                 limit=max(limit, len(target_ad_ids) * 8),
             )
-            targets = _with_reference_search_targets(conn, targets, ad_ids, self.crawler_config)
+            search_ad_ids = ad_ids
+            if rerun_mode == "skip_crawled":
+                targets, skipped_ad_ids = _skip_already_crawled_targets(
+                    self.graph,
+                    conn,
+                    targets,
+                    target_ad_ids,
+                )
+                if skipped_ad_ids:
+                    search_ad_ids = [
+                        ad_id for ad_id in (ad_ids or target_ad_ids) if ad_id not in skipped_ad_ids
+                    ]
+                    items.extend(
+                        CrawlerItem(
+                            ad_id=ad_id,
+                            url="",
+                            status="skipped",
+                            reason="already crawled; choose rerun or refresh mode to crawl again",
+                        )
+                        for ad_id in sorted(skipped_ad_ids)
+                    )
+            targets = _with_reference_search_targets(conn, targets, search_ad_ids, self.crawler_config)
             pending_targets = _dedupe_targets(
                 targets,
                 max_targets=self.crawler_config.crawler.max_targets_per_ad,
@@ -292,6 +319,8 @@ class EntityWebCrawler:
             conn.commit()
 
         return CrawlerResult(
+            rerun_mode=rerun_mode,
+            refreshed_ad_count=refreshed_ad_count if rerun_mode == "refresh" else 0,
             visited_count=sum(1 for item in items if item.status == "visited"),
             skipped_count=sum(1 for item in items if item.status == "skipped"),
             failed_count=sum(1 for item in items if item.status == "failed"),
@@ -456,6 +485,25 @@ def _with_reference_search_targets(
                         )
                     )
     return _dedupe_targets([*targets, *extra], max_targets=config.crawler.max_targets_per_ad)
+
+
+def _skip_already_crawled_targets(
+    graph: EntityGraphRepository,
+    conn,
+    targets: list[SubmittedAdWebTarget],
+    ad_ids: list[str],
+) -> tuple[list[SubmittedAdWebTarget], set[str]]:
+    metadata = graph.crawl_queue_metadata(conn, ad_ids)
+    explicit_ad_ids = {target.ad_id for target in targets if target.source == "explicit_reference"}
+    skipped_ad_ids = {
+        ad_id
+        for ad_id in ad_ids
+        if int(metadata.get(ad_id, {}).get("crawled_source_count") or 0) > 0
+        and ad_id not in explicit_ad_ids
+    }
+    if not skipped_ad_ids:
+        return targets, set()
+    return [target for target in targets if target.ad_id not in skipped_ad_ids], skipped_ad_ids
 
 
 def _reference_queries(

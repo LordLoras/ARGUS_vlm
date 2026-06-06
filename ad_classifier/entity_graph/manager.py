@@ -8,6 +8,7 @@ from ad_classifier.entity_graph.crawler_config import load_entity_crawler_config
 from ad_classifier.entity_graph.models import (
     AdChangeSuggestion,
     AdChangeSuggestionStatus,
+    CrawlerRerunMode,
     CrawlerResult,
     CrawlerTraceItem,
     DiscoveryCandidateRequest,
@@ -130,9 +131,15 @@ class EntityGraphManager:
         limit: int = 100,
         ad_ids: list[str] | None = None,
         target_urls: dict[str, list[str]] | None = None,
+        rerun_mode: CrawlerRerunMode = "rerun_crawled",
     ) -> CrawlerResult:
         extra_targets = target_utils.from_ad_url_mapping(target_urls or {})
-        return self.web_crawler.run(limit=limit, ad_ids=ad_ids, extra_targets=extra_targets)
+        return self.web_crawler.run(
+            limit=limit,
+            ad_ids=ad_ids,
+            extra_targets=extra_targets,
+            rerun_mode=rerun_mode,
+        )
 
     def crawl_queue(
         self,

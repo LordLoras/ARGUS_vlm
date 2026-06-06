@@ -51,7 +51,7 @@ const WORKBENCH_CARDS: CardItem[] = [
   },
   {
     title: "Evidence-aware automation",
-    body: "Uses resolver, crawler, search, manual targets, and VLM verification to improve entity quality while preserving provenance and candidate states for weak signals.",
+    body: "Uses resolver, crawler, search, manual targets, rerun modes, and VLM verification to improve entity quality while preserving provenance and candidate states for weak signals.",
     icon: Bot,
     color: "var(--amber)",
   },
@@ -84,7 +84,7 @@ const PRINCIPLE_CARDS: CardItem[] = [
   },
   {
     title: "Browser evidence as escalation",
-    body: "Playwright-rendered pages and screenshots should be used when HTTP text is thin, JavaScript hides product details, or visual product evidence can materially improve verification.",
+    body: "Playwright-rendered pages and screenshots are escalation paths when HTTP text is thin, JavaScript hides product details, or anti-bot/4xx responses prevent useful evidence.",
     icon: Camera,
     color: "var(--amber)",
   },
@@ -100,7 +100,7 @@ const ROUTE_LINKS: RouteItem[] = [
   {
     label: "Crawler Review",
     to: "/experimental/crawler",
-    note: "Run submitted URLs, manual targets, search-backed targets, and review suggested ad-record changes.",
+    note: "Run submitted, manual, and search-backed targets with skip, idempotent rerun, or refresh modes.",
     icon: ScanSearch,
   },
   {
@@ -124,9 +124,10 @@ const ROUTE_LINKS: RouteItem[] = [
 ];
 
 const ROADMAP = [
-  ["Search targets", "Let no-URL ads run through brand-product or brand-only search queries, while exposing generated query metadata and manual target overrides."],
-  ["Crawler evidence", "Improve target selection, crawler provenance, official-page ranking, and VLM JSON verification so product and brand facts are cleaner before review."],
-  ["Browser escalation", "Add optional Playwright rendering and screenshot-to-VLM verification for pages where HTML text, metadata, or static fetches are insufficient."],
+  ["Search targets", "Continue improving generated brand-product and brand-only search queries, while exposing query metadata, parsed result URLs, and manual official-target overrides."],
+  ["Crawler reruns", "Use skip, idempotent rerun, and selected refresh modes so stale crawler artifacts can be replaced without resetting the full experimental graph."],
+  ["Crawler evidence", "Improve target selection, blocked-page detection, official-page ranking, and VLM JSON verification so product and brand facts are cleaner before review."],
+  ["Browser escalation", "Use optional Playwright rendering and screenshot-to-VLM verification for pages where HTML text, metadata, or static fetches are insufficient."],
   ["Data quality", "Use suggested corrections to repair incorrect projected ad fields only after explicit approval, with an audit trail."],
   ["Taxonomy", "Align graph categories to IAB product and content taxonomy IDs, keeping free-text category names as unmapped hints."],
   ["Upload assist", "Offer an optional ingest mode that can keep initial metadata, use reviewed graph facts, or crawl again to reinforce weak fields."],
@@ -152,7 +153,8 @@ export function ExperimentalAbout() {
               A focused workspace for turning ad-level observations into durable product, brand,
               owner, category, and taxonomy records. The workflow now supports submitted URLs,
               manual reference targets, and search-backed discovery while keeping experimental
-              graph writes separate from submitted ad records.
+              graph writes separate from submitted ad records. Crawler runs can now skip completed
+              ads, rerun idempotently, or refresh selected discovery artifacts.
             </p>
             <div className="about-hero-actions">
               <Link to="/experimental/products" className="about-btn about-btn-primary">
@@ -201,7 +203,7 @@ export function ExperimentalAbout() {
               </div>
               <div>
                 <Globe2 size={16} />
-                <span>No-URL ads can be researched through generated brand/product queries.</span>
+                <span>No-URL ads can be researched through generated brand/product queries and parsed search results.</span>
               </div>
             </div>
           </div>
@@ -222,7 +224,9 @@ export function ExperimentalAbout() {
             toward a reusable entity graph. The goal is to make products and brands more accurate,
             auditable, and useful over time without treating every early signal as confirmed data.
             Current crawler work focuses on making missing targets explicit: an ad can use submitted
-            URLs, a user-provided official URL, or generated brand/product search queries.
+            URLs, a user-provided official URL, or generated brand/product search queries. Reruns
+            are now explicit: skip already-crawled ads, rerun without clearing prior evidence, or
+            refresh selected crawler artifacts when stale rows need to be replaced.
           </p>
         </div>
         <CardGrid items={WORKBENCH_CARDS} />

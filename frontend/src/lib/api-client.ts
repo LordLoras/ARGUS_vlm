@@ -413,6 +413,7 @@ export const api = {
     limit?: number;
     ad_ids?: string[];
     targets?: Array<{ ad_id: string; url: string }>;
+    rerun_mode?: "skip_crawled" | "rerun_crawled" | "refresh";
   } = {}) =>
     apiFetch<CrawlerResult>("/api/entity-graph/crawler/run", {
       method: "POST",
