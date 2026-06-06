@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-06-01T10:10:24.863197+00:00",
-  "benchmark_date_label": "June 1, 2026",
-  "source": "actual OpenRouter/local endpoint calls",
+  "generated_at": "2026-06-06T12:25:47.880492+00:00",
+  "benchmark_date_label": "June 6, 2026",
+  "source": "actual OpenRouter/local endpoint calls; merged rows preserve measured endpoint results",
   "raw_output_path": "data/benchmarks/model_benchmark_latest_raw.json",
   "protocol": {
     "temperature": "0 where supported; GPT-5.5 uses provider default because temperature is not listed for that route",
     "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
-    "response_format": "json_object",
+    "response_format": "json_object by default; custom compatible endpoints can use json_schema or text when required",
     "openrouter_thinking": "reasoning.effort=\"none\" except mandatory-reasoning routes: StepFun low and Gemini 3.5 Flash use \"low\"; StepFun Max uses \"xhigh\"",
     "local_thinking": "chat_template_kwargs.enable_thinking=false",
     "scoring": "Automatic rubric: parse/schema 10, category 20, brand 15, products 15, offers/CTAs/disclaimers 15, timestamp evidence 15, confidence/OCR/summary 10."
@@ -794,6 +794,122 @@
       ],
       "relative_performance_pct": 97.9,
       "performance_price_index": 14.1
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-qat",
+      "name": "Gemma 4 26B A4B QAT",
+      "provider": "Google",
+      "route_type": "Local",
+      "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+      "model": "google/gemma-4-26b-a4b-qat",
+      "thinking_off": "enable_thinking=false",
+      "score": 91.11,
+      "completion_seconds": 186.12,
+      "successful_ads": 5,
+      "total_ads": 5,
+      "prompt_tokens": 16390,
+      "completion_tokens": 2482,
+      "estimated_cost_usd": 0.0,
+      "readout": "Measured LM Studio local Gemma 4 QAT route; provider cost is zero and latency is local hardware bound.",
+      "cases": [
+        {
+          "ad_id": "ad_61e6c407",
+          "score": 92.06,
+          "seconds": 49.561,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 92.06,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.25,
+            "offers_ctas_disclaimers": 13.81,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_3271eca8",
+          "score": 97.29,
+          "seconds": 31.57,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Strong rubric match.",
+          "breakdown": {
+            "total": 97.29,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 15.0,
+            "offers_ctas_disclaimers": 12.29,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_23506859",
+          "score": 80.07,
+          "seconds": 21.444,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: evidence.",
+          "breakdown": {
+            "total": 80.07,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 8.57,
+            "offers_ctas_disclaimers": 11.5,
+            "evidence": 5.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e7b406e5",
+          "score": 92.78,
+          "seconds": 38.143,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: products.",
+          "breakdown": {
+            "total": 92.78,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 10.0,
+            "offers_ctas_disclaimers": 12.78,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        },
+        {
+          "ad_id": "ad_e20a0bc4",
+          "score": 93.33,
+          "seconds": 45.401,
+          "ok": true,
+          "parse_ok": true,
+          "error": null,
+          "note": "Weakest area: offers/CTA.",
+          "breakdown": {
+            "total": 93.33,
+            "parse": 10.0,
+            "category": 20.0,
+            "brand": 15.0,
+            "products": 13.64,
+            "offers_ctas_disclaimers": 9.7,
+            "evidence": 15.0,
+            "confidence_quality": 10.0
+          }
+        }
+      ],
+      "relative_performance_pct": 97.8,
+      "performance_price_index": null
     },
     {
       "id": "qwen3.6-27b-q4-remote",
