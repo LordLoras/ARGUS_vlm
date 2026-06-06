@@ -12,11 +12,21 @@ from typer.testing import CliRunner
 from ad_classifier.api.app import create_app
 from ad_classifier.cli import app as cli_app
 from ad_classifier.db.connection import open_database, open_readonly_database
-from ad_classifier.entity_graph.crawler import EntityWebCrawler, FetchedPage
+from ad_classifier.entity_graph.crawler import (
+    EntityWebCrawler,
+    FetchedPage,
+    PageLink,
+    _dedupe_targets,
+    _owner_supported_by_evidence,
+)
 from ad_classifier.entity_graph.discovery_vlm import DiscoveryProductFact, DiscoveryVLMResult
 from ad_classifier.entity_graph.manager import EntityGraphManager
-from ad_classifier.entity_graph.models import IngestAssistRequest
-from ad_classifier.entity_graph.repository import EntityGraphRepository
+from ad_classifier.entity_graph.models import IngestAssistRequest, SubmittedAdWebTarget
+from ad_classifier.entity_graph.repository import (
+    EntityGraphRepository,
+    _best_product_blurb,
+    _extract_product_blurb,
+)
 from ad_classifier.entity_graph.targets import from_ad_url_mapping
 
 
@@ -509,6 +519,61 @@ def test_graph_repository_persists_nodes_edges_and_mappings(tmp_path: Path) -> N
         assert products[0].taxonomy_mappings_count == 1
 
 
+def test_product_detail_ignores_rejected_relationship_edges(tmp_path: Path) -> None:
+    repo = EntityGraphRepository(tmp_path / "entity_graph.db")
+    with repo.connect() as conn:
+        source = repo.upsert_source(
+            conn, source_type="discovery_only", label="Discovery", ad_id="ad_one"
+        )
+        product, _ = repo.upsert_node(
+            conn,
+            entity_type="product",
+            canonical_name="Your Skin Foundation Stick",
+            status="confirmed_unreviewed",
+            confidence=0.88,
+        )
+        brand, _ = repo.upsert_node(
+            conn,
+            entity_type="brand",
+            canonical_name="Jones Road",
+            status="candidate",
+            confidence=0.65,
+        )
+        owner, _ = repo.upsert_node(
+            conn,
+            entity_type="company",
+            canonical_name="Blotout, Inc.",
+            status="candidate",
+            confidence=0.6,
+        )
+        repo.upsert_edge(
+            conn,
+            source_node_id=product.id,
+            target_node_id=brand.id,
+            relation="BRANDED_BY",
+            confidence=0.65,
+            status="candidate",
+            source_id=source.id,
+        )
+        repo.upsert_edge(
+            conn,
+            source_node_id=brand.id,
+            target_node_id=owner.id,
+            relation="OWNED_BY",
+            confidence=0.6,
+            status="rejected",
+            source_id=source.id,
+        )
+        conn.commit()
+
+    with repo.connect(readonly=True) as conn:
+        page = repo.get_product_page(conn, product.id)
+
+    assert page is not None
+    assert page.brand and page.brand.canonical_name == "Jones Road"
+    assert page.owner is None
+
+
 def test_resolver_uses_submitted_db_readonly_and_separates_candidates(config_path: Path) -> None:
     create_app(config_path=config_path)
     _seed_ads(config_path)
@@ -538,7 +603,9 @@ def test_resolver_uses_submitted_db_readonly_and_separates_candidates(config_pat
 
     products = manager.list_products(limit=10)
     wrangler = next(item for item in products if item.node.canonical_name == "Wrangler")
-    assert "submitted ad observation" in (wrangler.node.description or "")
+    assert "mapped to IAB Product 1028: Sport Utility Vehicles" in (
+        wrangler.node.description or ""
+    )
     assert wrangler.related_ads_count == 1
 
 
@@ -605,8 +672,211 @@ def test_resolver_uses_crawler_config_for_generic_product_cleanup(config_path: P
     assert "Sierra Heavy Duty" in sierra_aliases
 
 
+def test_product_blurb_prefers_product_function_over_relationship_summary() -> None:
+    evidence = (
+        "Your Skin Foundation Stick - Jones Road Jones Road Your Skin Foundation Stick "
+        "is a medium-to-full buildable coverage foundation that looks and feels like your best skin. "
+        "As lightweight as a foundation stick."
+    )
+
+    assert _extract_product_blurb("Your Skin Foundation Stick", evidence) == (
+        "is a medium-to-full buildable coverage foundation that looks and feels like your best skin"
+    )
+
+
+def test_crawler_target_dedupe_keeps_reference_search_slots() -> None:
+    targets = [
+        SubmittedAdWebTarget(
+            ad_id="ad_one",
+            url="https://bad.example/landing",
+            domain="bad.example",
+            source="landing_page_json",
+        ),
+        SubmittedAdWebTarget(
+            ad_id="ad_one",
+            url="https://brand.example/product",
+            domain="brand.example",
+            source="reference_search",
+        ),
+        SubmittedAdWebTarget(
+            ad_id="ad_one",
+            url="https://seller.example/contact",
+            domain="seller.example",
+            source="contact_points_json",
+        ),
+    ]
+
+    kept = _dedupe_targets(targets, max_targets=2)
+
+    assert [target.source for target in kept] == ["reference_search", "landing_page_json"]
+
+
+def test_product_blurb_prefers_product_page_source(tmp_path: Path) -> None:
+    repo = EntityGraphRepository(tmp_path / "entity_graph.db")
+    with repo.connect() as conn:
+        product, _ = repo.upsert_node(
+            conn,
+            entity_type="product",
+            canonical_name="Your Skin Foundation Stick",
+            status="confirmed_unreviewed",
+            confidence=0.88,
+        )
+        brand, _ = repo.upsert_node(
+            conn,
+            entity_type="brand",
+            canonical_name="Jones Road",
+            status="candidate",
+            confidence=0.65,
+        )
+        about_source = repo.upsert_source(
+            conn,
+            source_type="discovery_only",
+            label="About",
+            url="https://example.test/about",
+            ad_id="ad_one",
+            payload={"target_source": "brand_context_followup"},
+        )
+        product_source = repo.upsert_source(
+            conn,
+            source_type="discovery_only",
+            label="Product",
+            url="https://example.test/products/foundation-stick",
+            ad_id="ad_one",
+            payload={"target_source": "product_page_followup"},
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_vlm_product_description",
+            evidence_text="A clean beauty item with simple application for all skin types.",
+            source="web_vlm",
+            confidence=0.68,
+            source_id=about_source.id,
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_vlm_product_description",
+            evidence_text="A buildable coverage foundation stick with a lightweight creamy formula.",
+            source="web_vlm",
+            confidence=0.68,
+            source_id=product_source.id,
+        )
+        repo.upsert_edge(
+            conn,
+            source_node_id=product.id,
+            target_node_id=brand.id,
+            relation="BRANDED_BY",
+            confidence=0.65,
+            status="candidate",
+            source_id=product_source.id,
+        )
+        conn.commit()
+
+    with repo.connect(readonly=True) as conn:
+        assert _best_product_blurb(
+            conn, product.id, "Your Skin Foundation Stick"
+        ) == "A buildable coverage foundation stick with a lightweight creamy formula."
+        page = repo.get_product_page(conn, product.id)
+
+    assert page is not None
+    assert page.node.description == (
+        "Your Skin Foundation Stick from Jones Road is a buildable coverage foundation stick "
+        "with a lightweight creamy formula."
+    )
+
+
+def test_product_blurb_falls_back_from_malformed_generated_copy(tmp_path: Path) -> None:
+    repo = EntityGraphRepository(tmp_path / "entity_graph.db")
+    with repo.connect() as conn:
+        product, _ = repo.upsert_node(
+            conn,
+            entity_type="product",
+            canonical_name="Your Skin Foundation Stick",
+            status="confirmed_unreviewed",
+            confidence=0.88,
+        )
+        source = repo.upsert_source(
+            conn,
+            source_type="discovery_only",
+            label="Product",
+            url="https://example.test/products/foundation-stick",
+            ad_id="ad_one",
+            payload={"target_source": "product_page_followup"},
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_vlm_product_description",
+            evidence_text="A foundation stick that looks like best skin.",
+            source="web_vlm",
+            confidence=0.68,
+            source_id=source.id,
+        )
+        repo.upsert_observation(
+            conn,
+            node_id=product.id,
+            ad_id="ad_one",
+            field="web_discovery",
+            evidence_text=(
+                "Your Skin Foundation Stick is a medium-to-full buildable coverage foundation "
+                "that looks and feels like your best skin."
+            ),
+            source="web_crawl",
+            confidence=0.3,
+            source_id=source.id,
+        )
+        conn.commit()
+
+    with repo.connect(readonly=True) as conn:
+        assert _best_product_blurb(conn, product.id, product.canonical_name) == (
+            "is a medium-to-full buildable coverage foundation that looks and feels like your best skin"
+        )
+
+
+def test_owner_filter_rejects_vendor_copyright_only_evidence() -> None:
+    assert not _owner_supported_by_evidence(
+        owner_name="Blotout, Inc.",
+        brand_name="Jones Road",
+        evidence_spans=["Your Skin Foundation Stick", "Copyright (c) Blotout, Inc."],
+        source_url="https://www.jonesroadbeauty.com/products/foundation-stick",
+    )
+
+
+def test_owner_filter_accepts_explicit_operator_evidence() -> None:
+    assert _owner_supported_by_evidence(
+        owner_name="Ford Motor Company",
+        brand_name="Ford",
+        evidence_spans=["Ford is operated by Ford Motor Company."],
+        source_url="https://www.ford.com/about",
+    )
+
+
 class _FakeFetcher:
     def fetch(self, target, config):
+        if target.url.endswith("/f-150"):
+            return FetchedPage(
+                url=target.url,
+                final_url=target.url,
+                status_code=200,
+                title="Ford F-150 official product page",
+                description="F-150 pickup truck specifications from Ford.",
+                text="Ford F-150 pickup truck official product information.",
+                fetcher="fake",
+            )
+        if target.url.endswith("/about"):
+            return FetchedPage(
+                url=target.url,
+                final_url=target.url,
+                status_code=200,
+                title="About Ford",
+                description="Ford company information.",
+                text="Ford was founded by Henry Ford and is operated by Ford Motor Company.",
+                fetcher="fake",
+            )
         if target.ad_id == "ad_tmobile_iphone":
             return FetchedPage(
                 url=target.url,
@@ -625,6 +895,10 @@ class _FakeFetcher:
             description="Discovery-only test page",
             text="Shop Ford F-150 trucks and Ford Bronco SUVs at this dealer.",
             fetcher="fake",
+            links=[
+                PageLink(url="/f-150", text="Ford F-150"),
+                PageLink(url="/about", text="About Ford"),
+            ],
         )
 
 
@@ -636,9 +910,10 @@ class _FakeDiscoveryVerifier:
                 source_kind="carrier",
                 product_facts=[
                     DiscoveryProductFact(
-                        matched_submitted_product="iPhone 17 Pro",
-                        product_name="iPhone 17 Pro",
-                        brand_name="Apple",
+                    matched_submitted_product="iPhone 17 Pro",
+                    product_name="iPhone 17 Pro",
+                    product_description="A premium smartphone with Apple hardware and software, sold here with T-Mobile carrier offers.",
+                    brand_name="Apple",
                         brand_description="Apple designs iPhone hardware and software products.",
                         owner_name="Apple Inc.",
                         owner_description="Apple Inc. is the company behind iPhone.",
@@ -668,7 +943,22 @@ class _FakeDiscoveryVerifier:
                 DiscoveryProductFact(
                     matched_submitted_product=product.canonical_name,
                     product_name=product.canonical_name,
+                    product_description=(
+                        "A Ford pickup truck model with official product information."
+                        if product.canonical_name == "F-150"
+                        else None
+                    ),
                     brand_name="Ford" if product.canonical_name in {"F-150", "Bronco"} else None,
+                    owner_name=(
+                        "Ford Motor Company"
+                        if source_url.endswith("/about") and product.canonical_name in {"F-150", "Bronco"}
+                        else None
+                    ),
+                    owner_description=(
+                        "Ford Motor Company operates the Ford brand."
+                        if source_url.endswith("/about") and product.canonical_name in {"F-150", "Bronco"}
+                        else None
+                    ),
                     category_name="truck" if product.canonical_name == "F-150" else None,
                     relation_to_page="manufacturer_page",
                     confidence=0.82,
@@ -678,17 +968,21 @@ class _FakeDiscoveryVerifier:
                 for product in products
                 if product.canonical_name in {"F-150", "Bronco"}
             ],
-            suggested_ad_changes=[
-                {
-                    "field_path": "ads.subcategory",
-                    "current_value": submitted_ad.subcategory if submitted_ad else "Trucks",
-                    "suggested_value": "pickup truck",
-                    "confidence": 0.83,
-                    "reason": "Manufacturer page evidence describes F-150 as a pickup truck.",
-                    "evidence_spans": ["Shop Ford F-150 trucks and Ford Bronco SUVs at this dealer."],
-                    "apply_safety": "safe_projection_update",
-                }
-            ],
+            suggested_ad_changes=(
+                [
+                    {
+                        "field_path": "ads.subcategory",
+                        "current_value": submitted_ad.subcategory if submitted_ad else "Trucks",
+                        "suggested_value": "pickup truck",
+                        "confidence": 0.83,
+                        "reason": "Manufacturer page evidence describes F-150 as a pickup truck.",
+                        "evidence_spans": ["Shop Ford F-150 trucks and Ford Bronco SUVs at this dealer."],
+                        "apply_safety": "safe_projection_update",
+                    }
+                ]
+                if source_url.rstrip("/") == "https://ford.example"
+                else []
+            ),
         )
 
 
@@ -738,6 +1032,7 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
         ),
     )
     assert result.visited_count >= 1
+    assert any(item.url.endswith("/f-150") for item in result.items)
     assert repeat_result.visited_count >= 1
     assert result.observation_count >= 2
     assert result.suggestion_count >= 1
@@ -747,6 +1042,10 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
     detail = manager.get_product(f150.node.id)
     assert detail is not None
     assert f150.node.status == "confirmed_unreviewed"
+    assert detail.owner and detail.owner.canonical_name == "Ford Motor Company"
+    assert "submitted ad product mention seeded" not in (detail.node.description or "")
+    assert "Ford" in (detail.node.description or "")
+    assert "pickup truck model" in (detail.node.description or "")
     assert any(obs.source == "web_crawl" for obs in detail.observations)
 
     iphone = next(item for item in products if item.node.canonical_name == "iPhone 17 Pro")
@@ -779,6 +1078,11 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
     assert '"write_mode": "candidate_only"' in source["payload_json"]
     assert '"vlm_result"' in source["payload_json"]
 
+    with manager.graph.connect(readonly=True) as conn:
+        trace = manager.graph.list_product_crawl_trace(conn, f150.node.id)
+    assert any(item.target_source == "product_page_followup" for item in trace)
+    assert any(item.target_source == "brand_context_followup" for item in trace)
+
     suggestions = manager.list_ad_change_suggestions(status="pending", ad_id="ad_ford_trucks")
     assert suggestions
     iphone_suggestions = manager.list_ad_change_suggestions(
@@ -794,6 +1098,9 @@ def test_reset_and_crawler_rebuild_with_discovery_only_sources(config_path: Path
     assert approved.status == "approved"
     applied = manager.apply_ad_change_suggestion(suggestion.id, value="pickup truck")
     assert applied.status == "applied"
+    crawl_queue = {item.ad_id: item for item in manager.crawl_queue(limit=10)}
+    assert crawl_queue["ad_ford_trucks"].crawl_status == "done"
+    assert crawl_queue["ad_ford_trucks"].crawled_source_count >= 1
 
     readonly = open_readonly_database(submitted_db)
     try:
@@ -823,8 +1130,11 @@ def test_crawl_queue_product_edit_and_ingest_assist(config_path: Path) -> None:
     by_ad = {item.ad_id: item for item in queue}
     assert by_ad["ad_ford_trucks"].product_count >= 3
     assert by_ad["ad_ford_trucks"].has_web_targets is True
+    assert by_ad["ad_ford_trucks"].crawl_status == "ready"
     assert by_ad["ad_tmobile_iphone"].has_web_targets is False
+    assert by_ad["ad_tmobile_iphone"].crawl_status == "no_targets"
     assert by_ad["ad_wbal_overlay"].has_web_targets is False
+    assert by_ad["ad_wbal_overlay"].crawl_status == "no_targets"
     assert not any(
         target.ad_id == "ad_wbal_overlay"
         for target in manager.submitted_ads.list_web_targets(
@@ -890,6 +1200,10 @@ def test_entity_graph_api_product_detail_and_candidate_discovery(config_path: Pa
     assert len(payload["taxonomy_mappings"]) == 3
     assert payload["related_ads"][0]["ad_id"] == "ad_wrangle"
 
+    trace = client.get(f"/api/entity-graph/products/{wrangler['node']['id']}/crawler-trace")
+    assert trace.status_code == 200, trace.text
+    assert trace.json()["items"] == []
+
     queue = client.get("/api/entity-graph/crawler/queue", params={"limit": 10})
     assert queue.status_code == 200, queue.text
     assert any(item["ad_id"] == "ad_wrangle" for item in queue.json()["items"])
@@ -921,6 +1235,11 @@ def test_entity_graph_api_product_detail_and_candidate_discovery(config_path: Pa
     reviewed = client.post(f"/api/entity-graph/entities/{wrangler['node']['id']}/promote")
     assert reviewed.status_code == 200
     assert reviewed.json()["status"] == "confirmed_reviewed"
+    reviewed_detail = client.get(f"/api/entity-graph/products/{wrangler['node']['id']}")
+    assert reviewed_detail.status_code == 200, reviewed_detail.text
+    assert reviewed_detail.json()["brand"]["status"] == "confirmed_reviewed"
+    assert reviewed_detail.json()["owner"]["status"] == "confirmed_reviewed"
+    assert reviewed_detail.json()["category"]["status"] == "confirmed_reviewed"
 
     discovery = client.post(
         "/api/entity-graph/discovery-candidates",

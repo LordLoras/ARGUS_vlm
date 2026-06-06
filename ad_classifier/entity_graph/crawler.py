@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import html as html_lib
 import re
 import ssl
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Protocol
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 from ad_classifier.entity_graph import rows
 from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
@@ -20,13 +21,21 @@ from ad_classifier.entity_graph.models import (
     CrawlerItem,
     CrawlerResult,
     EntityNode,
+    EntityStatus,
     RelatedAdSummary,
     SubmittedAdObservation,
     SubmittedAdWebTarget,
 )
 from ad_classifier.entity_graph.repository import EntityGraphRepository
 from ad_classifier.entity_graph.submitted_ads import SubmittedAdReadOnlyRepository
+from ad_classifier.entity_graph.taxonomy_alignment import TaxonomyAligner
 from ad_classifier.entity_graph.utils import normalize_name
+
+
+@dataclass(frozen=True)
+class PageLink:
+    url: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,7 @@ class FetchedPage:
     description: str | None
     text: str
     fetcher: str
+    links: list[PageLink] = field(default_factory=list)
 
 
 class PageFetcher(Protocol):
@@ -54,6 +64,7 @@ class EntityWebCrawler:
         *,
         fetcher: PageFetcher | None = None,
         verifier: DiscoveryVerifier | None = None,
+        taxonomy_aligner: TaxonomyAligner | None = None,
     ) -> None:
         self.graph = graph
         self.submitted_ads = submitted_ads
@@ -62,6 +73,7 @@ class EntityWebCrawler:
         self.verifier = verifier
         if verifier is None and crawler_config.vlm_parse.enabled:
             self.verifier = VLMDiscoveryVerifier(crawler_config.vlm_parse)
+        self.taxonomy_aligner = taxonomy_aligner or TaxonomyAligner(crawler_config)
 
     def run(
         self,
@@ -101,8 +113,19 @@ class EntityWebCrawler:
                 limit=max(limit, len(target_ad_ids) * 8),
             )
             targets = _with_reference_search_targets(conn, targets, ad_ids, self.crawler_config)
-            targets = _dedupe_targets(targets, max_targets=self.crawler_config.crawler.max_targets_per_ad)
-            for target in targets:
+            pending_targets = _dedupe_targets(
+                targets,
+                max_targets=self.crawler_config.crawler.max_targets_per_ad,
+            )
+            visited_keys: set[str] = set()
+            visited_count_by_ad: dict[str, int] = {}
+            while pending_targets:
+                target = pending_targets.pop(0)
+                target_key = f"{target.ad_id}:{_target_key(target.url)}"
+                if target_key in visited_keys:
+                    continue
+                visited_keys.add(target_key)
+                visited_count_by_ad[target.ad_id] = visited_count_by_ad.get(target.ad_id, 0) + 1
                 if not _domain_allowed(target.domain, self.crawler_config):
                     items.append(
                         CrawlerItem(
@@ -211,10 +234,34 @@ class EntityWebCrawler:
                         source_id=source_id,
                         submitted_ad=submitted_ad,
                         config=self.crawler_config,
+                        taxonomy_aligner=self.taxonomy_aligner,
                     )
                     observation_count += written[0]
                     suggestion_count_total += written[1]
                     matched.extend(_matched_vlm_product_names(products, vlm_result))
+                    pending_targets.extend(
+                        [
+                            *_product_followup_targets(
+                                target=target,
+                                page=page,
+                                products=products,
+                                result=vlm_result,
+                                config=self.crawler_config,
+                                visited_count=visited_count_by_ad[target.ad_id],
+                            ),
+                            *_brand_context_followup_targets(
+                                target=target,
+                                page=page,
+                                result=vlm_result,
+                                config=self.crawler_config,
+                                visited_count=visited_count_by_ad[target.ad_id],
+                            ),
+                        ]
+                    )
+                    pending_targets = _dedupe_targets(
+                        pending_targets,
+                        max_targets=self.crawler_config.crawler.max_targets_per_ad,
+                    )
 
                 items.append(
                     CrawlerItem(
@@ -222,7 +269,7 @@ class EntityWebCrawler:
                         url=target.url,
                         status="visited",
                         source_id=source_id,
-                        matched_products=matched,
+                        matched_products=_unique_names(matched),
                         title=page.title,
                         final_url=page.final_url,
                         reason=_crawl_reason(vlm_error),
@@ -352,39 +399,242 @@ def _with_reference_search_targets(
 ) -> list[SubmittedAdWebTarget]:
     if not ad_ids or not config.crawler.reference_search_enabled:
         return targets
-    by_ad = {target.ad_id for target in targets}
     extra: list[SubmittedAdWebTarget] = []
     queries_used = 0
     for ad_id in ad_ids:
         if queries_used >= config.crawler.max_queries_per_run:
             break
-        if ad_id in by_ad:
-            continue
         products = _products_for_ad(conn, ad_id)
         for product in products[: max(config.crawler.max_reference_results_per_ad, 1)]:
             if queries_used >= config.crawler.max_queries_per_run:
                 break
-            query = config.crawler.reference_search_query_template.format(
-                product=product.canonical_name,
-                ad_id=ad_id,
-            )
-            try:
-                urls = _duckduckgo_urls(query, config)
-            except Exception:
-                urls = []
-            queries_used += 1
-            for url in urls[: config.crawler.max_reference_results_per_ad]:
-                parsed = urlparse(url)
-                extra.append(
-                    SubmittedAdWebTarget(
-                        ad_id=ad_id,
-                        url=url,
-                        domain=parsed.netloc.lower() or None,
-                        source="reference_search",
-                        evidence_text=f"Reference search query: {query}",
+            for query in _reference_queries(conn, ad_id, product, config):
+                if queries_used >= config.crawler.max_queries_per_run:
+                    break
+                try:
+                    urls = _duckduckgo_urls(query, config)
+                except Exception:
+                    urls = []
+                queries_used += 1
+                for url in urls[: config.crawler.max_reference_results_per_ad]:
+                    parsed = urlparse(url)
+                    extra.append(
+                        SubmittedAdWebTarget(
+                            ad_id=ad_id,
+                            url=url,
+                            domain=parsed.netloc.lower() or None,
+                            source="reference_search",
+                            evidence_text=f"Reference search query: {query}",
+                        )
                     )
-                )
     return _dedupe_targets([*targets, *extra], max_targets=config.crawler.max_targets_per_ad)
+
+
+def _reference_queries(
+    conn,
+    ad_id: str,
+    product: EntityNode,
+    config: EntityCrawlerConfig,
+) -> list[str]:
+    context = _submitted_source_context(conn, ad_id)
+    brand = _brand_for_product(conn, product.id) or context.get("submitted_brand") or ""
+    advertiser = context.get("advertiser_name") or context.get("parent_company") or ""
+    templates = config.crawler.reference_search_query_templates or [
+        config.crawler.reference_search_query_template
+    ]
+    queries: list[str] = []
+    values = {
+        "product": product.canonical_name,
+        "brand": brand,
+        "advertiser": advertiser,
+        "ad_id": ad_id,
+    }
+    for template in templates:
+        if not _template_context_available(template, values):
+            continue
+        query = template.format(**values)
+        query = re.sub(r"\s+", " ", query).strip()
+        if normalize_name(query) and normalize_name(query) != normalize_name(product.canonical_name):
+            queries.append(query)
+    if not queries:
+        fallback_template = config.crawler.reference_search_query_template
+        if _template_context_available(fallback_template, values):
+            queries.append(fallback_template.format(**values))
+        else:
+            queries.append(f"{product.canonical_name} official product")
+    return _unique_names(queries)
+
+
+def _template_context_available(template: str, values: dict[str, str]) -> bool:
+    required = set(re.findall(r"{([a-zA-Z_][a-zA-Z0-9_]*)}", template))
+    optional_empty = {"brand", "advertiser"}
+    return all(values.get(name, "").strip() or name in optional_empty for name in required) and not any(
+        name in required and name in optional_empty and not values.get(name, "").strip()
+        for name in optional_empty
+    )
+
+
+def _submitted_source_context(conn, ad_id: str) -> dict[str, str]:
+    row = conn.execute(
+        """
+        SELECT payload_json
+        FROM entity_sources
+        WHERE source_type = 'submitted_ad' AND ad_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (ad_id,),
+    ).fetchone()
+    payload = rows.loads_dict(row["payload_json"]) if row else {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        key: str(value)
+        for key, value in payload.items()
+        if key in {"submitted_brand", "advertiser_name", "parent_company"} and value
+    }
+
+
+def _brand_for_product(conn, product_id: str) -> str | None:
+    row = conn.execute(
+        """
+        SELECT b.canonical_name
+        FROM entity_edges e
+        JOIN entity_nodes b ON b.id = e.target_node_id
+        WHERE e.source_node_id = ?
+          AND e.relation = 'BRANDED_BY'
+          AND e.status <> 'rejected'
+          AND b.status <> 'rejected'
+        ORDER BY e.confidence DESC, b.canonical_name
+        LIMIT 1
+        """,
+        (product_id,),
+    ).fetchone()
+    return str(row["canonical_name"]) if row else None
+
+
+def _product_followup_targets(
+    *,
+    target: SubmittedAdWebTarget,
+    page: FetchedPage,
+    products: list[EntityNode],
+    result: DiscoveryVLMResult,
+    config: EntityCrawlerConfig,
+    visited_count: int,
+) -> list[SubmittedAdWebTarget]:
+    if not config.crawler.follow_product_links:
+        return []
+    if config.crawler.max_pages_per_entity <= 0:
+        return []
+    if visited_count >= config.crawler.max_pages_per_entity:
+        return []
+    if result.source_kind not in set(config.crawler.recursive_source_kinds):
+        return []
+
+    base_domain = _normalize_domain(page.final_url or target.url)
+    followups: list[SubmittedAdWebTarget] = []
+    seen: set[str] = set()
+    for link in page.links:
+        resolved = urljoin(page.final_url or target.url, link.url)
+        parsed = urlparse(resolved)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            continue
+        if _normalize_domain(parsed.netloc) != base_domain:
+            continue
+        if not _link_matches_product(link, resolved, products):
+            continue
+        key = _target_key(resolved)
+        if key in seen or key == _target_key(page.final_url or target.url):
+            continue
+        seen.add(key)
+        followups.append(
+            SubmittedAdWebTarget(
+                ad_id=target.ad_id,
+                url=resolved,
+                domain=parsed.netloc.lower() or None,
+                source="product_page_followup",
+                evidence_text=(
+                    f"Product page follow-up from {page.final_url or target.url}: "
+                    f"{link.text or parsed.path}"
+                ),
+            )
+        )
+        if len(followups) >= config.crawler.max_followup_links_per_page:
+            break
+    return followups
+
+
+def _brand_context_followup_targets(
+    *,
+    target: SubmittedAdWebTarget,
+    page: FetchedPage,
+    result: DiscoveryVLMResult,
+    config: EntityCrawlerConfig,
+    visited_count: int,
+) -> list[SubmittedAdWebTarget]:
+    if not config.crawler.follow_brand_context_links:
+        return []
+    if config.crawler.max_pages_per_entity <= 0:
+        return []
+    if visited_count >= config.crawler.max_pages_per_entity:
+        return []
+    if result.source_kind not in set(config.crawler.recursive_source_kinds):
+        return []
+
+    base_domain = _normalize_domain(page.final_url or target.url)
+    followups: list[SubmittedAdWebTarget] = []
+    seen: set[str] = set()
+    for link in page.links:
+        resolved = urljoin(page.final_url or target.url, link.url)
+        parsed = urlparse(resolved)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            continue
+        if _normalize_domain(parsed.netloc) != base_domain:
+            continue
+        if not _link_matches_brand_context(link, resolved, config):
+            continue
+        key = _target_key(resolved)
+        if key in seen or key == _target_key(page.final_url or target.url):
+            continue
+        seen.add(key)
+        followups.append(
+            SubmittedAdWebTarget(
+                ad_id=target.ad_id,
+                url=resolved,
+                domain=parsed.netloc.lower() or None,
+                source="brand_context_followup",
+                evidence_text=(
+                    f"Brand context follow-up from {page.final_url or target.url}: "
+                    f"{link.text or parsed.path}"
+                ),
+            )
+        )
+        if len(followups) >= config.crawler.max_brand_context_links_per_page:
+            break
+    return followups
+
+
+def _link_matches_product(link: PageLink, url: str, products: list[EntityNode]) -> bool:
+    parsed = urlparse(url)
+    link_context = normalize_name(" ".join([link.text, parsed.path.replace("-", " ")]))
+    if not link_context:
+        return False
+    for product in products:
+        product_key = normalize_name(product.canonical_name)
+        if product_key and (product_key in link_context or link_context in product_key):
+            return True
+    return False
+
+
+def _link_matches_brand_context(
+    link: PageLink, url: str, config: EntityCrawlerConfig
+) -> bool:
+    parsed = urlparse(url)
+    link_context = normalize_name(" ".join([link.text, parsed.path.replace("-", " ")]))
+    if not link_context:
+        return False
+    terms = [normalize_name(term) for term in config.crawler.brand_context_link_terms]
+    return any(term and term in link_context for term in terms)
 
 
 def _duckduckgo_urls(query: str, config: EntityCrawlerConfig) -> list[str]:
@@ -417,10 +667,34 @@ def _dedupe_targets(
         by_url: dict[str, SubmittedAdWebTarget] = {}
         for target in ad_targets:
             key = _target_key(target.url)
-            if key not in by_url:
+            current = by_url.get(key)
+            if current is None or _crawler_target_priority(target.source) < _crawler_target_priority(
+                current.source
+            ):
                 by_url[key] = target
-        result.extend(list(by_url.values())[:max_targets])
+        ordered = sorted(
+            by_url.values(),
+            key=lambda target: (
+                _crawler_target_priority(target.source),
+                _target_key(target.url),
+            ),
+        )
+        result.extend(ordered[:max_targets])
     return result
+
+
+def _crawler_target_priority(source: str) -> int:
+    priorities = {
+        "explicit_reference": 0,
+        "product_page_followup": 1,
+        "reference_search": 2,
+        "landing_page_json": 3,
+        "ads.landing_page_domain": 4,
+        "ads.website_domain": 5,
+        "contact_points_json": 6,
+        "brand_context_followup": 7,
+    }
+    return priorities.get(source, 20)
 
 
 class DefaultPageFetcher:
@@ -458,12 +732,12 @@ def _fetch_with_http(url: str, config: EntityCrawlerConfig) -> FetchedPage:
             timeout=config.crawler.timeout_s,
             context=_ssl_context(),
         ) as response:
-            raw = response.read(500_000)
+            raw = response.read(config.crawler.max_page_bytes)
             final_url = response.geturl()
             status_code = int(getattr(response, "status", 200))
             content_type = response.headers.get("content-type", "")
     except urllib.error.HTTPError as exc:
-        raw = exc.read(200_000)
+        raw = exc.read(min(config.crawler.max_page_bytes, 500_000))
         final_url = exc.geturl()
         status_code = int(exc.code)
         content_type = exc.headers.get("content-type", "")
@@ -479,8 +753,9 @@ def _fetch_with_http(url: str, config: EntityCrawlerConfig) -> FetchedPage:
         status_code=status_code,
         title=parsed.title,
         description=parsed.description,
-        text=parsed.text,
+        text=_augment_page_text(parsed.text, html),
         fetcher="http",
+        links=parsed.links,
     )
 
 
@@ -516,8 +791,9 @@ def _fetch_with_browser(url: str, config: EntityCrawlerConfig) -> FetchedPage:
                 status_code=response.status if response else 0,
                 title=parsed.title,
                 description=parsed.description,
-                text=parsed.text,
+                text=_augment_page_text(parsed.text, html),
                 fetcher="browser",
+                links=parsed.links,
             )
         finally:
             browser.close()
@@ -528,6 +804,7 @@ class ParsedHtml:
     title: str | None
     description: str | None
     text: str
+    links: list[PageLink]
 
 
 class _VisibleTextParser(HTMLParser):
@@ -537,8 +814,11 @@ class _VisibleTextParser(HTMLParser):
         self.description: str | None = None
         self._in_title = False
         self._blocked_depth = 0
+        self._active_href: str | None = None
+        self._active_link_text: list[str] = []
         self._title_parts: list[str] = []
         self._text_parts: list[str] = []
+        self._links: list[PageLink] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag_name = tag.lower()
@@ -550,6 +830,12 @@ class _VisibleTextParser(HTMLParser):
             values = {name.lower(): value or "" for name, value in attrs}
             if values.get("name", "").lower() == "description" and values.get("content"):
                 self.description = values["content"].strip()
+        if tag_name == "a":
+            values = {name.lower(): value or "" for name, value in attrs}
+            href = values.get("href")
+            if href:
+                self._active_href = href
+                self._active_link_text = []
 
     def handle_endtag(self, tag: str) -> None:
         tag_name = tag.lower()
@@ -557,6 +843,11 @@ class _VisibleTextParser(HTMLParser):
             self._blocked_depth -= 1
         if tag_name == "title":
             self._in_title = False
+        if tag_name == "a" and self._active_href:
+            text = re.sub(r"\s+", " ", " ".join(self._active_link_text)).strip()
+            self._links.append(PageLink(url=self._active_href, text=text))
+            self._active_href = None
+            self._active_link_text = []
 
     def handle_data(self, data: str) -> None:
         text = data.strip()
@@ -566,17 +857,72 @@ class _VisibleTextParser(HTMLParser):
             self._title_parts.append(text)
         if self._blocked_depth == 0:
             self._text_parts.append(text)
+            if self._active_href is not None:
+                self._active_link_text.append(text)
 
     def result(self) -> ParsedHtml:
         title = " ".join(self._title_parts).strip() or None
         text = re.sub(r"\s+", " ", " ".join(self._text_parts)).strip()
-        return ParsedHtml(title=title, description=self.description, text=text[:20_000])
+        return ParsedHtml(
+            title=title,
+            description=self.description,
+            text=text[:20_000],
+            links=self._links[:500],
+        )
 
 
 def _parse_html(html: str) -> ParsedHtml:
     parser = _VisibleTextParser()
     parser.feed(html)
     return parser.result()
+
+
+_CONTEXT_SNIPPET_TERMS = [
+    "founded by",
+    "founder",
+    "co-founder",
+    "co-owner",
+    "owned by",
+    "operated by",
+    "legal name",
+    "parent company",
+    "copyright",
+    "&copy;",
+    "©",
+]
+
+
+def _augment_page_text(visible_text: str, raw_html: str) -> str:
+    snippets = _html_context_snippets(raw_html)
+    if not snippets:
+        return visible_text
+    sections = ["Context snippets:", *snippets, "Page text:", visible_text]
+    return re.sub(r"\s+", " ", " ".join(sections)).strip()[:30_000]
+
+
+def _html_context_snippets(raw_html: str) -> list[str]:
+    snippets: list[str] = []
+    seen: set[str] = set()
+    for term in _CONTEXT_SNIPPET_TERMS:
+        for match in re.finditer(re.escape(term), raw_html, flags=re.I):
+            start = max(match.start() - 500, 0)
+            end = min(match.end() + 700, len(raw_html))
+            snippet = _strip_html_fragment(raw_html[start:end])
+            key = normalize_name(snippet[:180])
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            snippets.append(snippet[:700])
+            if len(snippets) >= 8:
+                return snippets
+    return snippets
+
+
+def _strip_html_fragment(fragment: str) -> str:
+    text = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", fragment)
+    text = re.sub(r"(?is)<[^>]+>", " ", text)
+    text = html_lib.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 class _SearchResultParser(HTMLParser):
@@ -683,10 +1029,12 @@ def _write_vlm_discovery(
     source_id: str,
     submitted_ad: RelatedAdSummary | None,
     config: EntityCrawlerConfig,
+    taxonomy_aligner: TaxonomyAligner,
 ) -> tuple[int, int]:
     observations = 0
     suggestions = 0
     by_name = _products_by_name(products)
+    taxonomy_reset_keys: set[tuple[str, str]] = set()
     for fact in result.product_facts:
         product = _match_product(by_name, fact.matched_submitted_product, fact.product_name)
         if product is None:
@@ -703,6 +1051,18 @@ def _write_vlm_discovery(
             source_id=source_id,
         )
         observations += 1
+        if fact.product_description:
+            graph.upsert_observation(
+                conn,
+                node_id=product.id,
+                ad_id=ad_id,
+                field="web_vlm_product_description",
+                evidence_text=_clean_description(fact.product_description) or fact.product_description,
+                source="web_vlm",
+                confidence=min(fact.confidence, 0.68),
+                source_id=source_id,
+            )
+            observations += 1
         if normalize_name(fact.product_name) != normalize_name(product.canonical_name):
             graph.upsert_alias(
                 conn,
@@ -738,7 +1098,12 @@ def _write_vlm_discovery(
                     "evidence_spans": fact.evidence_spans[:3],
                 },
             )
-            if fact.owner_name:
+            if fact.owner_name and _owner_supported_by_evidence(
+                owner_name=fact.owner_name,
+                brand_name=fact.brand_name,
+                evidence_spans=fact.evidence_spans,
+                source_url=result.source_url,
+            ):
                 owner, _owner_created = graph.upsert_node(
                     conn,
                     entity_type="company",
@@ -762,18 +1127,32 @@ def _write_vlm_discovery(
                         "evidence_spans": fact.evidence_spans[:3],
                     },
                 )
+            else:
+                _reject_owner_edges_for_source(conn, brand_id=brand.id, source_id=source_id)
         if fact.category_name:
+            category_evidence = _category_evidence_text(fact.category_name, fact.evidence_spans)
             graph.upsert_observation(
                 conn,
                 node_id=product.id,
                 ad_id=ad_id,
                 field="web_vlm_category_hint",
-                evidence_text=_evidence_text(fact.evidence_spans, fallback=fact.category_name),
+                evidence_text=category_evidence,
                 source="web_vlm",
                 confidence=min(fact.confidence, 0.55),
                 source_id=source_id,
             )
             observations += 1
+            _write_taxonomy_alignments(
+                graph,
+                conn,
+                product=product,
+                fact=fact,
+                source_id=source_id,
+                category_evidence=category_evidence,
+                taxonomy_aligner=taxonomy_aligner,
+                config=config,
+                reset_keys=taxonomy_reset_keys,
+            )
     for alias in result.aliases:
         product = _match_product(by_name, alias.matched_submitted_product, alias.alias)
         if product is None:
@@ -837,6 +1216,168 @@ def _write_vlm_discovery(
         )
         suggestions += 1
     return observations, suggestions
+
+
+def _write_taxonomy_alignments(
+    graph: EntityGraphRepository,
+    conn,
+    *,
+    product: EntityNode,
+    fact,
+    source_id: str,
+    category_evidence: str,
+    taxonomy_aligner: TaxonomyAligner,
+    config: EntityCrawlerConfig,
+    reset_keys: set[tuple[str, str]],
+) -> int:
+    count = 0
+    reset_key = (product.id, source_id)
+    if reset_key not in reset_keys:
+        graph.reject_taxonomy_context_for_source(conn, product_id=product.id, source_id=source_id)
+        reset_keys.add(reset_key)
+    alignments = taxonomy_aligner.align(
+        category_name=fact.category_name,
+        product_name=fact.product_name,
+        brand_name=fact.brand_name,
+        evidence_text=category_evidence,
+    )
+    for alignment in alignments:
+        status: EntityStatus = "candidate"
+        graph.upsert_taxonomy_mapping(
+            conn,
+            entity_id=product.id,
+            taxonomy_type=alignment.taxonomy_type,
+            taxonomy_id=alignment.taxonomy_id,
+            taxonomy_name=alignment.taxonomy_name,
+            confidence=min(alignment.confidence, 0.72),
+            status=status,
+            source_id=source_id,
+            evidence_text=alignment.evidence_text,
+        )
+        taxonomy_node, _created = graph.upsert_node(
+            conn,
+            entity_type="taxonomy",
+            canonical_name=_taxonomy_node_name(alignment),
+            status=status,
+            confidence=min(alignment.confidence, 0.72),
+            generated_from={
+                "source": alignment.source,
+                "taxonomy_type": alignment.taxonomy_type,
+                "taxonomy_id": alignment.taxonomy_id,
+            },
+        )
+        graph.upsert_edge(
+            conn,
+            source_node_id=product.id,
+            target_node_id=taxonomy_node.id,
+            relation="MAPS_TO_TAXONOMY",
+            confidence=min(alignment.confidence, 0.72),
+            status=status,
+            source_id=source_id,
+            evidence={
+                "source": alignment.source,
+                "evidence_text": alignment.evidence_text,
+            },
+        )
+        if (
+            alignment.taxonomy_type == "product"
+            and config.taxonomy_alignment.create_iab_category_edges
+            and alignment.confidence >= config.taxonomy_alignment.min_product_confidence
+        ):
+            category, _category_created = graph.upsert_node(
+                conn,
+                entity_type="category",
+                canonical_name=f"IAB Product {alignment.taxonomy_id}: {alignment.taxonomy_name}",
+                status=status,
+                confidence=min(alignment.confidence, 0.72),
+                generated_from={
+                    "source": alignment.source,
+                    "taxonomy_type": "product",
+                    "taxonomy_id": alignment.taxonomy_id,
+                    "taxonomy_name": alignment.taxonomy_name,
+                },
+            )
+            graph.upsert_edge(
+                conn,
+                source_node_id=product.id,
+                target_node_id=category.id,
+                relation="IN_CATEGORY",
+                confidence=min(alignment.confidence, 0.72),
+                status=status,
+                source_id=source_id,
+                evidence={
+                    "source": alignment.source,
+                    "taxonomy_type": "product",
+                    "taxonomy_id": alignment.taxonomy_id,
+                    "taxonomy_name": alignment.taxonomy_name,
+                    "free_text_category": fact.category_name,
+                },
+            )
+        count += 1
+    return count
+
+
+def _owner_supported_by_evidence(
+    *,
+    owner_name: str,
+    brand_name: str | None,
+    evidence_spans: list[str],
+    source_url: str,
+) -> bool:
+    owner_key = normalize_name(owner_name)
+    brand_key = normalize_name(brand_name or "")
+    domain_key = normalize_name(_normalize_domain(source_url).split(".", 1)[0])
+    if not owner_key:
+        return False
+    if brand_key and (owner_key in brand_key or brand_key in owner_key):
+        return True
+    if domain_key and (owner_key in domain_key or domain_key in owner_key):
+        return True
+    joined = normalize_name(" ".join(evidence_spans))
+    if owner_key not in joined:
+        return False
+    strong_owner_terms = [
+        "owned by",
+        "owner",
+        "co owner",
+        "co owned",
+        "operated by",
+        "legal name",
+        "legal entity",
+        "parent company",
+        "holding company",
+        "company behind",
+        "subsidiary",
+        "division of",
+        "part of",
+    ]
+    return any(term in joined for term in strong_owner_terms)
+
+
+def _reject_owner_edges_for_source(conn, *, brand_id: str, source_id: str) -> None:
+    conn.execute(
+        """
+        UPDATE entity_edges
+        SET status = 'rejected'
+        WHERE source_node_id = ?
+          AND source_id = ?
+          AND relation = 'OWNED_BY'
+          AND status <> 'rejected'
+        """,
+        (brand_id, source_id),
+    )
+
+
+def _taxonomy_node_name(alignment) -> str:
+    label = "IAB Product" if alignment.taxonomy_type == "product" else "IAB Content"
+    return f"{label} {alignment.taxonomy_id}: {alignment.taxonomy_name}"
+
+
+def _category_evidence_text(category_name: str, spans: list[str]) -> str:
+    evidence = _evidence_text(spans, fallback=category_name)
+    if normalize_name(category_name) == normalize_name(evidence):
+        return evidence
+    return f"{category_name}: {evidence}"
 
 
 def _should_store_ad_suggestion(
@@ -918,6 +1459,18 @@ def _matched_vlm_product_names(
         seen.add(product.id)
         matched.append(product.canonical_name)
     return matched
+
+
+def _unique_names(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        key = normalize_name(value)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 def _evidence_text(spans: list[str], *, fallback: str) -> str:

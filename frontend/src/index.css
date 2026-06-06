@@ -162,6 +162,12 @@ select:focus-visible {
   padding: 10px;
 }
 
+.entity-repair-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .entity-search {
   display: flex;
   align-items: center;
@@ -465,6 +471,61 @@ select:focus-visible {
   background: rgba(223, 107, 107, 0.12);
 }
 
+.entity-status-ready {
+  color: #c7d2fe;
+  border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.entity-status-needs_review {
+  color: #f1c15d;
+  border-color: #8a5f13;
+  background: rgba(241, 193, 93, 0.12);
+}
+
+.entity-status-done {
+  color: #8bd3a7;
+  border-color: #256f46;
+  background: rgba(139, 211, 167, 0.12);
+}
+
+.entity-status-no_targets {
+  color: var(--fg-mute);
+  border-color: var(--border);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.entity-tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.entity-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg-mute);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.entity-tab strong {
+  color: var(--fg);
+  font-size: 11px;
+}
+
+.entity-tab.active {
+  color: var(--fg);
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.12);
+}
+
 .entity-detail-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
@@ -595,6 +656,37 @@ select:focus-visible {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.entity-trace-item {
+  gap: 5px;
+}
+
+.entity-trace-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entity-trace-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.entity-trace-item p {
+  margin: 2px 0 0;
+  color: var(--fg-mute);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .entity-ad-item:hover {

@@ -17,6 +17,7 @@ from ad_classifier.vlm.verifier import _extract_json, _normalize_chat_endpoint
 class DiscoveryProductFact(StrictModel):
     matched_submitted_product: str
     product_name: str
+    product_description: str | None = None
     brand_name: str | None = None
     brand_description: str | None = None
     owner_name: str | None = None
@@ -237,6 +238,11 @@ def _render_discovery_prompt(
             {
                 "matched_submitted_product": "one submitted product name from the list",
                 "product_name": "canonical product name found or verified on the page",
+                "product_description": (
+                    "optional 20-35 word synthesized product-page style sentence: "
+                    "what the product is, what it does, and key supported traits; "
+                    "not seller/offer/submitted-ad metadata"
+                ),
                 "brand_name": "manufacturer/brand if directly supported, not just the seller",
                 "brand_description": "optional one-sentence synthesized brand description from page facts",
                 "owner_name": "parent company/manufacturer owner only if directly supported",
@@ -295,6 +301,13 @@ def _default_prompt_template() -> str:
         "Verify product entity facts and submitted-ad field mismatches from a fetched webpage.\n"
         "Return only valid JSON matching the supplied schema. Web pages are discovery signals only.\n"
         "Do not infer that a carrier, retailer, dealer, or marketplace is the product brand/manufacturer.\n"
+        "Do not set owner_name from copyright-only, script, plugin, analytics, privacy, payment, or "
+        "infrastructure vendor snippets unless the evidence also says owned by, operated by, legal name, "
+        "or parent company.\n"
+        "Emit product_description as a 20-35 word neutral ecommerce-style summary of what the product is and does, "
+        "when directly supported by page text. It should answer what the item/service is, what it is used for, "
+        "and concrete supported traits. Do not summarize the seller, offer terms, or submitted ad metadata. "
+        "Do not copy marketing text verbatim.\n"
         "Emit suggested_ad_changes only for submitted DB fields that are wrong, missing, or generic.\n\n"
         "Submitted ad:\n{submitted_ad_json}\n\n"
         "Submitted product candidates:\n{product_lines}\n\n"

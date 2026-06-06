@@ -93,6 +93,7 @@ def create_app(
         entity_graph_path,
         resolved_db,
         crawler_config_path=entity_crawler_config_path,
+        knowledge_db_path=kb_path,
     )
 
     @app.get("/", tags=["health"])

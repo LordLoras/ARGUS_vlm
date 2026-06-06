@@ -18,9 +18,18 @@ const STATUS_OPTIONS = [
   { value: "rejected", label: "Rejected" }
 ];
 
+const QUEUE_STATUS_OPTIONS = [
+  { value: "ready", label: "Ready" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "done", label: "Done" },
+  { value: "no_targets", label: "No targets" },
+  { value: "", label: "All" }
+];
+
 export function CrawlerReview() {
   const [limit, setLimit] = useState(1000);
   const [queueSearch, setQueueSearch] = useState("");
+  const [queueStatus, setQueueStatus] = useState("ready");
   const [adIds, setAdIds] = useState("");
   const [referenceUrls, setReferenceUrls] = useState("");
   const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set());
@@ -47,7 +56,15 @@ export function CrawlerReview() {
       })
   });
 
-  const queueItems = queueQuery.data?.items ?? [];
+  const allQueueItems = queueQuery.data?.items ?? [];
+  const queueCounts = useMemo(() => summarizeQueue(allQueueItems), [allQueueItems]);
+  const queueItems = useMemo(
+    () =>
+      queueStatus
+        ? allQueueItems.filter((item) => item.crawl_status === queueStatus)
+        : allQueueItems,
+    [allQueueItems, queueStatus]
+  );
   const visibleAdIds = queueItems.map((item) => item.ad_id);
   const explicitAdIds = parseAdIds(adIds);
   const selectedVisibleCount = visibleAdIds.filter((adId) => selectedAdIds.has(adId)).length;
@@ -195,6 +212,19 @@ export function CrawlerReview() {
             </div>
           </div>
           {error ? <div className="entity-error-line">{error}</div> : null}
+          <div className="entity-tab-strip entity-queue-tabs" aria-label="Crawler queue status">
+            {QUEUE_STATUS_OPTIONS.map((option) => (
+              <button
+                key={option.value || "all"}
+                className={`entity-tab ${queueStatus === option.value ? "active" : ""}`}
+                onClick={() => setQueueStatus(option.value)}
+                type="button"
+              >
+                <span>{option.label}</span>
+                <strong>{queueCounts[option.value || "all"] ?? 0}</strong>
+              </button>
+            ))}
+          </div>
           <div className="entity-action-row entity-queue-actions">
             <button
               className="btn btn-compact"
@@ -241,25 +271,32 @@ export function CrawlerReview() {
           />
         </section>
 
-        <section className="entity-toolbar">
-          <select
-            className="input entity-status-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <label className="entity-search">
-            <SearchIcon size={13} />
-            <input
-              value={filterAdId}
-              onChange={(event) => setFilterAdId(event.target.value)}
-              placeholder="Filter suggestions by ad ID"
-              aria-label="Filter suggestions by ad ID"
-            />
-          </label>
+        <section className="entity-panel">
+          <div className="entity-panel-title">Submitted ad repair suggestions</div>
+          <p className="entity-section-note">
+            Crawler/VLM mismatches appear here for review. Existing submitted ad projections are
+            changed only after a suggestion is approved and applied.
+          </p>
+          <div className="entity-repair-toolbar">
+            <select
+              className="input entity-status-select"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <label className="entity-search">
+              <SearchIcon size={13} />
+              <input
+                value={filterAdId}
+                onChange={(event) => setFilterAdId(event.target.value)}
+                placeholder="Filter suggestions by ad ID"
+                aria-label="Filter suggestions by ad ID"
+              />
+            </label>
+          </div>
         </section>
 
         {suggestionsQuery.isLoading ? (
@@ -377,9 +414,14 @@ function CrawlerQueueTable({
                 ) : null}
               </td>
               <td>
+                <span className={`entity-status entity-status-${item.crawl_status}`}>
+                  {formatQueueStatus(item.crawl_status)}
+                </span>
                 <span className="entity-count">{item.pending_suggestion_count} pending repairs</span>
                 <div className="entity-row-sub">
-                  {item.last_crawled_at ? `last crawled ${item.last_crawled_at}` : "not crawled yet"}
+                  {item.last_crawled_at
+                    ? `${item.crawled_source_count} sources, last crawled ${item.last_crawled_at}`
+                    : "not crawled yet"}
                 </div>
               </td>
             </tr>
@@ -453,6 +495,24 @@ function SuggestionRow({
 
 function TextCell({ value }: { value: string }) {
   return <span className="entity-wrap-text">{value}</span>;
+}
+
+function summarizeQueue(items: SubmittedAdCrawlQueueItem[]) {
+  const counts: Record<string, number> = {
+    all: items.length,
+    ready: 0,
+    needs_review: 0,
+    done: 0,
+    no_targets: 0
+  };
+  for (const item of items) {
+    counts[item.crawl_status] = (counts[item.crawl_status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function formatQueueStatus(value: SubmittedAdCrawlQueueItem["crawl_status"]) {
+  return value.replace(/_/g, " ");
 }
 
 function parseAdIds(value: string) {

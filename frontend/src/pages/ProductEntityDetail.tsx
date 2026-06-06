@@ -7,7 +7,7 @@ import { Topbar } from "../components/Topbar";
 import { api } from "../lib/api-client";
 import { compactEvidenceText } from "../lib/entity-display";
 import { CheckIcon, EditIcon, GraphIcon, XIcon } from "../lib/icons";
-import type { EntityTaxonomyMapping, ProductPage } from "../lib/types";
+import type { CrawlerTraceItem, EntityTaxonomyMapping, ProductPage } from "../lib/types";
 import { StatusPill } from "./ProductEntities";
 
 export function ProductEntityDetail() {
@@ -73,6 +73,12 @@ export function ProductEntityDetail() {
 }
 
 function ProductDetailBody({ product }: { product: ProductPage }) {
+  const traceQuery = useQuery({
+    queryKey: ["entity-product-crawler-trace", product.node.id],
+    queryFn: () => api.getEntityProductCrawlerTrace(product.node.id),
+  });
+  const traceItems = traceQuery.data?.items ?? [];
+
   return (
     <>
       <section className="entity-detail-head">
@@ -159,7 +165,41 @@ function ProductDetailBody({ product }: { product: ProductPage }) {
           )}
         </Panel>
       </section>
+
+      <Panel title="Crawler trace">
+        {traceQuery.isLoading ? (
+          <span className="entity-muted">Loading crawler trace...</span>
+        ) : traceItems.length ? (
+          <div className="entity-evidence-list">
+            {traceItems.map((item) => (
+              <CrawlerTraceRow key={item.source_id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <span className="entity-muted">No crawler source records are linked to this product.</span>
+        )}
+      </Panel>
     </>
+  );
+}
+
+function CrawlerTraceRow({ item }: { item: CrawlerTraceItem }) {
+  return (
+    <div className="entity-evidence-item entity-trace-item">
+      <span>{item.target_source || "crawler target"}</span>
+      <strong>{item.title || item.url || "Untitled crawl source"}</strong>
+      <em>
+        {item.source_kind || "unknown source"} via {item.fetcher || "unknown fetcher"}
+        {item.final_url ? ` -> ${item.final_url}` : ""}
+      </em>
+      <div className="entity-trace-meta">
+        <span>{item.product_fact_count} product facts</span>
+        <span>{item.taxonomy_hint_count} taxonomy hints</span>
+        <span>{item.suggested_change_count} suggestions</span>
+        {item.vlm_error ? <span>VLM error: {item.vlm_error}</span> : null}
+      </div>
+      {item.evidence_text ? <p>{compactEvidenceText(item.evidence_text)}</p> : null}
+    </div>
   );
 }
 

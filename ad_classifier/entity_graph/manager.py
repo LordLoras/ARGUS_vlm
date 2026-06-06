@@ -9,6 +9,7 @@ from ad_classifier.entity_graph.models import (
     AdChangeSuggestion,
     AdChangeSuggestionStatus,
     CrawlerResult,
+    CrawlerTraceItem,
     DiscoveryCandidateRequest,
     EntityNode,
     EntityStatus,
@@ -37,8 +38,17 @@ class EntityGraphManager:
         submitted_db_path: Path,
         *,
         crawler_config_path: Path | None = None,
+        knowledge_db_path: Path | None = None,
     ) -> None:
         self.crawler_config = load_entity_crawler_config(crawler_config_path)
+        if knowledge_db_path is not None:
+            self.crawler_config = self.crawler_config.model_copy(
+                update={
+                    "taxonomy_alignment": self.crawler_config.taxonomy_alignment.model_copy(
+                        update={"knowledge_db_path": knowledge_db_path.expanduser().resolve()}
+                    )
+                }
+            )
         self.graph = EntityGraphRepository(graph_db_path)
         self.submitted_ads = SubmittedAdReadOnlyRepository(
             submitted_db_path, crawler_config=self.crawler_config
@@ -95,6 +105,11 @@ class EntityGraphManager:
         with self.graph.connect(readonly=True) as conn:
             return self.graph.graph(conn, limit=limit)
 
+    def product_crawler_trace(self, product_id: str, *, limit: int = 50) -> list[CrawlerTraceItem]:
+        with self.graph.connect(readonly=True) as conn:
+            self.graph.get_node(conn, product_id)
+            return self.graph.list_product_crawl_trace(conn, product_id, limit=limit)
+
     def taxonomy_mappings(self, *, limit: int = 200) -> list[TaxonomyMappingSummary]:
         with self.graph.connect(readonly=True) as conn:
             return self.graph.list_taxonomy_mappings(conn, limit=limit)
@@ -136,6 +151,18 @@ class EntityGraphManager:
                         metadata.get(item.ad_id, {}).get("pending_suggestion_count") or 0
                     ),
                     "last_crawled_at": metadata.get(item.ad_id, {}).get("last_crawled_at"),
+                    "crawled_source_count": int(
+                        metadata.get(item.ad_id, {}).get("crawled_source_count") or 0
+                    ),
+                    "crawl_status": _crawl_status(
+                        item,
+                        pending_suggestion_count=int(
+                            metadata.get(item.ad_id, {}).get("pending_suggestion_count") or 0
+                        ),
+                        crawled_source_count=int(
+                            metadata.get(item.ad_id, {}).get("crawled_source_count") or 0
+                        ),
+                    ),
                 }
             )
             for item in items
@@ -344,6 +371,9 @@ class EntityGraphManager:
     def set_status(self, entity_id: str, status: EntityStatus) -> EntityNode:
         with self.graph.connect() as conn:
             node = self.graph.set_node_status(conn, entity_id, status)
+            if node.type == "product" and status == "confirmed_reviewed":
+                self.graph.promote_product_context(conn, entity_id, status)
+                node = self.graph.get_node(conn, entity_id)
             conn.commit()
             return node
 
@@ -386,6 +416,21 @@ class EntityGraphManager:
 
     def submitted_db_is_readonly(self) -> bool:
         return self.submitted_ads.query_only_enabled()
+
+
+def _crawl_status(
+    item: SubmittedAdCrawlQueueItem,
+    *,
+    pending_suggestion_count: int,
+    crawled_source_count: int,
+) -> str:
+    if pending_suggestion_count > 0:
+        return "needs_review"
+    if crawled_source_count > 0:
+        return "done"
+    if not item.has_web_targets:
+        return "no_targets"
+    return "ready"
 
 
 def _ingest_candidates(input_value: str, nodes: list[EntityNode]) -> list[IngestAssistCandidate]:

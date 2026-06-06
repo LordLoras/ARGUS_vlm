@@ -18,6 +18,7 @@ import type {
   EntityNode,
   EntityTaxonomyMappingSummary,
   CrawlerResult,
+  CrawlerTraceItem,
   AdChangeSuggestion,
   IngestAssistMode,
   IngestAssistResult,
@@ -368,6 +369,11 @@ export const api = {
 
   getEntityProduct: (productId: string) =>
     apiFetch<ProductPage>(`/api/entity-graph/products/${encodeURIComponent(productId)}`),
+
+  getEntityProductCrawlerTrace: (productId: string, limit = 50) =>
+    apiFetch<{ items: CrawlerTraceItem[]; limit: number }>(
+      `/api/entity-graph/products/${encodeURIComponent(productId)}/crawler-trace${params({ limit })}`
+    ),
 
   updateEntityProduct: (productId: string, body: ProductEntityUpdatePayload) =>
     apiFetch<ProductPage>(`/api/entity-graph/products/${encodeURIComponent(productId)}`, {

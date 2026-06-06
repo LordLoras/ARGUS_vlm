@@ -11,6 +11,7 @@ EntityStatus = Literal["candidate", "confirmed_unreviewed", "confirmed_reviewed"
 AdChangeSuggestionStatus = Literal["pending", "approved", "rejected", "applied"]
 SourceType = Literal["submitted_ad", "taxonomy", "discovery_only", "user", "resolver"]
 IngestAssistMode = Literal["keep_initial_metadata", "use_graph", "crawl_reinforce"]
+CrawlQueueStatus = Literal["ready", "done", "needs_review", "no_targets"]
 RelationType = Literal[
     "BRANDED_BY",
     "OWNED_BY",
@@ -139,6 +140,8 @@ class SubmittedAdCrawlQueueItem(RelatedAdSummary):
     product_count: int = 0
     pending_suggestion_count: int = 0
     last_crawled_at: str | None = None
+    crawled_source_count: int = 0
+    crawl_status: CrawlQueueStatus = "ready"
 
 
 class ProductSummary(StrictModel):
@@ -209,6 +212,24 @@ class CrawlerResult(StrictModel):
     observation_count: int = 0
     suggestion_count: int = 0
     items: list[CrawlerItem] = Field(default_factory=list)
+
+
+class CrawlerTraceItem(StrictModel):
+    source_id: str
+    ad_id: str | None = None
+    url: str | None = None
+    final_url: str | None = None
+    target_source: str | None = None
+    source_kind: str | None = None
+    fetcher: str | None = None
+    status: str | None = None
+    title: str | None = None
+    vlm_error: str | None = None
+    product_fact_count: int = 0
+    taxonomy_hint_count: int = 0
+    suggested_change_count: int = 0
+    evidence_text: str | None = None
+    created_at: str | None = None
 
 
 class AdChangeSuggestion(StrictModel):

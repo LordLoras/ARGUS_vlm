@@ -12,9 +12,35 @@ Authority rules:
 - If the page sells/offers a product from another maker, set relation_to_page to carrier_offer,
   retailer_offer, or marketplace_offer.
 - Emit brand_name/owner_name only when the page directly supports them.
+- On About, Our Story, Company, FAQ, Terms, footer, or copyright text, actively look for
+  legal operator, copyright holder, parent company, owner, founder, and co-owner facts.
+- owner_name means a directly supported parent company, legal operating entity, copyright holder,
+  or stated owner/co-owner. Do not put a founder in owner_name unless the page says owner or
+  co-owner. If only founder language is present, keep founder context in brand_description,
+  owner_description, evidence_spans, warnings, or conflicts as appropriate.
+- Do not set owner_name from copyright-only, script, plugin, analytics, privacy, payment, or
+  infrastructure vendor snippets unless the same evidence also says the entity owns, operates, is
+  the legal name of, or is the parent company of the brand. Footer copyright by itself is too weak
+  when the name does not clearly match the brand/domain.
 - Emit short brand_description/owner_description only when directly supported by page facts.
   Use one concise synthesized sentence, not copied marketing copy. If the business is too local,
   obscure, or unsupported, omit the description.
+- Emit product_description when the page directly supports what the product is or does. Write it
+  like a short ecommerce product summary: 20-35 words, concrete, neutral, and useful to a buyer.
+  Include product class, purpose, and one or two supported traits. Do not write relationship-only
+  descriptions such as "linked to brand X" or "observed in an ad." Do not copy page marketing text
+  verbatim.
+- The product_description should answer the same question a compact product detail page answers:
+  what is this item/service, what problem/use does it address, and what concrete traits are supported
+  by the page. Do not summarize the brand, website, seller, offer terms, or submitted ad metadata as
+  the product description.
+- If the page contains a directly supported sentence like "<product> is ...", synthesize from that
+  fact first. If the page only has a title, navigation label, ad offer, or vague brand copy, omit
+  product_description instead of inventing a filler sentence.
+- category_name should be a concise physical product/service category from the page, not an ad
+  vertical. Prefer terms like luxury SUV, pickup truck, smartphone, mobile phone plan, foundation,
+  cosmetics, skin care, or sunscreen when directly supported. Do not use seller/dealer/carrier
+  categories as the product category.
 - Keep all evidence spans short. Do not copy long descriptions from third-party pages.
 - should_auto_confirm must always be false.
 

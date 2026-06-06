@@ -10,13 +10,34 @@ crawler:
   provider: http
   max_queries_per_run: 25
   max_results_per_query: 5
-  max_pages_per_entity: 2
+  max_pages_per_entity: 3
   max_targets_per_ad: 3
+  follow_product_links: true
+  max_followup_links_per_page: 3
+  follow_brand_context_links: true
+  max_brand_context_links_per_page: 2
+  recursive_source_kinds:
+    - manufacturer
+    - brand
+  brand_context_link_terms:
+    - about
+    - about us
+    - our story
+    - story
+    - company
+    - who we are
   reference_search_enabled: true
   max_reference_results_per_ad: 2
   reference_search_endpoint: https://duckduckgo.com/html/
   reference_search_query_template: "{product} official product"
+  reference_search_query_templates:
+    - '"{brand}" "{product}" official product'
+    - '"{product}" "{brand}" product details'
+    - "{brand} {product} official product page"
+    - "{product} manufacturer official"
+    - "{advertiser} {product} official"
   timeout_s: 10.0
+  max_page_bytes: 1500000
   rate_limit_per_minute: 30
   cache_dir: ./data/entity_crawler_cache
   user_agent: ARGUS-EntityCrawler/0.1
@@ -72,6 +93,75 @@ crawler:
 discovery_source_type: discovery_only
 discovery_status: candidate
 search_only_can_confirm: false
+
+taxonomy_alignment:
+  enabled: true
+  knowledge_db_path: ./knowledge.db
+  create_iab_category_edges: true
+  min_product_confidence: 0.55
+  min_content_confidence: 0.45
+  aliases:
+    - product_taxonomy_id: "1551"
+      content_taxonomy_id: "6"
+      confidence: 0.66
+      terms:
+        - vehicle
+        - vehicles
+        - car
+        - cars
+        - auto
+        - automotive
+        - suv
+        - sport utility
+        - crossover
+        - truck
+        - pickup
+        - sedan
+        - coupe
+        - van
+        - luxury suv
+        - full-size suv
+    - product_taxonomy_id: "1114"
+      content_taxonomy_id: "635"
+      confidence: 0.68
+      terms:
+        - smartphone
+        - smartphones
+        - mobile phone
+        - cell phone
+        - iphone
+        - android phone
+    - product_taxonomy_id: "1471"
+      confidence: 0.63
+      terms:
+        - mobile service
+        - cellular service
+        - wireless plan
+        - phone plan
+        - mobile plan
+    - product_taxonomy_id: "1138"
+      content_taxonomy_id: "555"
+      confidence: 0.66
+      terms:
+        - cosmetic
+        - cosmetics
+        - makeup
+        - foundation
+        - foundation stick
+        - lipstick
+        - blush
+        - mascara
+        - beauty product
+    - product_taxonomy_id: "1244"
+      content_taxonomy_id: "553"
+      confidence: 0.63
+      terms:
+        - skin care
+        - skincare
+        - sunscreen
+        - serum
+        - cleanser
+        - lotion
 
 vlm_parse:
   enabled: true

@@ -871,6 +871,8 @@ export type SubmittedAdCrawlQueueItem = RelatedAdSummary & {
   product_count: number;
   pending_suggestion_count: number;
   last_crawled_at?: string | null;
+  crawled_source_count: number;
+  crawl_status: "ready" | "done" | "needs_review" | "no_targets";
 };
 
 export type ProductSummary = {
@@ -941,6 +943,24 @@ export type CrawlerResult = {
   observation_count: number;
   suggestion_count: number;
   items: CrawlerItem[];
+};
+
+export type CrawlerTraceItem = {
+  source_id: string;
+  ad_id?: string | null;
+  url?: string | null;
+  final_url?: string | null;
+  target_source?: string | null;
+  source_kind?: string | null;
+  fetcher?: string | null;
+  status?: string | null;
+  title?: string | null;
+  vlm_error?: string | null;
+  product_fact_count: number;
+  taxonomy_hint_count: number;
+  suggested_change_count: number;
+  evidence_text?: string | null;
+  created_at?: string | null;
 };
 
 export type AdChangeSuggestion = {

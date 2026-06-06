@@ -79,6 +79,19 @@ def get_product(product_id: str, request: Request) -> dict[str, Any]:
     return product.model_dump(mode="json")
 
 
+@router.get("/entity-graph/products/{product_id}/crawler-trace")
+def get_product_crawler_trace(
+    product_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    try:
+        items = _manager(request).product_crawler_trace(product_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="product entity not found") from exc
+    return {"items": [item.model_dump(mode="json") for item in items], "limit": limit}
+
+
 @router.patch("/entity-graph/products/{product_id}")
 def update_product(
     product_id: str,

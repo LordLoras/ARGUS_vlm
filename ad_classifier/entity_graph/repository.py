@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -11,6 +12,7 @@ from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig, produ
 from ad_classifier.entity_graph.models import (
     AdChangeSuggestion,
     AdChangeSuggestionStatus,
+    CrawlerTraceItem,
     EntityAlias,
     EntityEdge,
     EntityNode,
@@ -173,6 +175,92 @@ class EntityGraphRepository:
             (status, node_id),
         )
         return self.get_node(conn, node_id)
+
+    def promote_product_context(
+        self, conn: sqlite3.Connection, product_id: str, status: EntityStatus
+    ) -> None:
+        product = self.get_node(conn, product_id)
+        if product.type != "product":
+            return
+        conn.execute(
+            """
+            UPDATE entity_edges
+            SET status = ?
+            WHERE source_node_id = ?
+              AND relation IN ('BRANDED_BY', 'IN_CATEGORY', 'MAPS_TO_TAXONOMY')
+              AND status <> 'rejected'
+            """,
+            (status, product_id),
+        )
+        conn.execute(
+            """
+            UPDATE taxonomy_mappings
+            SET status = ?
+            WHERE entity_id = ? AND status <> 'rejected'
+            """,
+            (status, product_id),
+        )
+        direct_targets = [
+            str(row["target_node_id"])
+            for row in conn.execute(
+                """
+                SELECT target_node_id
+                FROM entity_edges
+                WHERE source_node_id = ?
+                  AND relation IN ('BRANDED_BY', 'IN_CATEGORY', 'MAPS_TO_TAXONOMY')
+                  AND status <> 'rejected'
+                """,
+                (product_id,),
+            ).fetchall()
+        ]
+        for target_id in direct_targets:
+            conn.execute(
+                """
+                UPDATE entity_nodes
+                SET status = ?, updated_at = datetime('now')
+                WHERE id = ? AND status <> 'rejected'
+                """,
+                (status, target_id),
+            )
+        brand_ids = [
+            str(row["target_node_id"])
+            for row in conn.execute(
+                """
+                SELECT target_node_id
+                FROM entity_edges
+                WHERE source_node_id = ?
+                  AND relation = 'BRANDED_BY'
+                  AND status <> 'rejected'
+                """,
+                (product_id,),
+            ).fetchall()
+        ]
+        for brand_id in brand_ids:
+            conn.execute(
+                """
+                UPDATE entity_edges
+                SET status = ?
+                WHERE source_node_id = ?
+                  AND relation = 'OWNED_BY'
+                  AND status <> 'rejected'
+                """,
+                (status, brand_id),
+            )
+            conn.execute(
+                """
+                UPDATE entity_nodes
+                SET status = ?, updated_at = datetime('now')
+                WHERE id IN (
+                  SELECT target_node_id
+                  FROM entity_edges
+                  WHERE source_node_id = ?
+                    AND relation = 'OWNED_BY'
+                    AND status <> 'rejected'
+                )
+                AND status <> 'rejected'
+                """,
+                (status, brand_id),
+            )
 
     def update_node_fields(
         self,
@@ -366,19 +454,25 @@ class EntityGraphRepository:
             """,
             (*params, limit),
         ).fetchall()
-        return [rows.suggestion(row) for row in result]
+        return _dedupe_suggestions([rows.suggestion(row) for row in result])
 
     def crawl_queue_metadata(self, conn: sqlite3.Connection, ad_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not ad_ids:
             return {}
         placeholders = ",".join("?" for _ in ad_ids)
         metadata = {
-            ad_id: {"pending_suggestion_count": 0, "last_crawled_at": None}
+            ad_id: {
+                "pending_suggestion_count": 0,
+                "last_crawled_at": None,
+                "crawled_source_count": 0,
+            }
             for ad_id in ad_ids
         }
         for row in conn.execute(
             f"""
-            SELECT ad_id, COUNT(*) AS count
+            SELECT
+              ad_id,
+              COUNT(DISTINCT field_path || '|' || lower(trim(suggested_value))) AS count
             FROM ad_change_suggestions
             WHERE status = 'pending' AND ad_id IN ({placeholders})
             GROUP BY ad_id
@@ -388,7 +482,7 @@ class EntityGraphRepository:
             metadata[str(row["ad_id"])]["pending_suggestion_count"] = int(row["count"] or 0)
         for row in conn.execute(
             f"""
-            SELECT ad_id, MAX(created_at) AS last_crawled_at
+            SELECT ad_id, COUNT(*) AS count, MAX(created_at) AS last_crawled_at
             FROM entity_sources
             WHERE source_type = 'discovery_only' AND ad_id IN ({placeholders})
             GROUP BY ad_id
@@ -396,7 +490,34 @@ class EntityGraphRepository:
             ad_ids,
         ).fetchall():
             metadata[str(row["ad_id"])]["last_crawled_at"] = row["last_crawled_at"]
+            metadata[str(row["ad_id"])]["crawled_source_count"] = int(row["count"] or 0)
         return metadata
+
+    def list_product_crawl_trace(
+        self,
+        conn: sqlite3.Connection,
+        product_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[CrawlerTraceItem]:
+        result = conn.execute(
+            """
+            SELECT DISTINCT s.*
+            FROM entity_sources s
+            LEFT JOIN entity_observations o ON o.source_id = s.id
+            LEFT JOIN entity_edges e ON e.source_id = s.id
+            WHERE s.source_type = 'discovery_only'
+              AND (
+                o.node_id = ?
+                OR e.source_node_id = ?
+                OR e.target_node_id = ?
+              )
+            ORDER BY s.created_at DESC
+            LIMIT ?
+            """,
+            (product_id, product_id, product_id, limit),
+        ).fetchall()
+        return [_trace_item(row) for row in result]
 
     def lookup_nodes(
         self,
@@ -497,7 +618,14 @@ class EntityGraphRepository:
             ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(node_id, normalized_alias, source_id) DO UPDATE SET
               confidence = max(entity_aliases.confidence, excluded.confidence),
-              status = excluded.status
+              status = CASE
+                WHEN entity_aliases.status = 'rejected' THEN entity_aliases.status
+                WHEN entity_aliases.status = 'confirmed_reviewed'
+                  OR excluded.status = 'confirmed_reviewed' THEN 'confirmed_reviewed'
+                WHEN entity_aliases.status = 'confirmed_unreviewed'
+                  OR excluded.status = 'confirmed_unreviewed' THEN 'confirmed_unreviewed'
+                ELSE excluded.status
+              END
             """,
             (node_id, alias.strip(), normalized, source_id, confidence, status),
         )
@@ -531,7 +659,14 @@ class EntityGraphRepository:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_node_id, target_node_id, relation, source_id) DO UPDATE SET
               confidence = max(entity_edges.confidence, excluded.confidence),
-              status = excluded.status,
+              status = CASE
+                WHEN entity_edges.status = 'rejected' THEN entity_edges.status
+                WHEN entity_edges.status = 'confirmed_reviewed'
+                  OR excluded.status = 'confirmed_reviewed' THEN 'confirmed_reviewed'
+                WHEN entity_edges.status = 'confirmed_unreviewed'
+                  OR excluded.status = 'confirmed_unreviewed' THEN 'confirmed_unreviewed'
+                ELSE excluded.status
+              END,
               evidence_json = excluded.evidence_json
             """,
             (
@@ -653,7 +788,14 @@ class EntityGraphRepository:
             ON CONFLICT(entity_id, taxonomy_type, taxonomy_id, source_id) DO UPDATE SET
               taxonomy_name = excluded.taxonomy_name,
               confidence = max(taxonomy_mappings.confidence, excluded.confidence),
-              status = excluded.status,
+              status = CASE
+                WHEN taxonomy_mappings.status = 'rejected' THEN taxonomy_mappings.status
+                WHEN taxonomy_mappings.status = 'confirmed_reviewed'
+                  OR excluded.status = 'confirmed_reviewed' THEN 'confirmed_reviewed'
+                WHEN taxonomy_mappings.status = 'confirmed_unreviewed'
+                  OR excluded.status = 'confirmed_unreviewed' THEN 'confirmed_unreviewed'
+                ELSE excluded.status
+              END,
               evidence_text = excluded.evidence_text
             """,
             (
@@ -670,6 +812,26 @@ class EntityGraphRepository:
         )
         row = conn.execute("SELECT * FROM taxonomy_mappings WHERE id = ?", (new_mapping_id,)).fetchone()
         return rows.mapping(row)
+
+    def reject_taxonomy_context_for_source(
+        self, conn: sqlite3.Connection, *, product_id: str, source_id: str
+    ) -> None:
+        conn.execute(
+            """
+            DELETE FROM taxonomy_mappings
+            WHERE entity_id = ? AND source_id = ?
+            """,
+            (product_id, source_id),
+        )
+        conn.execute(
+            """
+            DELETE FROM entity_edges
+            WHERE source_node_id = ?
+              AND source_id = ?
+              AND relation IN ('IN_CATEGORY', 'MAPS_TO_TAXONOMY')
+            """,
+            (product_id, source_id),
+        )
 
     def list_products(
         self,
@@ -729,13 +891,15 @@ class EntityGraphRepository:
                 ).fetchall()
             ]
         )
-        mappings = [
-            rows.mapping(item)
-            for item in conn.execute(
-                "SELECT * FROM taxonomy_mappings WHERE entity_id = ? ORDER BY confidence DESC",
-                (product_id,),
-            ).fetchall()
-        ]
+        mappings = _dedupe_mappings(
+            [
+                rows.mapping(item)
+                for item in conn.execute(
+                    "SELECT * FROM taxonomy_mappings WHERE entity_id = ? ORDER BY confidence DESC",
+                    (product_id,),
+                ).fetchall()
+            ]
+        )
         observations = [
             rows.observation(item)
             for item in conn.execute(
@@ -829,6 +993,7 @@ class EntityGraphRepository:
         brand = _first_related(conn, node.id, "BRANDED_BY")
         owner = _first_related(conn, brand.id, "OWNED_BY") if brand else None
         category = _first_related(conn, node.id, "IN_CATEGORY")
+        display_node = _with_synthesized_product_description(conn, node, brand, owner, category)
         counts = conn.execute(
             """
             SELECT
@@ -836,12 +1001,14 @@ class EntityGraphRepository:
               (SELECT COUNT(DISTINCT normalized_alias) FROM entity_aliases WHERE node_id = ?) AS distinct_aliases_count,
               (SELECT COUNT(*) FROM entity_observations WHERE node_id = ?) AS evidence_count,
               (SELECT COUNT(DISTINCT ad_id) FROM entity_observations WHERE node_id = ?) AS ads_count,
-              (SELECT COUNT(*) FROM taxonomy_mappings WHERE entity_id = ?) AS mapping_count
+              (SELECT COUNT(DISTINCT taxonomy_type || ':' || taxonomy_id)
+                 FROM taxonomy_mappings
+                WHERE entity_id = ? AND status <> 'rejected') AS mapping_count
             """,
             (node.id, node.id, node.id, node.id, node.id),
         ).fetchone()
         return ProductSummary(
-            node=node,
+            node=display_node,
             brand=brand,
             owner=owner,
             category=category,
@@ -864,6 +1031,53 @@ def _dedupe_aliases(aliases: list[EntityAlias]) -> list[EntityAlias]:
     return sorted(by_key.values(), key=lambda item: item.alias.lower())
 
 
+def _dedupe_mappings(mappings: list[TaxonomyMapping]) -> list[TaxonomyMapping]:
+    by_key: dict[tuple[str, str], TaxonomyMapping] = {}
+    for mapping in mappings:
+        key = (mapping.taxonomy_type, mapping.taxonomy_id)
+        current = by_key.get(key)
+        if current is None or _mapping_score(mapping) > _mapping_score(current):
+            by_key[key] = mapping
+    return sorted(
+        by_key.values(),
+        key=lambda item: (item.taxonomy_type != "product", -item.confidence, item.taxonomy_name or ""),
+    )
+
+
+def _mapping_score(mapping: TaxonomyMapping) -> tuple[int, float, str]:
+    status_rank = {
+        "confirmed_reviewed": 4,
+        "confirmed_unreviewed": 3,
+        "candidate": 2,
+        "rejected": 1,
+    }.get(mapping.status, 0)
+    return (status_rank, mapping.confidence, mapping.created_at or "")
+
+
+def _dedupe_suggestions(suggestions: list[AdChangeSuggestion]) -> list[AdChangeSuggestion]:
+    by_key: dict[tuple[str, str, str], AdChangeSuggestion] = {}
+    for suggestion in suggestions:
+        key = (
+            suggestion.ad_id,
+            suggestion.field_path,
+            normalize_name(suggestion.suggested_value),
+        )
+        current = by_key.get(key)
+        if current is None or _suggestion_score(suggestion) > _suggestion_score(current):
+            by_key[key] = suggestion
+    return list(by_key.values())
+
+
+def _suggestion_score(suggestion: AdChangeSuggestion) -> tuple[int, float, str]:
+    status_rank = {
+        "pending": 4,
+        "approved": 3,
+        "applied": 2,
+        "rejected": 1,
+    }.get(suggestion.status, 0)
+    return (status_rank, suggestion.confidence, suggestion.created_at or "")
+
+
 def _first_related(conn: sqlite3.Connection, source_id: str, relation: str) -> EntityNode | None:
     row = conn.execute(
         """
@@ -871,12 +1085,349 @@ def _first_related(conn: sqlite3.Connection, source_id: str, relation: str) -> E
         FROM entity_edges e
         JOIN entity_nodes n ON n.id = e.target_node_id
         WHERE e.source_node_id = ? AND e.relation = ? AND n.status <> 'rejected'
+          AND e.status <> 'rejected'
         ORDER BY e.confidence DESC, n.canonical_name
         LIMIT 1
         """,
         (source_id, relation),
     ).fetchone()
     return rows.node(row) if row else None
+
+
+def _with_synthesized_product_description(
+    conn: sqlite3.Connection,
+    node: EntityNode,
+    brand: EntityNode | None,
+    owner: EntityNode | None,
+    category: EntityNode | None,
+) -> EntityNode:
+    if node.type != "product":
+        return node
+    description = _synthesize_product_description(conn, node, brand, owner, category)
+    if description is None:
+        return node
+    current = node.description or ""
+    if current and (node.generated_from or {}).get("source") == "user_edit":
+        return node
+    if current and not _is_seed_description(current) and len(current) >= len(description):
+        return node
+    return node.model_copy(update={"description": description})
+
+
+def _synthesize_product_description(
+    conn: sqlite3.Connection,
+    node: EntityNode,
+    brand: EntityNode | None,
+    owner: EntityNode | None,
+    category: EntityNode | None,
+) -> str | None:
+    blurb = _best_product_blurb(conn, node.id, node.canonical_name)
+    if blurb:
+        return _format_product_blurb(node.canonical_name, blurb, brand)
+
+    facts: list[str] = []
+    if brand:
+        facts.append(f"linked to the {brand.canonical_name} brand")
+    mapping = _best_taxonomy_mapping(conn, node.id, "product")
+    if category:
+        facts.append(f"mapped to {category.canonical_name}")
+    elif mapping:
+        facts.append(
+            f"mapped to IAB Product {mapping.taxonomy_id}: {mapping.taxonomy_name or mapping.taxonomy_id}"
+        )
+    hint = _best_category_hint(conn, node.id)
+    if hint and not _hint_repeats_mapping(hint, category, mapping):
+        facts.append(f"described by crawl evidence as {hint}")
+    if owner:
+        facts.append(f"with owner/manufacturer context {owner.canonical_name}")
+    if not facts:
+        return node.description
+    evidence_sources = _product_evidence_sources(conn, node.id)
+    source_text = (
+        "submitted ad evidence and discovery-only crawler facts"
+        if {"submitted_ad", "web"} <= evidence_sources
+        else "discovery-only crawler facts"
+        if "web" in evidence_sources
+        else "submitted ad evidence"
+    )
+    return f"{node.canonical_name} is {', '.join(facts)}, based on {source_text}."
+
+
+def _best_product_blurb(
+    conn: sqlite3.Connection, entity_id: str, product_name: str
+) -> str | None:
+    rows_ = conn.execute(
+        """
+        SELECT
+          entity_observations.field,
+          entity_observations.evidence_text,
+          entity_observations.confidence,
+          entity_observations.created_at,
+          entity_sources.payload_json
+        FROM entity_observations
+        LEFT JOIN entity_sources ON entity_sources.id = entity_observations.source_id
+        WHERE node_id = ?
+          AND field IN (
+            'web_vlm_product_description',
+            'web_discovery',
+            'web_vlm_product_fact'
+          )
+        ORDER BY confidence DESC, entity_observations.created_at DESC
+        """,
+        (entity_id,),
+    ).fetchall()
+    for row in sorted(rows_, key=_product_blurb_row_priority):
+        text = _string_or_none(row["evidence_text"])
+        if not text:
+            continue
+        if row["field"] == "web_vlm_product_description":
+            cleaned = _clean_blurb(text)
+            if cleaned:
+                return cleaned
+            continue
+        extracted = _extract_product_blurb(product_name, text)
+        if extracted:
+            return extracted
+    return None
+
+
+def _product_blurb_row_priority(row: sqlite3.Row) -> tuple[int, int]:
+    field_priority = {
+        "web_vlm_product_description": 0,
+        "web_discovery": 1,
+        "web_vlm_product_fact": 2,
+    }.get(str(row["field"] or ""), 9)
+    try:
+        payload_json = row["payload_json"]
+    except (IndexError, KeyError):
+        payload_json = None
+    payload = rows.loads_dict(payload_json) if payload_json else {}
+    target_source = str(payload.get("target_source") or "")
+    source_priority = {
+        "product_page_followup": 0,
+        "explicit_reference": 1,
+        "reference_search": 2,
+        "ads.landing_page_domain": 3,
+        "landing_page_json": 3,
+        "ads.website_domain": 4,
+        "contact_points_json": 5,
+        "brand_context_followup": 8,
+    }.get(target_source, 6)
+    return (source_priority, field_priority)
+
+
+def _extract_product_blurb(product_name: str, evidence_text: str) -> str | None:
+    text = re.sub(r"\s+", " ", evidence_text).strip()
+    if not text:
+        return None
+    name_key = product_name.lower()
+    text_key = text.lower()
+    start = text_key.find(name_key)
+    while start != -1:
+        after = text[start + len(product_name) :]
+        match = re.match(r"\s+(?:new\s+)?(?:is|are)\s+(an|a|the)\s+(.+)", after, flags=re.I)
+        if match:
+            article = match.group(1).lower()
+            phrase = _clean_product_phrase(match.group(2))
+            if phrase:
+                return f"is {article} {phrase}"
+        start = text_key.find(name_key, start + 1)
+    return None
+
+
+def _clean_product_phrase(value: str) -> str | None:
+    phrase = re.split(r"[.|]", value, maxsplit=1)[0]
+    phrase = phrase.strip(" ,;:-")
+    phrase = re.sub(r"\s+", " ", phrase)
+    words = phrase.split()
+    if len(words) > 28:
+        phrase = " ".join(words[:28]).strip(" ,;:-")
+    if len(phrase) < 8:
+        return None
+    if _looks_like_relationship_summary(phrase):
+        return None
+    return phrase
+
+
+def _format_product_blurb(
+    product_name: str, blurb: str, brand: EntityNode | None
+) -> str:
+    text = _clean_blurb(blurb) or blurb
+    text = text.strip().rstrip(".")
+    product_key = normalize_name(product_name)
+    text_key = normalize_name(text)
+    if text_key.startswith(product_key):
+        sentence = text
+    elif text.lower().startswith(("is ", "are ")):
+        sentence = f"{product_name} {text}"
+    else:
+        sentence = f"{product_name} is {text[0].lower() + text[1:] if text else text}"
+    if brand and normalize_name(brand.canonical_name) not in normalize_name(sentence):
+        sentence = _insert_brand_in_product_sentence(
+            sentence,
+            product_name=product_name,
+            brand_name=brand.canonical_name,
+        )
+    return sentence.rstrip(".") + "."
+
+
+def _insert_brand_in_product_sentence(sentence: str, *, product_name: str, brand_name: str) -> str:
+    if sentence.lower().startswith(product_name.lower()):
+        rest = sentence[len(product_name) :].strip()
+        if rest:
+            return f"{product_name} from {brand_name} {rest}"
+    return f"{sentence} from {brand_name}"
+
+
+def _clean_blurb(value: str) -> str | None:
+    text = re.sub(r"\s+", " ", value).strip().strip("\"'")
+    if not text:
+        return None
+    text = text.replace(" | ", ". ")
+    text = re.sub(r"\.{2,}", ".", text)
+    if _looks_like_relationship_summary(text):
+        return None
+    if _looks_like_malformed_product_copy(text):
+        return None
+    return text[:320].strip(" .") + "."
+
+
+def _looks_like_relationship_summary(value: str) -> bool:
+    key = normalize_name(value)
+    weak_markers = [
+        "linked to",
+        "submitted ad",
+        "ad evidence",
+        "crawler facts",
+        "discovery only",
+        "observed as",
+        "observed in",
+        "seeded for crawler",
+    ]
+    return any(marker in key for marker in weak_markers)
+
+
+def _looks_like_malformed_product_copy(value: str) -> bool:
+    return bool(
+        re.search(r"\blike best\b", value, flags=re.I)
+        and not re.search(r"\blike\s+(your|their|its|my|our)\s+best\b", value, flags=re.I)
+    )
+
+
+def _is_seed_description(value: str) -> bool:
+    key = normalize_name(value)
+    return (
+        "submitted ad product mention seeded for crawler verification" in key
+        or "submitted ad observation" in key
+        or "observed as a product mention" in key
+    )
+
+
+def _best_taxonomy_mapping(
+    conn: sqlite3.Connection, entity_id: str, taxonomy_type: str
+) -> TaxonomyMapping | None:
+    row = conn.execute(
+        """
+        SELECT *
+        FROM taxonomy_mappings
+        WHERE entity_id = ? AND taxonomy_type = ? AND status <> 'rejected'
+        ORDER BY
+          CASE status
+            WHEN 'confirmed_reviewed' THEN 0
+            WHEN 'confirmed_unreviewed' THEN 1
+            ELSE 2
+          END,
+          confidence DESC,
+          taxonomy_name
+        LIMIT 1
+        """,
+        (entity_id, taxonomy_type),
+    ).fetchone()
+    return rows.mapping(row) if row else None
+
+
+def _best_category_hint(conn: sqlite3.Connection, entity_id: str) -> str | None:
+    row = conn.execute(
+        """
+        SELECT evidence_text
+        FROM entity_observations
+        WHERE node_id = ?
+          AND field = 'web_vlm_category_hint'
+        ORDER BY confidence DESC, created_at DESC
+        LIMIT 1
+        """,
+        (entity_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    text = _string_or_none(row["evidence_text"])
+    if not text:
+        return None
+    if ":" in text:
+        prefix = text.split(":", 1)[0].strip()
+        if 2 <= len(prefix) <= 80:
+            return prefix
+    return text[:80]
+
+
+def _hint_repeats_mapping(
+    hint: str,
+    category: EntityNode | None,
+    mapping: TaxonomyMapping | None,
+) -> bool:
+    hint_key = normalize_name(hint)
+    values = [category.canonical_name if category else None, mapping.taxonomy_name if mapping else None]
+    for value in values:
+        value_key = normalize_name(value or "")
+        if value_key and (hint_key in value_key or value_key in hint_key):
+            return True
+    return False
+
+
+def _product_evidence_sources(conn: sqlite3.Connection, entity_id: str) -> set[str]:
+    result: set[str] = set()
+    for row in conn.execute(
+        "SELECT DISTINCT source FROM entity_observations WHERE node_id = ?",
+        (entity_id,),
+    ).fetchall():
+        source = str(row["source"] or "")
+        if source.startswith("web_") or source == "web_crawl":
+            result.add("web")
+        else:
+            result.add("submitted_ad")
+    return result
+
+
+def _trace_item(row: sqlite3.Row) -> CrawlerTraceItem:
+    payload = rows.loads_dict(row["payload_json"]) or {}
+    vlm_result = payload.get("vlm_result") if isinstance(payload.get("vlm_result"), dict) else {}
+    product_facts = vlm_result.get("product_facts") if isinstance(vlm_result, dict) else []
+    taxonomy_hints = vlm_result.get("taxonomy_hints") if isinstance(vlm_result, dict) else []
+    suggested_changes = vlm_result.get("suggested_ad_changes") if isinstance(vlm_result, dict) else []
+    return CrawlerTraceItem(
+        source_id=row["id"],
+        ad_id=row["ad_id"],
+        url=row["url"],
+        final_url=_string_or_none(payload.get("final_url")),
+        target_source=_string_or_none(payload.get("target_source")),
+        source_kind=_string_or_none(vlm_result.get("source_kind")) if isinstance(vlm_result, dict) else None,
+        fetcher=_string_or_none(payload.get("fetcher")),
+        status=_string_or_none(payload.get("status")),
+        title=_string_or_none(payload.get("title")),
+        vlm_error=_string_or_none(payload.get("vlm_error")),
+        product_fact_count=len(product_facts) if isinstance(product_facts, list) else 0,
+        taxonomy_hint_count=len(taxonomy_hints) if isinstance(taxonomy_hints, list) else 0,
+        suggested_change_count=len(suggested_changes) if isinstance(suggested_changes, list) else 0,
+        evidence_text=_string_or_none(payload.get("evidence_text")),
+        created_at=row["created_at"],
+    )
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _dedupe_product_summaries(

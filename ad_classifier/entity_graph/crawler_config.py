@@ -33,13 +33,38 @@ class EntityCrawlerSettings(BaseModel):
     provider: Literal["disabled", "duckduckgo", "http", "browser"] = "disabled"
     max_queries_per_run: int = Field(default=25, ge=1)
     max_results_per_query: int = Field(default=5, ge=1, le=25)
-    max_pages_per_entity: int = Field(default=2, ge=0, le=10)
+    max_pages_per_entity: int = Field(default=3, ge=0, le=10)
     max_targets_per_ad: int = Field(default=3, ge=1, le=20)
+    follow_product_links: bool = True
+    max_followup_links_per_page: int = Field(default=3, ge=0, le=10)
+    follow_brand_context_links: bool = True
+    max_brand_context_links_per_page: int = Field(default=2, ge=0, le=5)
+    recursive_source_kinds: list[str] = Field(default_factory=lambda: ["manufacturer", "brand"])
+    brand_context_link_terms: list[str] = Field(
+        default_factory=lambda: [
+            "about",
+            "about us",
+            "our story",
+            "story",
+            "company",
+            "who we are",
+        ]
+    )
     reference_search_enabled: bool = False
     max_reference_results_per_ad: int = Field(default=2, ge=0, le=10)
     reference_search_endpoint: str = "https://duckduckgo.com/html/"
     reference_search_query_template: str = "{product} official product"
+    reference_search_query_templates: list[str] = Field(
+        default_factory=lambda: [
+            '"{brand}" "{product}" official product',
+            '"{product}" "{brand}" product details',
+            "{brand} {product} official product page",
+            "{product} manufacturer official",
+            "{advertiser} {product} official",
+        ]
+    )
     timeout_s: float = Field(default=10.0, ge=0.1)
+    max_page_bytes: int = Field(default=1_500_000, ge=50_000, le=5_000_000)
     rate_limit_per_minute: int = Field(default=30, ge=1)
     cache_dir: Path = Path("./data/entity_crawler_cache")
     user_agent: str = "ARGUS-EntityCrawler/0.1"
@@ -114,6 +139,105 @@ class VLMDiscoveryParseConfig(BaseModel):
     enable_thinking: bool = False
 
 
+class TaxonomyAliasRule(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    terms: list[str] = Field(default_factory=list)
+    product_taxonomy_id: str | None = None
+    content_taxonomy_id: str | None = None
+    confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+
+
+class TaxonomyAlignmentConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    knowledge_db_path: Path = Path("./knowledge.db")
+    create_iab_category_edges: bool = True
+    min_product_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
+    min_content_confidence: float = Field(default=0.45, ge=0.0, le=1.0)
+    aliases: list[TaxonomyAliasRule] = Field(
+        default_factory=lambda: [
+            TaxonomyAliasRule(
+                terms=[
+                    "vehicle",
+                    "vehicles",
+                    "car",
+                    "cars",
+                    "auto",
+                    "automotive",
+                    "suv",
+                    "sport utility",
+                    "crossover",
+                    "truck",
+                    "pickup",
+                    "sedan",
+                    "coupe",
+                    "van",
+                    "luxury suv",
+                    "full-size suv",
+                ],
+                product_taxonomy_id="1551",
+                content_taxonomy_id="6",
+                confidence=0.66,
+            ),
+            TaxonomyAliasRule(
+                terms=[
+                    "smartphone",
+                    "smartphones",
+                    "mobile phone",
+                    "cell phone",
+                    "iphone",
+                    "android phone",
+                ],
+                product_taxonomy_id="1114",
+                content_taxonomy_id="635",
+                confidence=0.68,
+            ),
+            TaxonomyAliasRule(
+                terms=[
+                    "mobile service",
+                    "cellular service",
+                    "wireless plan",
+                    "phone plan",
+                    "mobile plan",
+                ],
+                product_taxonomy_id="1471",
+                confidence=0.63,
+            ),
+            TaxonomyAliasRule(
+                terms=[
+                    "cosmetic",
+                    "cosmetics",
+                    "makeup",
+                    "foundation",
+                    "foundation stick",
+                    "lipstick",
+                    "blush",
+                    "mascara",
+                    "beauty product",
+                ],
+                product_taxonomy_id="1138",
+                content_taxonomy_id="555",
+                confidence=0.66,
+            ),
+            TaxonomyAliasRule(
+                terms=[
+                    "skin care",
+                    "skincare",
+                    "sunscreen",
+                    "serum",
+                    "cleanser",
+                    "lotion",
+                ],
+                product_taxonomy_id="1244",
+                content_taxonomy_id="553",
+                confidence=0.63,
+            ),
+        ]
+    )
+
+
 class SubmittedDbRepairConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -146,6 +270,7 @@ class EntityCrawlerConfig(BaseModel):
 
     crawler: EntityCrawlerSettings = Field(default_factory=EntityCrawlerSettings)
     vlm_parse: VLMDiscoveryParseConfig = Field(default_factory=VLMDiscoveryParseConfig)
+    taxonomy_alignment: TaxonomyAlignmentConfig = Field(default_factory=TaxonomyAlignmentConfig)
     resolver: ProductResolverConfig = Field(default_factory=ProductResolverConfig)
     discovery_source_type: Literal["discovery_only"] = "discovery_only"
     discovery_status: Literal["candidate"] = "candidate"
@@ -177,6 +302,15 @@ def load_entity_crawler_config(path: Path | None) -> EntityCrawlerConfig:
             update={
                 "vlm_parse": config.vlm_parse.model_copy(
                     update={"prompt_path": (resolved.parent / prompt_path).resolve()}
+                )
+            }
+        )
+    knowledge_path = config.taxonomy_alignment.knowledge_db_path
+    if not knowledge_path.is_absolute():
+        config = config.model_copy(
+            update={
+                "taxonomy_alignment": config.taxonomy_alignment.model_copy(
+                    update={"knowledge_db_path": (resolved.parent / knowledge_path).resolve()}
                 )
             }
         )
