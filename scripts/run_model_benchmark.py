@@ -6,11 +6,16 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import httpx
 
@@ -23,7 +28,6 @@ from ad_classifier.pipeline.preprocess.models import FrameAnalysis
 from ad_classifier.pipeline.rules.models import RuleTrigger
 from ad_classifier.vlm.verifier import _build_content
 
-ROOT = Path(__file__).resolve().parents[1]
 ADS = [
     "ad_61e6c407",
     "ad_3271eca8",
@@ -65,6 +69,7 @@ DISPLAY_NAMES: dict[str, str] = {
     "moonshotai/kimi-k2.5": "Kimi K2.5",
     "xiaomi/mimo-v2.5": "MiMo V2.5",
     "google/gemma-4-31b-it": "Gemma 4 31B",
+    "google/gemma-4-26b-a4b-qat": "Gemma 4 26B A4B QAT",
     "qwen3.6-27b-q4-local": "Qwen3.6 27B Q4",
     "qwen3.6-27b-q4-remote": "Qwen3.6 27B Q4 Remote",
 }
@@ -104,6 +109,9 @@ class Endpoint:
     endpoint: str
     model: str
     api_key_env: str | None
+    display_name: str | None = None
+    readout: str | None = None
+    response_format: str = "json_object"
 
 
 def main() -> None:
@@ -118,15 +126,33 @@ def main() -> None:
     parser.add_argument("--include-direct-local", action="store_true")
     parser.add_argument("--skip-local", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--only", action="append", default=[])
+    parser.add_argument("--custom-id")
+    parser.add_argument("--custom-endpoint")
+    parser.add_argument("--custom-model")
+    parser.add_argument("--custom-route-type", default="Local")
+    parser.add_argument("--custom-api-key-env")
+    parser.add_argument("--custom-name")
+    parser.add_argument("--custom-readout")
+    parser.add_argument(
+        "--custom-response-format",
+        choices=["json_object", "json_schema", "text"],
+        default="json_object",
+    )
+    parser.add_argument(
+        "--merge-existing-output",
+        action="store_true",
+        help="Replace matching model rows in the existing output file instead of writing only this run.",
+    )
+    parser.add_argument(
+        "--require-all-parse-ok",
+        action="store_true",
+        help="Fail before writing output unless every called case returned parseable JSON.",
+    )
     args = parser.parse_args()
 
     config, config_path = load_config(ROOT / args.config)
     conn = sqlite3.connect(ROOT / args.db)
     conn.row_factory = sqlite3.Row
-
-    openrouter_key = (resolve_api_key("OPENROUTER_API_KEY") or "").strip()
-    if not openrouter_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set in the environment or .env.local")
 
     endpoints = [
         Endpoint(
@@ -166,11 +192,38 @@ def main() -> None:
                 api_key_env=config.vlm.local.api_key_env,
             )
         )
+    if args.custom_id or args.custom_endpoint or args.custom_model:
+        if not (args.custom_id and args.custom_endpoint and args.custom_model):
+            raise RuntimeError(
+                "--custom-id, --custom-endpoint, and --custom-model must be set together"
+            )
+        endpoints.append(
+            Endpoint(
+                id=args.custom_id,
+                route_type=args.custom_route_type,
+                endpoint=normalize_chat_endpoint(args.custom_endpoint),
+                model=args.custom_model,
+                api_key_env=args.custom_api_key_env,
+                display_name=args.custom_name,
+                readout=args.custom_readout,
+                response_format=args.custom_response_format,
+            )
+        )
     if args.only:
         only = set(args.only)
         endpoints = [endpoint for endpoint in endpoints if endpoint.id in only]
         if not endpoints:
             raise RuntimeError(f"No endpoints matched --only values: {sorted(only)}")
+    required_api_keys = sorted(
+        {endpoint.api_key_env for endpoint in endpoints if endpoint.api_key_env}
+    )
+    missing_api_keys = [
+        env_name for env_name in required_api_keys if not (resolve_api_key(env_name) or "").strip()
+    ]
+    if missing_api_keys:
+        raise RuntimeError(
+            "Missing required API key environment variable(s): " + ", ".join(missing_api_keys)
+        )
 
     references = {ad_id: reference_for_ad(conn, ad_id) for ad_id in ADS}
     ad_summaries = [ad_summary(conn, ad_id) for ad_id in ADS]
@@ -207,6 +260,15 @@ def main() -> None:
             )
             raw_runs.append(run | {"model_id": endpoint.id})
 
+    if args.require_all_parse_ok:
+        failed_runs = [run for run in raw_runs if not run["ok"] or not run["parse_ok"]]
+        if failed_runs:
+            failed_labels = ", ".join(
+                f"{run['model_id']}:{run['ad_id']} ({run.get('error') or 'not parseable'})"
+                for run in failed_runs
+            )
+            raise RuntimeError(f"Benchmark did not pass parse requirements: {failed_labels}")
+
     result = summarize_results(
         raw_runs=raw_runs,
         endpoints=endpoints,
@@ -215,24 +277,23 @@ def main() -> None:
     )
 
     output_path = ROOT / args.output
+    if args.merge_existing_output:
+        result = merge_existing_result(output_path, result)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
     raw_path = ROOT / args.raw_output
+    raw_payload = {
+        "generated_at": result["generated_at"],
+        "config_path": str(config_path),
+        "system_prompt": SYSTEM_PROMPT,
+        "runs": raw_runs,
+    }
+    if args.merge_existing_output:
+        raw_payload = merge_existing_raw(raw_path, raw_payload)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(
-        json.dumps(
-            {
-                "generated_at": result["generated_at"],
-                "config_path": str(config_path),
-                "system_prompt": SYSTEM_PROMPT,
-                "runs": raw_runs,
-            },
-            indent=2,
-            ensure_ascii=True,
-        )
-        + "\n",
-        encoding="utf-8",
+        json.dumps(raw_payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
     )
     print(f"Wrote {output_path}")
     print(f"Wrote {raw_path}")
@@ -357,7 +418,9 @@ def build_benchmark_content(
     return _build_content(bundle, image_max_dim=image_max_dim)
 
 
-def call_model(endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: float) -> dict[str, Any]:
+def call_model(
+    endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: float
+) -> dict[str, Any]:
     headers = {"Content-Type": "application/json"}
     if endpoint.api_key_env:
         api_key = (resolve_api_key(endpoint.api_key_env) or "").strip()
@@ -375,7 +438,7 @@ def call_model(endpoint: Endpoint, content: list[dict[str, Any]], *, timeout_s: 
         ],
         "temperature": 0,
         "max_tokens": max_tokens_for(endpoint.id),
-        "response_format": {"type": "json_object"},
+        "response_format": response_format_payload(endpoint.response_format),
         "stream": False,
     }
     if endpoint.id == "openai/gpt-5.5":
@@ -509,7 +572,9 @@ def ad_summary(conn: sqlite3.Connection, ad_id: str) -> dict[str, Any]:
     }
 
 
-def score_output(parsed: dict[str, Any] | None, ref: dict[str, Any], parse_ok: bool) -> dict[str, float]:
+def score_output(
+    parsed: dict[str, Any] | None, ref: dict[str, Any], parse_ok: bool
+) -> dict[str, float]:
     if not parsed:
         return {
             "total": 0.0,
@@ -522,12 +587,19 @@ def score_output(parsed: dict[str, Any] | None, ref: dict[str, Any], parse_ok: b
             "confidence_quality": 0.0,
         }
 
-    category = 20.0 if normalize(parsed.get("primary_category")) == normalize(ref["primary_category"]) else 0.0
+    category = (
+        20.0
+        if normalize(parsed.get("primary_category")) == normalize(ref["primary_category"])
+        else 0.0
+    )
     brand = soft_text_score(parsed.get("brand_name"), ref.get("brand_name")) * 15.0
-    products = list_overlap_score(
-        as_text_list(parsed.get("products")),
-        as_text_list(ref.get("products")) or [ref.get("products_text", "")],
-    ) * 15.0
+    products = (
+        list_overlap_score(
+            as_text_list(parsed.get("products")),
+            as_text_list(ref.get("products")) or [ref.get("products_text", "")],
+        )
+        * 15.0
+    )
     offer_parts = (
         as_text_list(parsed.get("offers"))
         + as_text_list(parsed.get("ctas"))
@@ -636,12 +708,18 @@ def as_text_list(value: Any) -> list[str]:
                 if item.strip():
                     out.append(item)
             elif isinstance(item, dict):
-                text = " ".join(str(v) for v in item.values() if v is not None and not isinstance(v, list | dict))
+                text = " ".join(
+                    str(v)
+                    for v in item.values()
+                    if v is not None and not isinstance(v, list | dict)
+                )
                 if text.strip():
                     out.append(text)
         return out
     if isinstance(value, dict):
-        text = " ".join(str(v) for v in value.values() if v is not None and not isinstance(v, list | dict))
+        text = " ".join(
+            str(v) for v in value.values() if v is not None and not isinstance(v, list | dict)
+        )
         return [text] if text.strip() else []
     return [str(value)]
 
@@ -660,12 +738,14 @@ def summarize_results(
         score = sum(run["score"] for run in runs) / len(runs) if runs else 0.0
         elapsed = sum(float(run["elapsed_s"]) for run in runs)
         prompt_tokens = sum(int(run.get("usage", {}).get("prompt_tokens") or 0) for run in runs)
-        completion_tokens = sum(int(run.get("usage", {}).get("completion_tokens") or 0) for run in runs)
+        completion_tokens = sum(
+            int(run.get("usage", {}).get("completion_tokens") or 0) for run in runs
+        )
         cost = cost_for_model(endpoint.id, prompt_tokens, completion_tokens)
         by_model.append(
             {
                 "id": endpoint.id,
-                "name": DISPLAY_NAMES.get(endpoint.id, endpoint.id),
+                "name": endpoint.display_name or DISPLAY_NAMES.get(endpoint.id, endpoint.id),
                 "provider": provider_for_endpoint(endpoint.id),
                 "route_type": endpoint.route_type,
                 "endpoint": endpoint.endpoint,
@@ -678,7 +758,7 @@ def summarize_results(
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "estimated_cost_usd": cost,
-                "readout": readout_for_model(endpoint.id),
+                "readout": endpoint.readout or readout_for_model(endpoint.id),
                 "cases": [
                     {
                         "ad_id": run["ad_id"],
@@ -695,34 +775,18 @@ def summarize_results(
             }
         )
 
-    leader = max((row["score"] for row in by_model), default=1.0)
-    paid_values = [
-        row["score"] / row["estimated_cost_usd"]
-        for row in by_model
-        if row["route_type"] == "OpenRouter" and row["estimated_cost_usd"] > 0
-    ]
-    best_value = max(paid_values, default=1.0)
-    for row in by_model:
-        row["relative_performance_pct"] = round((row["score"] / leader) * 100, 1) if leader else 0.0
-        if row["route_type"] == "OpenRouter" and row["estimated_cost_usd"] > 0:
-            row["performance_price_index"] = round(
-                ((row["score"] / row["estimated_cost_usd"]) / best_value) * 100,
-                1,
-            )
-        elif row["route_type"] == "Local":
-            row["performance_price_index"] = None
-        else:
-            row["performance_price_index"] = None
+    recalculate_relative_metrics(by_model)
+    generated_at = datetime.now(timezone.utc)
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "benchmark_date_label": "June 1, 2026",
+        "generated_at": generated_at.isoformat(),
+        "benchmark_date_label": f"{generated_at.strftime('%B')} {generated_at.day}, {generated_at.year}",
         "source": "actual OpenRouter/local endpoint calls",
         "raw_output_path": raw_output_path,
         "protocol": {
             "temperature": "0 where supported; GPT-5.5 uses provider default because temperature is not listed for that route",
             "max_tokens": "1600, StepFun low uses 4096, StepFun Max uses 8192",
-            "response_format": "json_object",
+            "response_format": "json_object by default; custom compatible endpoints can use json_schema or text when required",
             "openrouter_thinking": (
                 'reasoning.effort="none" except mandatory-reasoning routes: '
                 'StepFun low and Gemini 3.5 Flash use "low"; StepFun Max uses "xhigh"'
@@ -735,6 +799,97 @@ def summarize_results(
     }
 
 
+def merge_existing_result(existing_path: Path, result: dict[str, Any]) -> dict[str, Any]:
+    if not existing_path.exists():
+        return result
+    try:
+        existing = json.loads(existing_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return result
+    if not isinstance(existing, dict):
+        return result
+
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    for row in existing.get("models", []):
+        if isinstance(row, dict) and isinstance(row.get("id"), str):
+            rows_by_id[row["id"]] = row
+    for row in result.get("models", []):
+        if isinstance(row, dict) and isinstance(row.get("id"), str):
+            rows_by_id[row["id"]] = row
+
+    merged = dict(existing)
+    merged.update(
+        {
+            "generated_at": result["generated_at"],
+            "benchmark_date_label": result["benchmark_date_label"],
+            "source": "actual OpenRouter/local endpoint calls; merged rows preserve measured endpoint results",
+            "raw_output_path": result["raw_output_path"],
+            "protocol": result["protocol"],
+            "ads": result["ads"],
+        }
+    )
+    models = sorted(rows_by_id.values(), key=lambda row: float(row.get("score") or 0), reverse=True)
+    recalculate_relative_metrics(models)
+    merged["models"] = models
+    return merged
+
+
+def merge_existing_raw(raw_path: Path, raw_payload: dict[str, Any]) -> dict[str, Any]:
+    if not raw_path.exists():
+        return raw_payload
+    try:
+        existing = json.loads(raw_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return raw_payload
+    if not isinstance(existing, dict):
+        return raw_payload
+
+    runs_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for run in existing.get("runs", []):
+        if (
+            isinstance(run, dict)
+            and isinstance(run.get("model_id"), str)
+            and isinstance(run.get("ad_id"), str)
+        ):
+            runs_by_key[(run["model_id"], run["ad_id"])] = run
+    for run in raw_payload.get("runs", []):
+        if (
+            isinstance(run, dict)
+            and isinstance(run.get("model_id"), str)
+            and isinstance(run.get("ad_id"), str)
+        ):
+            runs_by_key[(run["model_id"], run["ad_id"])] = run
+
+    merged = dict(existing)
+    merged.update(
+        {
+            "generated_at": raw_payload["generated_at"],
+            "config_path": raw_payload["config_path"],
+            "system_prompt": raw_payload["system_prompt"],
+        }
+    )
+    merged["runs"] = list(runs_by_key.values())
+    return merged
+
+
+def recalculate_relative_metrics(models: list[dict[str, Any]]) -> None:
+    leader = max((float(row.get("score") or 0) for row in models), default=1.0)
+    paid_values = [
+        float(row.get("score") or 0) / float(row.get("estimated_cost_usd") or 0)
+        for row in models
+        if row.get("route_type") == "OpenRouter" and float(row.get("estimated_cost_usd") or 0) > 0
+    ]
+    best_value = max(paid_values, default=1.0)
+    for row in models:
+        score = float(row.get("score") or 0)
+        row["relative_performance_pct"] = round((score / leader) * 100, 1) if leader else 0.0
+        cost = float(row.get("estimated_cost_usd") or 0)
+        if row.get("route_type") == "OpenRouter" and cost > 0:
+            row["performance_price_index"] = round(((score / cost) / best_value) * 100, 1)
+        else:
+            row["performance_price_index"] = None
+
+
 def cost_for_model(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
     pricing = MODEL_PRICING_PER_M.get(model_id)
     if not pricing:
@@ -744,6 +899,50 @@ def cost_for_model(model_id: str, prompt_tokens: int, completion_tokens: int) ->
         + (completion_tokens * pricing["completion"] / 1_000_000),
         6,
     )
+
+
+def response_format_payload(format_type: str) -> dict[str, Any]:
+    if format_type == "json_schema":
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "argus_benchmark_result",
+                "strict": False,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "properties": {
+                        "primary_category": {"type": "string"},
+                        "brand_name": {"type": ["string", "null"]},
+                        "products": {"type": "array", "items": {"type": "string"}},
+                        "offers": {"type": "array", "items": {"type": "string"}},
+                        "ctas": {"type": "array", "items": {"type": "string"}},
+                        "disclaimers": {"type": "array", "items": {"type": "string"}},
+                        "risk_labels": {"type": "array", "items": {"type": "string"}},
+                        "sensitive_category": {"type": "boolean"},
+                        "confidence": {"type": "number"},
+                        "ocr_quality": {"type": "string"},
+                        "evidence": {"type": "array", "items": {"type": "object"}},
+                        "summary": {"type": "string"},
+                    },
+                    "required": [
+                        "primary_category",
+                        "brand_name",
+                        "products",
+                        "offers",
+                        "ctas",
+                        "disclaimers",
+                        "risk_labels",
+                        "sensitive_category",
+                        "confidence",
+                        "ocr_quality",
+                        "evidence",
+                        "summary",
+                    ],
+                },
+            },
+        }
+    return {"type": format_type}
 
 
 def json_load(value: str | None, fallback: Any) -> Any:
@@ -810,6 +1009,7 @@ def readout_for_model(model_id: str) -> str:
         "stepfun/step-3.7-flash": "Measured fast paid route; useful for cleaner artifacts.",
         "xiaomi/mimo-v2.5": "Measured low-cost route; schema and dense extraction decide its usefulness.",
         "google/gemma-4-31b-it": "Measured low-cost route with strong price/performance when parse quality holds.",
+        "google/gemma-4-26b-a4b-qat": "Measured LM Studio local Gemma 4 QAT route; provider cost is zero and latency is local hardware bound.",
         "stepfun/step-3.7-flash-max": "Measured StepFun with maximum OpenRouter reasoning effort for comparison.",
         "qwen3.6-27b-q4-local": "Measured local quantized route; provider cost is zero but latency is local hardware bound.",
         "qwen3.6-27b-q4-remote": "Measured custom remote-compatible endpoint for the Qwen quantized model.",
