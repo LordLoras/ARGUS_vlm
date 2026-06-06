@@ -11,7 +11,10 @@ from typing import Protocol
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 from ad_classifier.entity_graph import rows
-from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
+from ad_classifier.entity_graph.crawler_config import (
+    EntityCrawlerConfig,
+    build_reference_search_queries,
+)
 from ad_classifier.entity_graph.discovery_vlm import (
     DiscoveryVerifier,
     DiscoveryVLMResult,
@@ -98,6 +101,8 @@ class EntityWebCrawler:
                         url=target.url,
                         status="skipped",
                         reason="crawler disabled",
+                        target_source=target.source,
+                        target_evidence_text=target.evidence_text,
                     )
                     for target in targets
                 ],
@@ -133,6 +138,8 @@ class EntityWebCrawler:
                             url=target.url,
                             status="skipped",
                             reason="domain blocked by crawler config",
+                            target_source=target.source,
+                            target_evidence_text=target.evidence_text,
                         )
                     )
                     continue
@@ -145,6 +152,8 @@ class EntityWebCrawler:
                             url=target.url,
                             status="skipped",
                             reason="no product nodes linked to submitted ad",
+                            target_source=target.source,
+                            target_evidence_text=target.evidence_text,
                         )
                     )
                     continue
@@ -158,6 +167,8 @@ class EntityWebCrawler:
                             url=target.url,
                             status="failed",
                             reason=str(exc)[:240],
+                            target_source=target.source,
+                            target_evidence_text=target.evidence_text,
                         )
                     )
                     continue
@@ -273,6 +284,8 @@ class EntityWebCrawler:
                         title=page.title,
                         final_url=page.final_url,
                         reason=_crawl_reason(vlm_error),
+                        target_source=target.source,
+                        target_evidence_text=target.evidence_text,
                     )
                 )
             conn.commit()
@@ -416,6 +429,20 @@ def _with_reference_search_targets(
                 except Exception:
                     urls = []
                 queries_used += 1
+                target_source = "reference_search"
+                evidence_text = f"Reference search query: {query}"
+                if not urls:
+                    context = _submitted_source_context(conn, ad_id)
+                    urls = _fallback_reference_urls(
+                        product_name=product.canonical_name,
+                        brand=_brand_for_product(conn, product.id) or context.get("submitted_brand"),
+                        advertiser=context.get("advertiser_name") or context.get("parent_company"),
+                    )
+                    target_source = "reference_search_fallback"
+                    evidence_text = (
+                        "DuckDuckGo returned no parseable result URLs; generated local "
+                        f"official-domain candidates for query: {query}"
+                    )
                 for url in urls[: config.crawler.max_reference_results_per_ad]:
                     parsed = urlparse(url)
                     extra.append(
@@ -423,8 +450,8 @@ def _with_reference_search_targets(
                             ad_id=ad_id,
                             url=url,
                             domain=parsed.netloc.lower() or None,
-                            source="reference_search",
-                            evidence_text=f"Reference search query: {query}",
+                            source=target_source,
+                            evidence_text=evidence_text,
                         )
                     )
     return _dedupe_targets([*targets, *extra], max_targets=config.crawler.max_targets_per_ad)
@@ -439,38 +466,12 @@ def _reference_queries(
     context = _submitted_source_context(conn, ad_id)
     brand = _brand_for_product(conn, product.id) or context.get("submitted_brand") or ""
     advertiser = context.get("advertiser_name") or context.get("parent_company") or ""
-    templates = config.crawler.reference_search_query_templates or [
-        config.crawler.reference_search_query_template
-    ]
-    queries: list[str] = []
-    values = {
-        "product": product.canonical_name,
-        "brand": brand,
-        "advertiser": advertiser,
-        "ad_id": ad_id,
-    }
-    for template in templates:
-        if not _template_context_available(template, values):
-            continue
-        query = template.format(**values)
-        query = re.sub(r"\s+", " ", query).strip()
-        if normalize_name(query) and normalize_name(query) != normalize_name(product.canonical_name):
-            queries.append(query)
-    if not queries:
-        fallback_template = config.crawler.reference_search_query_template
-        if _template_context_available(fallback_template, values):
-            queries.append(fallback_template.format(**values))
-        else:
-            queries.append(f"{product.canonical_name} official product")
-    return _unique_names(queries)
-
-
-def _template_context_available(template: str, values: dict[str, str]) -> bool:
-    required = set(re.findall(r"{([a-zA-Z_][a-zA-Z0-9_]*)}", template))
-    optional_empty = {"brand", "advertiser"}
-    return all(values.get(name, "").strip() or name in optional_empty for name in required) and not any(
-        name in required and name in optional_empty and not values.get(name, "").strip()
-        for name in optional_empty
+    return build_reference_search_queries(
+        config,
+        product_name=product.canonical_name,
+        brand=brand,
+        advertiser=advertiser,
+        ad_id=ad_id,
     )
 
 
@@ -511,6 +512,54 @@ def _brand_for_product(conn, product_id: str) -> str | None:
         (product_id,),
     ).fetchone()
     return str(row["canonical_name"]) if row else None
+
+
+def _fallback_reference_urls(
+    *,
+    product_name: str,
+    brand: str | None,
+    advertiser: str | None,
+) -> list[str]:
+    domains = _official_domain_candidates(brand) or _official_domain_candidates(advertiser)
+    if not domains:
+        return []
+    product_paths = _product_path_candidates(product_name)
+    urls: list[str] = []
+    for domain in domains:
+        for path in product_paths:
+            urls.append(f"https://{domain}/{path}/")
+        urls.append(f"https://{domain}/")
+    return _unique_names(urls)
+
+
+def _official_domain_candidates(value: str | None) -> list[str]:
+    key = normalize_name(value or "")
+    if not key:
+        return []
+    drop_words = {
+        "inc",
+        "incorporated",
+        "llc",
+        "ltd",
+        "limited",
+        "corp",
+        "corporation",
+        "company",
+        "co",
+        "the",
+    }
+    words = [word for word in key.split() if word not in drop_words]
+    compact = "".join(words)
+    if len(compact) < 3:
+        return []
+    return [f"www.{compact}.com", f"{compact}.com"]
+
+
+def _product_path_candidates(product_name: str) -> list[str]:
+    slug = re.sub(r"[^a-z0-9]+", "-", product_name.lower()).strip("-")
+    compact = re.sub(r"[^a-z0-9]+", "", product_name.lower()).strip()
+    values = [slug, compact]
+    return [value for value in _unique_names(values) if value]
 
 
 def _product_followup_targets(
@@ -688,11 +737,12 @@ def _crawler_target_priority(source: str) -> int:
         "explicit_reference": 0,
         "product_page_followup": 1,
         "reference_search": 2,
-        "landing_page_json": 3,
-        "ads.landing_page_domain": 4,
-        "ads.website_domain": 5,
-        "contact_points_json": 6,
-        "brand_context_followup": 7,
+        "reference_search_fallback": 3,
+        "landing_page_json": 4,
+        "ads.landing_page_domain": 5,
+        "ads.website_domain": 6,
+        "contact_points_json": 7,
+        "brand_context_followup": 8,
     }
     return priorities.get(source, 20)
 
@@ -1193,6 +1243,19 @@ def _write_vlm_discovery(
             continue
         if not suggestion.suggested_value.strip():
             continue
+        apply_safety = _ad_suggestion_apply_safety(
+            field_path=suggestion.field_path,
+            current_value=current_value,
+            suggested_value=suggestion.suggested_value,
+            apply_safety=suggestion.apply_safety,
+            config=config,
+        )
+        reason = suggestion.reason.strip()[:1000]
+        if apply_safety == "review_only" and suggestion.apply_safety == "safe_projection_update":
+            reason = (
+                "Review-only: discovery evidence may be narrowing a submitted product to a "
+                f"web-only variant. {reason}"
+            )[:1000]
         graph.upsert_ad_change_suggestion(
             conn,
             ad_id=ad_id,
@@ -1200,13 +1263,13 @@ def _write_vlm_discovery(
             field_path=suggestion.field_path,
             current_value=current_value,
             suggested_value=suggestion.suggested_value.strip(),
-            confidence=min(suggestion.confidence, 0.75),
-            reason=suggestion.reason.strip()[:1000],
+            confidence=min(suggestion.confidence, 0.75 if apply_safety != "review_only" else 0.45),
+            reason=reason,
             evidence_text=_evidence_text(
                 suggestion.evidence_spans,
                 fallback=suggestion.suggested_value,
             ),
-            apply_safety=suggestion.apply_safety,
+            apply_safety=apply_safety,
             payload={
                 "source": "web_vlm",
                 "source_kind": result.source_kind,
@@ -1394,6 +1457,30 @@ def _should_store_ad_suggestion(
     if not current_key or current_key == suggested_key:
         return True
     return current_key in {normalize_name(item) for item in config.resolver.drop_exact}
+
+
+def _ad_suggestion_apply_safety(
+    *,
+    field_path: str,
+    current_value: str | None,
+    suggested_value: str,
+    apply_safety: str,
+    config: EntityCrawlerConfig,
+) -> str:
+    if apply_safety != "safe_projection_update":
+        return apply_safety
+    if field_path != "ads.products_text":
+        return apply_safety
+    current_key = normalize_name(current_value)
+    suggested_key = normalize_name(suggested_value)
+    if not current_key or not suggested_key or current_key == suggested_key:
+        return apply_safety
+    dropped = {normalize_name(item) for item in config.resolver.drop_exact}
+    if current_key in dropped:
+        return apply_safety
+    if current_key in suggested_key or suggested_key in current_key:
+        return "review_only"
+    return apply_safety
 
 
 def _submitted_ad_summary(

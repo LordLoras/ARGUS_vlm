@@ -5,9 +5,11 @@ import {
   ArrowRight,
   BadgeCheck,
   Bot,
+  Camera,
   Database,
   FileSearch,
   GitBranch,
+  Globe2,
   Layers,
   ListChecks,
   Network,
@@ -15,7 +17,6 @@ import {
   Route,
   ScanSearch,
   ShieldCheck,
-  Workflow,
 } from "lucide-react";
 
 import bannerUrl from "../../banner.jpg";
@@ -50,7 +51,7 @@ const WORKBENCH_CARDS: CardItem[] = [
   },
   {
     title: "Evidence-aware automation",
-    body: "Uses resolver, crawler, and VLM verification steps to improve entity quality while preserving provenance and candidate states for weak signals.",
+    body: "Uses resolver, crawler, search, manual targets, and VLM verification to improve entity quality while preserving provenance and candidate states for weak signals.",
     icon: Bot,
     color: "var(--amber)",
   },
@@ -65,7 +66,7 @@ const PRINCIPLE_CARDS: CardItem[] = [
   },
   {
     title: "Grounded facts first",
-    body: "Internal ad evidence, taxonomy records, crawler output, and model verification are stored with source context so later review can trace why a field exists.",
+    body: "Internal ad evidence, taxonomy records, crawler output, search attempts, and model verification are stored with source context so later review can trace why a field exists.",
     icon: FileSearch,
     color: "var(--emerald)",
   },
@@ -81,6 +82,12 @@ const PRINCIPLE_CARDS: CardItem[] = [
     icon: ListChecks,
     color: "var(--accent-2)",
   },
+  {
+    title: "Browser evidence as escalation",
+    body: "Playwright-rendered pages and screenshots should be used when HTTP text is thin, JavaScript hides product details, or visual product evidence can materially improve verification.",
+    icon: Camera,
+    color: "var(--amber)",
+  },
 ];
 
 const ROUTE_LINKS: RouteItem[] = [
@@ -93,7 +100,7 @@ const ROUTE_LINKS: RouteItem[] = [
   {
     label: "Crawler Review",
     to: "/experimental/crawler",
-    note: "Run crawl/VLM enrichment and review suggested ad-record changes.",
+    note: "Run submitted URLs, manual targets, search-backed targets, and review suggested ad-record changes.",
     icon: ScanSearch,
   },
   {
@@ -117,7 +124,9 @@ const ROUTE_LINKS: RouteItem[] = [
 ];
 
 const ROADMAP = [
-  ["Near term", "Improve target selection, crawler provenance, and VLM JSON verification so product and brand facts are cleaner before review."],
+  ["Search targets", "Let no-URL ads run through brand-product or brand-only search queries, while exposing generated query metadata and manual target overrides."],
+  ["Crawler evidence", "Improve target selection, crawler provenance, official-page ranking, and VLM JSON verification so product and brand facts are cleaner before review."],
+  ["Browser escalation", "Add optional Playwright rendering and screenshot-to-VLM verification for pages where HTML text, metadata, or static fetches are insufficient."],
   ["Data quality", "Use suggested corrections to repair incorrect projected ad fields only after explicit approval, with an audit trail."],
   ["Taxonomy", "Align graph categories to IAB product and content taxonomy IDs, keeping free-text category names as unmapped hints."],
   ["Upload assist", "Offer an optional ingest mode that can keep initial metadata, use reviewed graph facts, or crawl again to reinforce weak fields."],
@@ -141,8 +150,9 @@ export function ExperimentalAbout() {
             <h1>Experimental Workbench</h1>
             <p className="about-hero-subtitle">
               A focused workspace for turning ad-level observations into durable product, brand,
-              owner, category, and taxonomy records that can support higher-confidence analysis
-              across future uploads.
+              owner, category, and taxonomy records. The workflow now supports submitted URLs,
+              manual reference targets, and search-backed discovery while keeping experimental
+              graph writes separate from submitted ad records.
             </p>
             <div className="about-hero-actions">
               <Link to="/experimental/products" className="about-btn about-btn-primary">
@@ -187,11 +197,11 @@ export function ExperimentalAbout() {
               </div>
               <div>
                 <Radar size={16} />
-                <span>Crawler output is discovery evidence, not automatic truth.</span>
+                <span>Search and crawler output are discovery evidence, not automatic truth.</span>
               </div>
               <div>
-                <Workflow size={16} />
-                <span>Future ingest can use graph confidence as an optional signal.</span>
+                <Globe2 size={16} />
+                <span>No-URL ads can be researched through generated brand/product queries.</span>
               </div>
             </div>
           </div>
@@ -211,6 +221,8 @@ export function ExperimentalAbout() {
             The experimental area explores how ARGUS can move from individual ad classifications
             toward a reusable entity graph. The goal is to make products and brands more accurate,
             auditable, and useful over time without treating every early signal as confirmed data.
+            Current crawler work focuses on making missing targets explicit: an ad can use submitted
+            URLs, a user-provided official URL, or generated brand/product search queries.
           </p>
         </div>
         <CardGrid items={WORKBENCH_CARDS} />

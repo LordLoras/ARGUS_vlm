@@ -16,9 +16,12 @@ from ad_classifier.entity_graph.crawler import (
     EntityWebCrawler,
     FetchedPage,
     PageLink,
+    _ad_suggestion_apply_safety,
     _dedupe_targets,
+    _fallback_reference_urls,
     _owner_supported_by_evidence,
 )
+from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
 from ad_classifier.entity_graph.discovery_vlm import DiscoveryProductFact, DiscoveryVLMResult
 from ad_classifier.entity_graph.manager import EntityGraphManager
 from ad_classifier.entity_graph.models import IngestAssistRequest, SubmittedAdWebTarget
@@ -469,6 +472,27 @@ resolver:
     return path
 
 
+def _write_search_enabled_entity_crawler_config(config_path: Path) -> Path:
+    path = config_path.parent / "entity_crawler_search.yaml"
+    path.write_text(
+        r"""
+crawler:
+  enabled: true
+  provider: http
+  reference_search_enabled: true
+  max_reference_results_per_ad: 2
+  reference_search_query_templates:
+    - '"{brand}" "{product}" official product'
+    - '"{brand}" official website'
+vlm_parse:
+  enabled: true
+  write_mode: candidate_only
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_graph_repository_persists_nodes_edges_and_mappings(tmp_path: Path) -> None:
     repo = EntityGraphRepository(tmp_path / "entity_graph.db")
     with repo.connect() as conn:
@@ -672,6 +696,50 @@ def test_resolver_uses_crawler_config_for_generic_product_cleanup(config_path: P
     assert "Sierra Heavy Duty" in sierra_aliases
 
 
+def test_crawl_queue_marks_no_url_ads_ready_when_search_queries_exist(config_path: Path) -> None:
+    create_app(config_path=config_path)
+    submitted_db, graph_db = _paths(config_path)
+    conn = open_database(submitted_db)
+    try:
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            """
+            INSERT INTO ads (
+              id, source_path, ingested_at, status, brand_name, advertiser_name,
+              products_text, primary_category, subcategory
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "ad_rav4",
+                "/tmp/rav4.mp4",
+                now,
+                "completed",
+                "Toyota",
+                "Toyota",
+                "RAV4",
+                "automotive",
+                "SUV",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    manager = EntityGraphManager(
+        graph_db,
+        submitted_db,
+        crawler_config_path=_write_search_enabled_entity_crawler_config(config_path),
+    )
+
+    item = next(row for row in manager.crawl_queue(limit=10) if row.ad_id == "ad_rav4")
+
+    assert item.has_web_targets is False
+    assert item.has_search_targets is True
+    assert item.crawl_status == "ready"
+    assert '"Toyota" "RAV4" official product' in item.search_queries
+    assert '"Toyota" official website' in item.search_queries
+
+
 def test_product_blurb_prefers_product_function_over_relationship_summary() -> None:
     evidence = (
         "Your Skin Foundation Stick - Jones Road Jones Road Your Skin Foundation Stick "
@@ -709,6 +777,25 @@ def test_crawler_target_dedupe_keeps_reference_search_slots() -> None:
     kept = _dedupe_targets(targets, max_targets=2)
 
     assert [target.source for target in kept] == ["reference_search", "landing_page_json"]
+
+
+def test_fallback_reference_urls_use_brand_and_product_candidates() -> None:
+    urls = _fallback_reference_urls(product_name="RAV4", brand="Toyota", advertiser=None)
+
+    assert "https://www.toyota.com/rav4/" in urls
+    assert "https://www.toyota.com/" in urls
+
+
+def test_product_variant_suggestions_are_review_only() -> None:
+    safety = _ad_suggestion_apply_safety(
+        field_path="ads.products_text",
+        current_value="RAV4",
+        suggested_value="2026 Toyota RAV4 Plug-in Hybrid",
+        apply_safety="safe_projection_update",
+        config=EntityCrawlerConfig(),
+    )
+
+    assert safety == "review_only"
 
 
 def test_product_blurb_prefers_product_page_source(tmp_path: Path) -> None:

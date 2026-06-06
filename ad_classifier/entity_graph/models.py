@@ -137,6 +137,8 @@ class RelatedAdSummary(StrictModel):
 class SubmittedAdCrawlQueueItem(RelatedAdSummary):
     has_web_targets: bool = False
     web_targets: list[str] = Field(default_factory=list)
+    has_search_targets: bool = False
+    search_queries: list[str] = Field(default_factory=list)
     product_count: int = 0
     pending_suggestion_count: int = 0
     last_crawled_at: str | None = None
@@ -198,6 +200,8 @@ class CrawlerItem(StrictModel):
     ad_id: str
     url: str
     status: Literal["visited", "skipped", "failed"]
+    target_source: str | None = None
+    target_evidence_text: str | None = None
     source_id: str | None = None
     matched_products: list[str] = Field(default_factory=list)
     title: str | None = None

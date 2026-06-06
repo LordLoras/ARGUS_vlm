@@ -868,6 +868,8 @@ export type RelatedAdSummary = {
 export type SubmittedAdCrawlQueueItem = RelatedAdSummary & {
   has_web_targets: boolean;
   web_targets: string[];
+  has_search_targets: boolean;
+  search_queries: string[];
   product_count: number;
   pending_suggestion_count: number;
   last_crawled_at?: string | null;
@@ -929,6 +931,8 @@ export type CrawlerItem = {
   ad_id: string;
   url: string;
   status: "visited" | "skipped" | "failed";
+  target_source?: string | null;
+  target_evidence_text?: string | null;
   source_id?: string | null;
   matched_products: string[];
   title?: string | null;

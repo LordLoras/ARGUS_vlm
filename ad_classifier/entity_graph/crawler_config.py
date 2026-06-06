@@ -61,6 +61,8 @@ class EntityCrawlerSettings(BaseModel):
             "{brand} {product} official product page",
             "{product} manufacturer official",
             "{advertiser} {product} official",
+            '"{brand}" official website',
+            '"{brand}" product catalog',
         ]
     )
     timeout_s: float = Field(default=10.0, ge=0.1)
@@ -315,6 +317,60 @@ def load_entity_crawler_config(path: Path | None) -> EntityCrawlerConfig:
             }
         )
     return config
+
+
+def build_reference_search_queries(
+    config: EntityCrawlerConfig,
+    *,
+    product_name: str | None,
+    brand: str | None,
+    advertiser: str | None,
+    ad_id: str,
+) -> list[str]:
+    values = {
+        "product": product_name or "",
+        "brand": brand or "",
+        "advertiser": advertiser or "",
+        "ad_id": ad_id,
+    }
+    templates = config.crawler.reference_search_query_templates or [
+        config.crawler.reference_search_query_template
+    ]
+    queries: list[str] = []
+    for template in templates:
+        if not _template_context_available(template, values):
+            continue
+        query = template.format(**values)
+        query = re.sub(r"\s+", " ", query).strip()
+        if normalize_name(query):
+            queries.append(query)
+    if not queries and product_name:
+        fallback_template = config.crawler.reference_search_query_template
+        if _template_context_available(fallback_template, values):
+            queries.append(fallback_template.format(**values))
+        else:
+            queries.append(f"{product_name} official product")
+    if not queries and brand:
+        queries.append(f"{brand} official website")
+    return _unique_queries(queries)
+
+
+def _template_context_available(template: str, values: dict[str, str]) -> bool:
+    required = set(re.findall(r"{([a-zA-Z_][a-zA-Z0-9_]*)}", template))
+    return all(values.get(name, "").strip() for name in required)
+
+
+def _unique_queries(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        query = re.sub(r"\s+", " ", value).strip()
+        key = normalize_name(query)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(query)
+    return result
 
 
 def resolve_product_candidate(

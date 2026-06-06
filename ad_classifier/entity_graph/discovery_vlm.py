@@ -304,6 +304,8 @@ def _default_prompt_template() -> str:
         "Do not set owner_name from copyright-only, script, plugin, analytics, privacy, payment, or "
         "infrastructure vendor snippets unless the evidence also says owned by, operated by, legal name, "
         "or parent company.\n"
+        "Do not mark product-field changes safe when a webpage only narrows a submitted base product "
+        "into a year, trim, package, or variant; use review_only unless submitted ad evidence supports it.\n"
         "Emit product_description as a 20-35 word neutral ecommerce-style summary of what the product is and does, "
         "when directly supported by page text. It should answer what the item/service is, what it is used for, "
         "and concrete supported traits. Do not summarize the seller, offer terms, or submitted ad metadata. "

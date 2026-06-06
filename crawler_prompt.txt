@@ -50,6 +50,9 @@ Mismatch suggestion rules:
 - Never suggest changing ads.brand_name just because the web page identifies a product manufacturer
   when the submitted ad is actually from a seller/carrier/dealer. In that case use conflicts/warnings,
   not a submitted DB change.
+- Never mark a product-field change as safe_projection_update when the web page only narrows a
+  submitted base product into a more specific year, trim, package, or variant. Use review_only unless
+  the submitted ad evidence itself supports that specific variant.
 - Good suggestion fields are ads.products_text, ads.primary_category, ads.subcategory, and ads.brand_name.
 - Mark apply_safety as safe_projection_update only when the change is narrow and directly supported.
 - Mark apply_safety as review_only for ambiguous conflicts.

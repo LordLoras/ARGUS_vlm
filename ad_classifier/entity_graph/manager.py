@@ -428,7 +428,7 @@ def _crawl_status(
         return "needs_review"
     if crawled_source_count > 0:
         return "done"
-    if not item.has_web_targets:
+    if not item.has_web_targets and not item.has_search_targets:
         return "no_targets"
     return "ready"
 

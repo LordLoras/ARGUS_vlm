@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 from ad_classifier.db.connection import open_readonly_database
 from ad_classifier.entity_graph.crawler_config import (
     EntityCrawlerConfig,
+    build_reference_search_queries,
     collapse_product_candidates,
     is_product_variant_of_base,
     resolve_product_candidate,
@@ -222,6 +223,7 @@ class SubmittedAdReadOnlyRepository:
             for row in result:
                 targets = _web_targets(row, self.crawler_config)
                 products = _raw_products(row)
+                search_queries = _reference_search_queries_for_row(row, products, self.crawler_config)
                 items.append(
                     SubmittedAdCrawlQueueItem(
                         ad_id=row["id"],
@@ -232,6 +234,8 @@ class SubmittedAdReadOnlyRepository:
                         ingested_at=str(row["ingested_at"]) if row["ingested_at"] else None,
                         has_web_targets=bool(targets),
                         web_targets=[target.url for target in targets],
+                        has_search_targets=bool(search_queries),
+                        search_queries=search_queries,
                         product_count=len(products),
                     )
                 )
@@ -314,6 +318,30 @@ def _raw_products(row: sqlite3.Row) -> list[str]:
         if items:
             return _unique(items)
     return _unique([item.strip() for item in (row["products_text"] or "").split(",") if item.strip()])
+
+
+def _reference_search_queries_for_row(
+    row: sqlite3.Row,
+    products: list[str],
+    crawler_config: EntityCrawlerConfig,
+) -> list[str]:
+    if not crawler_config.crawler.reference_search_enabled:
+        return []
+    brand = _brand(row)
+    advertiser = _advertiser(row) or _parent_company(row)
+    queries: list[str] = []
+    product_values = products or [""]
+    for product in product_values[: max(crawler_config.crawler.max_reference_results_per_ad, 1)]:
+        queries.extend(
+            build_reference_search_queries(
+                crawler_config,
+                product_name=product or None,
+                brand=brand,
+                advertiser=advertiser,
+                ad_id=str(row["id"]),
+            )
+        )
+    return _unique(queries)[: crawler_config.crawler.max_queries_per_run]
 
 
 def _web_targets(

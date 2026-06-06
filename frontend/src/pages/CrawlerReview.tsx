@@ -33,6 +33,7 @@ export function CrawlerReview() {
   const [adIds, setAdIds] = useState("");
   const [referenceUrls, setReferenceUrls] = useState("");
   const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set());
+  const [inlineTargets, setInlineTargets] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("pending");
   const [filterAdId, setFilterAdId] = useState("");
   const [lastRun, setLastRun] = useState<CrawlerResult | null>(null);
@@ -74,12 +75,11 @@ export function CrawlerReview() {
   ]);
 
   const runMutation = useMutation({
-    mutationFn: (mode: "visible" | "selected") => {
-      const ids = mode === "visible" ? visibleAdIds : selectedForRun;
+    mutationFn: ({ ids, referenceText }: { ids: string[]; referenceText?: string }) => {
       return api.runEntityCrawler({
         limit,
         ad_ids: ids,
-        targets: buildTargets(ids, referenceUrls)
+        targets: buildTargets(ids, referenceText ?? referenceUrls)
       });
     },
     onSuccess: async (result) => {
@@ -196,7 +196,7 @@ export function CrawlerReview() {
               <button
                 className="btn"
                 disabled={runMutation.isPending || visibleAdIds.length === 0}
-                onClick={() => runMutation.mutate("visible")}
+                onClick={() => runMutation.mutate({ ids: visibleAdIds })}
               >
                 <FlowIcon size={12} />
                 <span>{runMutation.isPending ? "Running" : "Run visible queue"}</span>
@@ -204,7 +204,7 @@ export function CrawlerReview() {
               <button
                 className="btn btn-primary"
                 disabled={runMutation.isPending || selectedForRun.length === 0}
-                onClick={() => runMutation.mutate("selected")}
+                onClick={() => runMutation.mutate({ ids: selectedForRun })}
               >
                 <SearchIcon size={12} />
                 <span>{runMutation.isPending ? "Running" : "Run selected"}</span>
@@ -256,10 +256,24 @@ export function CrawlerReview() {
               <Metric label="Suggestions" value={lastRun.suggestion_count} />
             </div>
           ) : null}
+          {lastRun?.items.length ? <CrawlerRunItems items={lastRun.items} /> : null}
           <CrawlerQueueTable
             items={queueItems}
             loading={queueQuery.isLoading}
             selectedAdIds={selectedAdIds}
+            inlineTargets={inlineTargets}
+            setInlineTarget={(adId, value) =>
+              setInlineTargets((current) => ({ ...current, [adId]: value }))
+            }
+            runItem={(item) =>
+              runMutation.mutate({
+                ids: [item.ad_id],
+                referenceText: inlineTargets[item.ad_id]
+                  ? `${item.ad_id} ${inlineTargets[item.ad_id]}`
+                  : ""
+              })
+            }
+            running={runMutation.isPending}
             toggle={(adId) =>
               setSelectedAdIds((current) => {
                 const next = new Set(current);
@@ -349,11 +363,19 @@ function CrawlerQueueTable({
   items,
   loading,
   selectedAdIds,
+  inlineTargets,
+  setInlineTarget,
+  runItem,
+  running,
   toggle
 }: {
   items: SubmittedAdCrawlQueueItem[];
   loading: boolean;
   selectedAdIds: Set<string>;
+  inlineTargets: Record<string, string>;
+  setInlineTarget: (adId: string, value: string) => void;
+  runItem: (item: SubmittedAdCrawlQueueItem) => void;
+  running: boolean;
   toggle: (adId: string) => void;
 }) {
   if (loading) {
@@ -406,12 +428,49 @@ function CrawlerQueueTable({
                 </span>
               </td>
               <td>
-                <span className={item.has_web_targets ? "entity-status entity-status-confirmed_unreviewed" : "entity-status"}>
-                  {item.has_web_targets ? "has targets" : "needs search"}
+                <span
+                  className={
+                    item.has_web_targets || item.has_search_targets
+                      ? "entity-status entity-status-confirmed_unreviewed"
+                      : "entity-status"
+                  }
+                >
+                  {item.has_web_targets
+                    ? "submitted URL"
+                    : item.has_search_targets
+                      ? "search ready"
+                      : "needs target"}
                 </span>
                 {item.web_targets[0] ? (
                   <div className="entity-row-sub">{compactEvidenceText(item.web_targets[0])}</div>
                 ) : null}
+                {!item.web_targets[0] && item.search_queries[0] ? (
+                  <div className="entity-row-sub">
+                    DuckDuckGo: {compactEvidenceText(item.search_queries[0])}
+                  </div>
+                ) : null}
+                <div className="crawler-inline-target">
+                  <input
+                    className="input"
+                    value={inlineTargets[item.ad_id] ?? ""}
+                    onChange={(event) => setInlineTarget(item.ad_id, event.target.value)}
+                    placeholder="optional official URL"
+                    aria-label={`Optional crawler URL for ${item.ad_id}`}
+                  />
+                  <button
+                    className="btn btn-compact"
+                    disabled={
+                      running ||
+                      (!item.has_web_targets &&
+                        !item.has_search_targets &&
+                        !(inlineTargets[item.ad_id] ?? "").trim())
+                    }
+                    onClick={() => runItem(item)}
+                  >
+                    <SearchIcon size={11} />
+                    <span>Run</span>
+                  </button>
+                </div>
               </td>
               <td>
                 <span className={`entity-status entity-status-${item.crawl_status}`}>
@@ -428,6 +487,36 @@ function CrawlerQueueTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function CrawlerRunItems({ items }: { items: CrawlerResult["items"] }) {
+  return (
+    <div className="crawler-last-run">
+      <div className="entity-panel-title">Last run targets</div>
+      <div className="crawler-last-run-grid">
+        {items.slice(0, 12).map((item) => (
+          <div className="crawler-run-card" key={`${item.ad_id}-${item.url}`}>
+            <div className="entity-action-row">
+              <span className={`entity-status entity-status-${item.status}`}>
+                {item.status}
+              </span>
+              <span className="entity-row-sub">{item.target_source || "target"}</span>
+            </div>
+            <div className="entity-link-strong">{item.ad_id}</div>
+            <TextCell value={item.final_url || item.url} />
+            {item.target_evidence_text ? (
+              <div className="entity-row-sub">{item.target_evidence_text}</div>
+            ) : null}
+            {item.matched_products.length ? (
+              <div className="entity-row-sub">
+                Matched: {item.matched_products.join(", ")}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
