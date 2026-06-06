@@ -526,9 +526,9 @@ def _fallback_reference_urls(
     product_paths = _product_path_candidates(product_name)
     urls: list[str] = []
     for domain in domains:
+        urls.append(f"https://{domain}/")
         for path in product_paths:
             urls.append(f"https://{domain}/{path}/")
-        urls.append(f"https://{domain}/")
     return _unique_names(urls)
 
 
@@ -691,7 +691,7 @@ def _duckduckgo_urls(query: str, config: EntityCrawlerConfig) -> list[str]:
     url = f"{endpoint}?{urlencode({'q': query})}"
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": config.crawler.user_agent},
+        headers=_http_headers(config),
         method="GET",
     )
     with urllib.request.urlopen(
@@ -762,18 +762,27 @@ class DefaultPageFetcher:
                         f"http fetch failed: {http_exc}; browser fallback failed: {browser_exc}"
                     ) from browser_exc
             raise
-        if len(page.text) < 200 and config.crawler.use_browser_fallback:
+        needs_fallback = len(page.text) < 200 or _looks_blocked_or_challenged(page)
+        if needs_fallback and config.crawler.use_browser_fallback:
             try:
                 return _fetch_with_browser(target.url, config)
-            except Exception:
+            except Exception as browser_exc:
+                if _looks_blocked_or_challenged(page):
+                    raise RuntimeError(
+                        "http fetch returned a blocked/challenge page; "
+                        f"browser fallback failed: {browser_exc}"
+                    ) from browser_exc
                 return page
+        if _looks_blocked_or_challenged(page):
+            title = page.title or f"HTTP {page.status_code}"
+            raise RuntimeError(f"http fetch returned a blocked/challenge page: {title}")
         return page
 
 
 def _fetch_with_http(url: str, config: EntityCrawlerConfig) -> FetchedPage:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": config.crawler.user_agent},
+        headers=_http_headers(config),
         method="GET",
     )
     try:
@@ -807,6 +816,45 @@ def _fetch_with_http(url: str, config: EntityCrawlerConfig) -> FetchedPage:
         fetcher="http",
         links=parsed.links,
     )
+
+
+def _http_headers(config: EntityCrawlerConfig) -> dict[str, str]:
+    return {
+        "User-Agent": config.crawler.user_agent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
+
+def _looks_blocked_or_challenged(page: FetchedPage) -> bool:
+    if page.status_code in {401, 403, 429}:
+        return True
+    haystack = normalize_name(
+        " ".join(
+            [
+                page.title or "",
+                page.description or "",
+                page.text[:2000],
+            ]
+        )
+    )
+    blocked_markers = [
+        "access denied",
+        "attention required",
+        "bot detection",
+        "captcha",
+        "browser challenge",
+        "security challenge",
+        "challenge page",
+        "cloudflare",
+        "forbidden",
+        "permission to access",
+        "request blocked",
+        "temporarily unavailable due to security",
+        "verify you are human",
+    ]
+    return any(marker in haystack for marker in blocked_markers)
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -1002,8 +1050,9 @@ def _clean_search_url(value: str) -> str | None:
     href = value.strip()
     if href.startswith("//"):
         href = f"https:{href}"
-    if href.startswith("/l/"):
-        parsed = urlparse(href)
+    parsed = urlparse(href)
+    normalized_domain = _normalize_domain(parsed.netloc) if parsed.netloc else ""
+    if href.startswith("/l/") or (normalized_domain in {"duckduckgo.com", "duck.com"} and parsed.path == "/l/"):
         target = parse_qs(parsed.query).get("uddg", [""])[0]
         href = target or href
     parsed = urlparse(href)

@@ -42,7 +42,10 @@ crawler:
   max_page_bytes: 1500000
   rate_limit_per_minute: 30
   cache_dir: ./data/entity_crawler_cache
-  user_agent: ARGUS-EntityCrawler/0.1
+  # Use a normal browser identity. Some manufacturer sites return anti-bot
+  # "Access Denied" pages to custom crawler user agents even when the same page
+  # is reachable from a local browser.
+  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36
   # Optional JS-rendered fallback. Requires installing the project browser extra
   # and Playwright's Chromium runtime; otherwise HTTP crawling still runs.
   use_browser_fallback: true

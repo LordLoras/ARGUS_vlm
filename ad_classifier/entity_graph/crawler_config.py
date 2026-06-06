@@ -69,7 +69,10 @@ class EntityCrawlerSettings(BaseModel):
     max_page_bytes: int = Field(default=1_500_000, ge=50_000, le=5_000_000)
     rate_limit_per_minute: int = Field(default=30, ge=1)
     cache_dir: Path = Path("./data/entity_crawler_cache")
-    user_agent: str = "ARGUS-EntityCrawler/0.1"
+    user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    )
     use_browser_fallback: bool = False
     respect_robots_txt: bool = True
     store_raw_html: bool = False

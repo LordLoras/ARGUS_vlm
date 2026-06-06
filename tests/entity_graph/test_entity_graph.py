@@ -13,12 +13,15 @@ from ad_classifier.api.app import create_app
 from ad_classifier.cli import app as cli_app
 from ad_classifier.db.connection import open_database, open_readonly_database
 from ad_classifier.entity_graph.crawler import (
+    DefaultPageFetcher,
     EntityWebCrawler,
     FetchedPage,
     PageLink,
     _ad_suggestion_apply_safety,
+    _clean_search_url,
     _dedupe_targets,
     _fallback_reference_urls,
+    _looks_blocked_or_challenged,
     _owner_supported_by_evidence,
 )
 from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
@@ -782,8 +785,78 @@ def test_crawler_target_dedupe_keeps_reference_search_slots() -> None:
 def test_fallback_reference_urls_use_brand_and_product_candidates() -> None:
     urls = _fallback_reference_urls(product_name="RAV4", brand="Toyota", advertiser=None)
 
+    assert urls[:2] == ["https://www.toyota.com/", "https://www.toyota.com/rav4/"]
     assert "https://www.toyota.com/rav4/" in urls
     assert "https://www.toyota.com/" in urls
+
+
+def test_clean_search_url_accepts_duckduckgo_redirect_links() -> None:
+    url = _clean_search_url(
+        "//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.gmc.com%2Ftrucks%2Fsierra%2F1500&rut=abc"
+    )
+
+    assert url == "https://www.gmc.com/trucks/sierra/1500"
+
+
+def test_blocked_page_detection_catches_access_denied_without_product_false_positive() -> None:
+    denied = FetchedPage(
+        url="https://www.gmc.com/sierra-1500/",
+        final_url="https://www.gmc.com/sierra-1500/",
+        status_code=403,
+        title="Access Denied",
+        description=None,
+        text='You do not have permission to access "http://www.gmc.com/sierra-1500/"',
+        fetcher="http",
+    )
+    challenger = FetchedPage(
+        url="https://www.dodge.com/challenger/",
+        final_url="https://www.dodge.com/challenger/",
+        status_code=200,
+        title="Dodge Challenger",
+        description="Explore Challenger performance trims.",
+        text="The Dodge Challenger is a performance coupe with available V8 power.",
+        fetcher="http",
+    )
+
+    assert _looks_blocked_or_challenged(denied)
+    assert not _looks_blocked_or_challenged(challenger)
+
+
+def test_default_fetcher_uses_browser_fallback_for_access_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    http_page = FetchedPage(
+        url="https://www.gmc.com/sierra-1500/",
+        final_url="https://www.gmc.com/sierra-1500/",
+        status_code=403,
+        title="Access Denied",
+        description=None,
+        text='Access Denied. You do not have permission to access "http://www.gmc.com/sierra-1500/".',
+        fetcher="http",
+    )
+    browser_page = FetchedPage(
+        url="https://www.gmc.com/sierra-1500/",
+        final_url="https://www.gmc.com/sierra-1500/",
+        status_code=200,
+        title="2026 GMC Sierra 1500",
+        description="GMC Sierra 1500 pickup truck details.",
+        text="The GMC Sierra 1500 is a light-duty pickup truck from GMC.",
+        fetcher="browser",
+    )
+
+    monkeypatch.setattr("ad_classifier.entity_graph.crawler._fetch_with_http", lambda _url, _config: http_page)
+    monkeypatch.setattr("ad_classifier.entity_graph.crawler._fetch_with_browser", lambda _url, _config: browser_page)
+
+    page = DefaultPageFetcher().fetch(
+        SubmittedAdWebTarget(
+            ad_id="ad_one",
+            url="https://www.gmc.com/sierra-1500/",
+            domain="www.gmc.com",
+            source="reference_search_fallback",
+        ),
+        EntityCrawlerConfig(crawler={"use_browser_fallback": True}),
+    )
+
+    assert page.fetcher == "browser"
+    assert page.status_code == 200
 
 
 def test_product_variant_suggestions_are_review_only() -> None:
