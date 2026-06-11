@@ -247,6 +247,14 @@ The final result must follow this shape:
 
 ## Post-submission experimental work: product entity graph
 
+> **Status (2026-06-11): merged.** This work was explicitly approved and
+> fast-forward merged into `main`; the `experimental` branch is retired. The
+> branch-isolation rules below are kept for historical context only — the
+> standard Git workflow (commit and push directly to `main`) applies to all
+> work again. The data-isolation rules (separate `entity_graph.db`, read-only
+> access to submitted records, candidate-vs-confirmed separation) remain in
+> force.
+
 These instructions override the Git workflow above only for Product Entity Pages + Graph Relations and directly related experimental work.
 
 - This work is post-submission / experimental. It must be isolated from the submitted demo and must not change submitted demo behavior except for strictly additive navigation labels or clearly separated experimental routes.

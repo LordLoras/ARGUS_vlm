@@ -9,20 +9,23 @@ def test_example_config_uses_current_vlm_schema_and_model():
     config, source = load_config(Path("config.example.yaml"))
 
     assert source.name == "config.example.yaml"
-    assert config.vlm.mode == "local"
+    assert config.vlm.mode == "frontier"
+    assert config.vlm.frontier.model == "moonshotai/kimi-k2.5"
+    assert config.vlm.frontier.endpoint == "https://openrouter.ai/api/v1/chat/completions"
+    assert config.vlm.frontier.api_key_env == "OPENROUTER_API_KEY"
+    assert config.vlm.frontier.max_tokens == 8192
+    # The local fallback preset stays intact for offline runs.
     assert config.vlm.local.model == "Qwen3.6-27B-Q4_K_M"
     assert config.vlm.local.endpoint == "http://127.0.0.1:1234/v1"
     assert config.vlm.local.timeout_s >= 240
-    assert config.vlm.local.temperature == 0.1
-    assert config.vlm.local.max_tokens == 8192
 
 
 def test_vlm_mode_resolves_endpoint():
     config, source = load_config(Path("config.example.yaml"))
 
-    assert config.vlm.mode == "local"
-    assert config.vlm.endpoint.model == config.vlm.local.model
-    assert config.vlm.endpoint.endpoint == config.vlm.local.endpoint
+    assert config.vlm.mode == "frontier"
+    assert config.vlm.endpoint.model == config.vlm.frontier.model
+    assert config.vlm.endpoint.endpoint == config.vlm.frontier.endpoint
 
 
 def test_vlm_remote_mode():
