@@ -6,17 +6,23 @@ import {
   BadgeCheck,
   Bot,
   Camera,
+  CheckCircle2,
   Database,
   FileSearch,
   GitBranch,
   Globe2,
   Layers,
+  Link2,
   ListChecks,
   Network,
   Radar,
   Route,
   ScanSearch,
   ShieldCheck,
+  ShieldAlert,
+  Timer,
+  TrendingUp,
+  Webhook,
 } from "lucide-react";
 
 import bannerUrl from "../../banner.jpg";
@@ -123,16 +129,79 @@ const ROUTE_LINKS: RouteItem[] = [
   },
 ];
 
-const ROADMAP = [
-  ["Search targets", "Continue improving generated brand-product and brand-only search queries, while exposing query metadata, parsed result URLs, and manual official-target overrides."],
-  ["Crawler runs", "Keep long crawler work in persisted background run records so hosted requests do not depend on a single browser tab or proxy timeout."],
-  ["Crawler reruns", "Use skip, idempotent rerun, and selected refresh modes so stale crawler artifacts can be replaced without resetting the full experimental graph."],
-  ["Crawler evidence", "Improve target selection, blocked-page detection, official-page follow-ups, and VLM JSON verification so product and brand facts are cleaner before review."],
-  ["Browser escalation", "Use optional Playwright rendering and screenshot-to-VLM verification for pages where HTML text, metadata, or static fetches are insufficient."],
-  ["Data quality", "Use suggested corrections to repair incorrect projected ad fields only after explicit approval, with an audit trail."],
-  ["Taxonomy", "Align graph categories to IAB product and content taxonomy IDs, keeping free-text category names as unmapped hints."],
-  ["Upload assist", "Offer an optional ingest mode that can keep initial metadata, use reviewed graph facts, or crawl again to reinforce weak fields."],
-  ["Scale path", "Keep the SQLite graph schema portable so the same model can migrate to a dedicated graph database later if volume requires it."],
+const ROADMAP_CARDS: CardItem[] = [
+  {
+    title: "Scheduled re-crawls",
+    body: "Automatically re-visit confirmed entities on a configurable cadence to detect stale product pages, discontinued products, or brand changes. Reruns are currently manual.",
+    icon: Timer,
+    color: "var(--rose)",
+  },
+  {
+    title: "Crawl success metrics",
+    body: "Dashboard stats tracking block rate, success rate, and average evidence per entity. Makes it possible to measure whether the anti-bot resolver and search API integrations are improving coverage.",
+    icon: TrendingUp,
+    color: "var(--sky)",
+  },
+  {
+    title: "Structured search API",
+    body: "Replace DuckDuckGo HTML scraping with a paid search API for stable, structured discovery results that bypass bot-detection layers entirely.",
+    icon: Radar,
+    color: "var(--sky)",
+  },
+  {
+    title: "Anti-bot resolver",
+    body: "Add a Cloudflare challenge resolver to recover blocked pages when standard HTTP and browser fallback both fail against 403, CAPTCHA, and WAF protections.",
+    icon: ShieldAlert,
+    color: "var(--rose)",
+  },
+  {
+    title: "Deep crawls",
+    body: "Extend the crawler beyond landing pages to follow internal product catalog links, category listings, and specification pages so that a single seed URL can surface multiple related entities.",
+    icon: Webhook,
+    color: "var(--sky)",
+  },
+  {
+    title: "Chain search",
+    body: "When a crawl or VLM pass identifies a distinct product or brand with high confidence, automatically queue it as a new crawl target and insert the resulting entity into the graph without manual review.",
+    icon: Link2,
+    color: "var(--accent-2)",
+  },
+  {
+    title: "Search targets",
+    body: "Continue improving generated brand-product and brand-only search queries while exposing query metadata, parsed result URLs, and manual official-target overrides.",
+    icon: Globe2,
+    color: "var(--sky)",
+  },
+  {
+    title: "Evidence quality",
+    body: "Improve target selection, blocked-page detection, official-page follow-ups, and VLM verification so product and brand facts are cleaner before review.",
+    icon: FileSearch,
+    color: "var(--amber)",
+  },
+  {
+    title: "Data quality",
+    body: "Use suggested corrections to repair incorrect projected ad fields only after explicit approval, with an audit trail.",
+    icon: BadgeCheck,
+    color: "var(--emerald)",
+  },
+  {
+    title: "Taxonomy alignment",
+    body: "Significant improvement needed to align graph categories to IAB product and content taxonomy IDs. Free-text category names are currently treated as unmapped hints and require systematic mapping and review.",
+    icon: ListChecks,
+    color: "var(--rose)",
+  },
+  {
+    title: "Upload assist",
+    body: "Offer an optional ingest mode that can keep initial metadata, use reviewed graph facts, or crawl again to reinforce weak fields.",
+    icon: Layers,
+    color: "var(--sky)",
+  },
+  {
+    title: "Scale path",
+    body: "Keep the SQLite graph schema portable so the same model can migrate to a dedicated graph database later if volume requires it.",
+    icon: Database,
+    color: "var(--amber)",
+  },
 ];
 
 export function ExperimentalAbout() {
@@ -152,11 +221,10 @@ export function ExperimentalAbout() {
             <h1>Experimental Workbench</h1>
             <p className="about-hero-subtitle">
               A focused workspace for turning ad-level observations into durable product, brand,
-              owner, category, and taxonomy records. The workflow now supports submitted URLs,
-              manual reference targets, and search-backed discovery while keeping experimental
-              graph writes separate from submitted ad records. Crawler runs can now skip completed
-              ads, rerun idempotently, refresh selected discovery artifacts, and continue as
-              background work beyond a proxy response timeout.
+              owner, category, and taxonomy records. Submitted URLs, manual reference targets, and
+              search-backed discovery feed a separate entity graph without modifying core ad records.
+              Crawler runs persist as background jobs with skip, idempotent rerun, and refresh modes,
+              and Playwright rendering handles pages that need JavaScript or screenshot verification.
             </p>
             <div className="about-hero-actions">
               <Link to="/experimental/products" className="about-btn about-btn-primary">
@@ -222,15 +290,15 @@ export function ExperimentalAbout() {
         </div>
         <div className="about-lead-block">
           <p>
-            The experimental area explores how ARGUS can move from individual ad classifications
-            toward a reusable entity graph. The goal is to make products and brands more accurate,
-            auditable, and useful over time without treating every early signal as confirmed data.
-            Current crawler work focuses on making missing targets explicit: an ad can use submitted
-            URLs, a user-provided official URL, or generated brand/product search queries. Reruns
-            are now explicit: skip already-crawled ads, rerun without clearing prior evidence, or
-            refresh selected crawler artifacts when stale rows need to be replaced. Long crawls
-            are represented as background runs so navigation, Cloudflare timeouts, and browser
-            refreshes do not lose the run state.
+            The experimental area moves ARGUS from individual ad classifications toward a reusable
+            entity graph. Products and brands are tracked as durable, auditable records rather than
+            treating every early signal as confirmed data. The crawler resolves missing targets
+            through submitted URLs, user-provided official URLs, or generated brand and product
+            search queries. Crawl runs persist in the background with support for skipping completed
+            ads, idempotent reruns, and selective artifact refresh. Playwright browser escalation
+            and screenshot-to-VLM verification handle pages where static fetches are insufficient.
+            Current focus is on expanding coverage through structured search APIs, anti-bot
+            resolvers, and deeper crawl strategies.
           </p>
         </div>
         <CardGrid items={WORKBENCH_CARDS} />
@@ -278,15 +346,7 @@ export function ExperimentalAbout() {
             <p>A practical roadmap for making the graph useful as a quality layer for future uploads.</p>
           </div>
         </div>
-        <div className="about-stack-table">
-          {ROADMAP.map(([label, detail]) => (
-            <div key={label} className="about-stack-row">
-              <strong>{label}</strong>
-              <span>{detail}</span>
-              <code>experimental graph</code>
-            </div>
-          ))}
-        </div>
+        <CardGrid items={ROADMAP_CARDS} columns="two" />
         <div className="about-plain-callout about-plain-callout-sky">
           <ShieldCheck size={18} />
           <span>
