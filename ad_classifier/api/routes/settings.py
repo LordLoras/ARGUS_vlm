@@ -152,4 +152,5 @@ def _configured_key_usage(config: AppConfig) -> dict[str, set[str]]:
         add(f"glm_ocr.{mode}", getattr(config.glm_ocr, mode).api_key_env)
     add("agent.endpoint", config.agent.endpoint.api_key_env)
     add("creative_panel.endpoint", config.creative_panel.endpoint.api_key_env)
+    add("api.public", config.api.public.api_key_env)
     return usage

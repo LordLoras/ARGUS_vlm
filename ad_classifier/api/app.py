@@ -118,11 +118,14 @@ def create_app(
     )
 
     if config.api.public.enabled:
+        from ad_classifier._env import resolve_api_key
         from ad_classifier.api.middleware import ApiKeyMiddleware
 
         app.add_middleware(
             ApiKeyMiddleware,
-            public_api_key=config.api.public.api_key,
+            public_api_key=(
+                config.api.public.api_key or resolve_api_key(config.api.public.api_key_env)
+            ),
         )
 
     app.include_router(ads_router, prefix="/api")

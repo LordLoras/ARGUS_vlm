@@ -249,7 +249,10 @@ class PublicApiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     enabled: bool = False
+    # Inline api_key is never written back to config.yaml (config_file_payload
+    # excludes it); api_key_env + .env.local is the durable source.
     api_key: str | None = None
+    api_key_env: str | None = "ARGUS_PUBLIC_API_KEY"
 
 
 class APIConfig(BaseModel):

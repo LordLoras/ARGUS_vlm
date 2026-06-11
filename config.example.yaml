@@ -324,11 +324,13 @@ api:
       - video/quicktime
       - video/webm
   # Public read-only API under /api/public/*. Requires an API key.
-  # Set enabled: true and api_key to a secret string to activate.
-  # With api_key: null, /api/public routes stay mounted but return 403.
+  # The key is read from the env var named by api_key_env — set it in
+  # .env.local (or the process environment); it is never stored in this file,
+  # and saving settings from the UI cannot remove it.
+  # With no key available, /api/public routes stay mounted but return 403.
   public:
     enabled: true
-    api_key: null
+    api_key_env: ARGUS_PUBLIC_API_KEY
 
 worker:
   # Polling interval for queued jobs. Lower reacts faster; higher is quieter.

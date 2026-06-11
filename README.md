@@ -607,17 +607,24 @@ ARGUS exposes a read-only public API under `/api/public/*` for external
 integrations. Public endpoints require an API key passed via the `X-API-Key`
 header or `api_key` query parameter.
 
-Enable in `config.yaml`:
+Enable in `config.yaml` and put the key itself in `.env.local` (like every
+other secret):
 
 ```yaml
 api:
   public:
     enabled: true
-    api_key: "<api-key>"
+    api_key_env: ARGUS_PUBLIC_API_KEY
 ```
 
-Committed examples keep `api_key: null`; in that state `/api/public/*` routes
-return 403 until a local `config.yaml` sets a real key.
+```bash
+# .env.local
+ARGUS_PUBLIC_API_KEY="<api-key>"
+```
+
+The key is resolved from the env var named by `api_key_env` at API startup —
+it is never written to `config.yaml`, so saving settings from the UI cannot
+remove it. With no key available, `/api/public/*` routes return 403.
 
 Public endpoints:
 
