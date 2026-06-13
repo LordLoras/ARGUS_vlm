@@ -358,9 +358,9 @@ use the one file concurrently.
 
 **D1 — Q: Library and campaign numbers?**
 
-**A:** **28 ads** in the demo library · **5 Jeep ads** = one campaign
+**A:** **30 ads** in the demo library · **5 Jeep ads** = one campaign
 ("Declaration of Deals") · ~**60 snapshots** per 30s spot (every 0.5s) ·
-pipeline time **~2.5 min median per ad** (45s–6.5min across all 28 jobs).
+pipeline time **~2.5 min median per ad** (45s–6.5min across the library jobs).
 
 ---
 
@@ -551,6 +551,179 @@ Words like `tv show`, `lawyer`, `car`, and `truck` also trigger intent filters t
 drop unrelated categories. If the user wants literal `red car`, that needs object/color
 grounding (YOLO-style detection + color inside the car box); SigLIP alone is semantic
 similarity, not a detector.
+
+---
+
+**E17 — Q: "Which search mode should I use during the live demo?"**
+
+**A:** Use the mode that matches the claim you're demonstrating:
+- **Keyword:** exact text/OCR/entity lookup — best for offers, prices, phone numbers.
+- **Text vector:** semantic meaning over transcript + OCR + entities — best for
+  paraphrases like `television show fishing boat next friday`.
+- **Hybrid:** starts keyword-first, then falls back to text-vector + RRF when exact
+  words miss — best for natural-language analyst questions.
+- **Visual:** typed phrase → SigLIP frame search — best for concrete scenes, not tiny
+  two-word object queries.
+- **Visual + OCR:** fusion path for text-heavy visual queries; great when the visible
+  offer text is the point, weaker for purely visual scenes.
+
+---
+
+**E18 — Q: "What do the search scores mean?"**
+
+**A:** Different modes expose different ranking signals; don't compare them across
+modes as one universal score.
+- `score`: cosine-style relevance after thresholding; higher is better.
+- `distance`: raw nearest-neighbor vector distance; lower is better.
+- `rerank_score`: post-processing boost from OCR/transcript/entity token evidence;
+  higher is better.
+- `rrf_score`: reciprocal rank fusion points from combined ranked lists; higher is
+  better, but values look small.
+- `vec_distance`: text-vector raw distance in hybrid fallback; lower is better.
+For presenters: say "ranking signal," not "probability."
+
+---
+
+**E19 — Q: "Why does Visual + OCR sometimes return zero when Visual returns results?"**
+
+**A:** Because Visual + OCR is stricter. Plain Visual can return weak frame-neighbor
+matches after a low visual threshold. Visual + OCR tries to fuse visual candidates with
+text/OCR evidence and uses a higher visual-hybrid threshold; if the query has no strong
+OCR/FTS side or no candidate clears the combined bar, it returns nothing. Say:
+**Visual is exploratory; Visual + OCR is evidence-fused.** For clean demos, use
+offer/text-heavy queries like `five year price guarantee satellite coverage`.
+
+---
+
+**E20 — Q: "How should I phrase a visual query so it works cleanly?"**
+
+**A:** Use four anchors: **scene + object + visible text + category cue**.
+Weak: `crab boat`.
+Strong: `tv show weathered paper note next friday fishing boat`.
+Weak: `red car`.
+Stronger: `red heart shaped Toyota lease offer graphic`.
+The query is still one embedding, not a checklist, but concrete nouns and visible text
+make the vector more specific, and category words like `tv show` or `lawyer` can
+activate intent filters.
+
+---
+
+**E21 — Q: "Why is `red car` a weak demo query?"**
+
+**A:** It is short, common, and literal. The database is vehicle-heavy, and frame-level
+embeddings see the whole image: red sale graphics, red banners, tail lights, or a red
+background can all pull results toward `red car`. SigLIP is semantic similarity, not
+object detection. To make literal `red car` robust, ARGUS would need an object/color
+grounding stage: detect the car box, measure red inside that box, then rank with
+SigLIP.
+
+---
+
+**E22 — Q: "What are intent filters?"**
+
+**A:** A lightweight safety rail after retrieval. The query is tokenized; known terms
+map to categories:
+- `tv`, `show`, `weekly` → entertainment/media.
+- `lawyer`, `attorney`, `legal`, `injury` → legal.
+- `car`, `truck`, `suv`, `vehicle`, `wrangler`, `cherokee`, `gladiator` → automotive.
+If one of those terms appears, ARGUS drops retrieved ads outside that category. That's
+why `tv show ... fishing boat` is clean while `crab boat` is broad.
+
+---
+
+**E23 — Q: "What do I say if a live search returns extra weak matches?"**
+
+**A:** Own it and explain the ranking. "The top hit is the one we want; the lower rows
+are weak visual-neighbor matches because Visual mode is exploratory. If I switch to
+Text vector, Hybrid, or add the category cue `tv show`, the evidence filters tighten
+it to one result." Then run the clean fallback from the demo sheet. Don't apologize;
+show that the system exposes the ranking and evidence instead of hiding it.
+
+---
+
+**E24 — Q: "What's the difference between raw OCR, GLM-OCR, and VLM corrections?"**
+
+**A:** **Raw OCR** is the grounded text layer from PaddleOCR: text, box, confidence,
+engine, timestamp — never overwritten. **GLM-OCR** is an optional local document-style
+OCR pass for dense/hard frames; when enabled for search it becomes additional searchable
+OCR, not a replacement. **VLM corrections** are verification notes inside the evidence
+bundle or final structured output; they can explain likely OCR errors, but raw OCR
+stays intact so every claim can be audited against the original read.
+
+---
+
+**E25 — Q: "What happens if OCR reads fine print wrong?"**
+
+**A:** Three guardrails. First, the raw OCR with confidence and frame timestamp is
+preserved, so the mistake is inspectable. Second, dense or low-confidence frames can
+escalate to an additional OCR/VLM pass. Third, the final VLM output must cite evidence
+and a deterministic checker drops ungrounded claims before saving. The honest line:
+OCR can be wrong; ARGUS makes the error visible and recoverable instead of silently
+turning it into truth.
+
+---
+
+**E26 — Q: "Can an analyst correct bad extracted data?"**
+
+**A:** Yes, but through controlled paths. The API can patch user-facing projection
+fields like brand, products, category, promotion, offers, and CTAs. The experimental
+crawler can propose ad-change suggestions, but applying one is human-gated and limited
+to the four whitelisted ad columns. The JSON source of truth remains the audit record;
+projection columns are convenience copies for fast lists, filters, and demos.
+
+---
+
+**E27 — Q: "Why only 12 frames to the VLM if every kept frame is searchable?"**
+
+**A:** Cost and evidence density. Search benefits from broad coverage, so every kept
+frame gets a SigLIP vector. The VLM is expensive, so it receives a deterministic
+12-frame evidence bundle: first/last, rule-trigger frames, OCR-dense frames, then
+time-distributed fill. That means visual search can find a frame the classifier never
+saw, while classification still uses the most information-rich evidence.
+
+---
+
+**E28 — Q: "How does campaign discovery avoid merging ads that only look similar?"**
+
+**A:** Similarity is a proposal signal, not an automatic merge. Discovery is scoped by
+brand, uses visual embeddings and campaign-name signals, checks cluster coherence, and
+returns candidate campaigns for analyst acceptance. Jeep is the story: same footage,
+different offers — ARGUS links them as a campaign family while keeping each ad's offer
+record separate. The machine proposes; the analyst decides.
+
+---
+
+**E29 — Q: "What exactly is audited?"**
+
+**A:** The paper trail spans the whole system:
+- Jobs and stages: status, error message, cached artifacts.
+- Evidence: frames, OCR items, transcript segments, rule triggers, classifier output.
+- Agent: sessions, messages, tool calls, and citations.
+- Campaigns: assignments and whether they were auto or user curated.
+- Crawler/entity graph: crawl runs, trace items, provenance, suggestions, approvals.
+The point: answers aren't just generated; they are replayable.
+
+---
+
+**E30 — Q: "What fails gracefully if LM Studio or a frontier model is unavailable?"**
+
+**A:** In production pipeline terms, a model outage marks the job failed with a short
+user-facing error and the traceback goes to logs only. Cached upstream artifacts stay
+on disk, so a rerun resumes from the failed stage and downstream stages. For tests and
+offline development, OCR, VLM, embeddings, and vector-store integrations have mock
+paths. Creative panel also has deterministic fallback behavior. "Graceful" means
+audited degradation, not pretending the stage succeeded.
+
+---
+
+**E31 — Q: "How would this scale past one local SQLite file?"**
+
+**A:** The interfaces are already split for that. SQLite + FTS5 + sqlite-vec is the
+zero-infrastructure local deployment. If volume outgrows it, the natural split is:
+Postgres for relational metadata, Qdrant or another vector backend for embeddings,
+object storage for frames/video, and a worker queue for ingestion jobs. The pipeline
+models and vector-store interface are designed so that migration is operational, not a
+rewrite. But the demo's claim is local-first: one machine, one file, no cloud required.
 
 ---
 
