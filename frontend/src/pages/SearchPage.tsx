@@ -30,6 +30,8 @@ const STATUS_OPTIONS = [
   { value: "new", label: "New" }
 ] as const;
 
+const RESULT_LIMIT_OPTIONS = [3, 5, 10, 20, 50] as const;
+
 export function SearchPage() {
   const [q, setQ] = useState("");
   const [adId, setAdId] = useState("");
@@ -37,6 +39,7 @@ export function SearchPage() {
   const [promotion, setPromotion] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
+  const [resultLimit, setResultLimit] = useState<(typeof RESULT_LIMIT_OPTIONS)[number]>(10);
   const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("hybrid");
   const [submitted, setSubmitted] = useState<{
     q: string;
@@ -47,13 +50,14 @@ export function SearchPage() {
     status: string;
     mode: string;
     rerank: boolean;
+    k: number;
   } | null>(null);
   const navigate = useNavigate();
   const health = useApiHealth();
 
   const query = useQuery({
     queryKey: ["search", submitted],
-    queryFn: () => api.search({ ...submitted!, k: 20 }),
+    queryFn: () => api.search(submitted!),
     enabled: Boolean(submitted)
   });
 
@@ -84,7 +88,17 @@ export function SearchPage() {
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            setSubmitted({ q, ad_id: adId, brand, promotion, category, status, mode, rerank: true });
+            setSubmitted({
+              q,
+              ad_id: adId,
+              brand,
+              promotion,
+              category,
+              status,
+              mode,
+              rerank: true,
+              k: resultLimit
+            });
           }}
         >
           <div className="search-primary-row">
@@ -185,6 +199,23 @@ export function SearchPage() {
                   {STATUS_OPTIONS.map((option) => (
                     <option key={option.value || "any"} value={option.value}>
                       {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="search-field">
+                <span className="search-label">Results</span>
+                <select
+                  className="input search-filter"
+                  name="search_result_limit"
+                  value={resultLimit}
+                  onChange={(e) =>
+                    setResultLimit(Number(e.target.value) as (typeof RESULT_LIMIT_OPTIONS)[number])
+                  }
+                >
+                  {RESULT_LIMIT_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      Top {option}
                     </option>
                   ))}
                 </select>
