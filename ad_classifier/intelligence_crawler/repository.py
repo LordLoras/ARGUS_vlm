@@ -11,6 +11,7 @@ from pathlib import Path
 from ad_classifier.entity_graph.rows import loads_dict, loads_list, to_json
 from ad_classifier.intelligence_crawler.ids import campaign_group_id, evidence_id
 from ad_classifier.intelligence_crawler.models import (
+    IntelEvidence,
     IntelResource,
     IntelSignal,
     IntelSource,
@@ -336,6 +337,25 @@ class IntelRepository:
         for row in rows:
             result.setdefault(str(row["signal_id"]), []).append(str(row["url"]))
         return result
+
+    def evidence_for(self, conn: sqlite3.Connection, signal_id: str) -> list[IntelEvidence]:
+        rows = conn.execute(
+            "SELECT * FROM intel_signal_evidence WHERE signal_id = ?", (signal_id,)
+        ).fetchall()
+        return [
+            IntelEvidence(
+                id=row["id"],
+                signal_id=row["signal_id"],
+                resource_id=row["resource_id"],
+                source_id=row["source_id"],
+                evidence_type=row["evidence_type"],
+                url=row["url"],
+                text=row["text"],
+                published_at=parse_iso(row["published_at"]),
+                confidence=float(row["confidence"] or 0.0),
+            )
+            for row in rows
+        ]
 
     # ---- runs ------------------------------------------------------------------
 

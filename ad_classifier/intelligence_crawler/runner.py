@@ -156,16 +156,26 @@ class IntelRunner:
 
             if detection.baseline_mode:
                 self.repo.set_source_activated(conn, source.id, detection.activated_at)
+            # A poll that returned errors (e.g. HTTP 4xx, bad config) but didn't raise is
+            # "degraded evidence": surface it on the source state and the run item, but keep
+            # going — it is not a whole-source failure.
+            poll_error = "; ".join(result.errors)[:240] if result.errors else None
             self.repo.update_source_state(
                 conn,
                 source.id,
                 last_success_at=now,
-                last_error=None,
+                last_error=poll_error,
                 consecutive_errors=0,
                 watermark=result.new_watermark or state.watermark,
                 etag=result.etag or state.etag,
                 last_modified=result.last_modified or state.last_modified,
             )
+            if detection.baseline_mode:
+                reason = "baseline first poll (no live signals)"
+            elif poll_error:
+                reason = f"poll errors: {poll_error}"
+            else:
+                reason = None
             return SourceRunItem(
                 source_id=source.id,
                 status="polled",
@@ -173,7 +183,7 @@ class IntelRunner:
                 new_signals=new_signals,
                 backfilled=backfilled,
                 baseline=detection.baseline_mode,
-                reason="baseline first poll (no live signals)" if detection.baseline_mode else None,
+                reason=reason,
             )
         finally:
             self.repo.release_lease(conn, source_cfg.id)

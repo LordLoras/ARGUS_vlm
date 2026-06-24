@@ -88,10 +88,22 @@ def test_repoll_is_idempotent(tmp_path):
     assert second.signal_count == 0  # nothing new on re-poll
 
 
+class _BoomAdapter:
+    tier = "A"
+
+    def __init__(self, *, http=None, intel_config=None):
+        pass
+
+    def poll(self, source, state, *, now):
+        raise RuntimeError("boom")
+
+
 def test_source_failure_marks_run_degraded(tmp_path):
     db = tmp_path / "intel.db"
-    # The youtube adapter is a Phase-3 stub whose poll() raises.
-    cfg = _config(db, [], source_type="youtube_channel")
-    summary = IntelRunner(cfg, now_fn=lambda: T1).run(due=True)
+    cfg = _config(db, [])
+    # Force the adapter to raise (a whole-source failure) via the factory seam.
+    summary = IntelRunner(
+        cfg, now_fn=lambda: T1, adapter_factory=lambda _stype: _BoomAdapter()
+    ).run(due=True)
     assert summary.status == "degraded"
     assert summary.items[0].status == "failed"

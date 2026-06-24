@@ -16,6 +16,7 @@ from ad_classifier.api.routes.creative_panel import router as creative_panel_rou
 from ad_classifier.api.routes.embeddings import router as embeddings_router
 from ad_classifier.api.routes.entity_graph import router as entity_graph_router
 from ad_classifier.api.routes.evidence import router as evidence_router
+from ad_classifier.api.routes.intelligence import router as intelligence_router
 from ad_classifier.api.routes.jobs import router as jobs_router
 from ad_classifier.api.routes.knowledge import router as knowledge_router
 from ad_classifier.api.routes.public import router as public_router
@@ -25,6 +26,8 @@ from ad_classifier.api.routes.stats import router as stats_router
 from ad_classifier.config import load_config, resolve_config_path
 from ad_classifier.db.connection import initialize_database, load_sqlite_vec, open_database
 from ad_classifier.entity_graph.manager import EntityGraphManager
+from ad_classifier.intelligence_crawler.config import load_intel_config
+from ad_classifier.intelligence_crawler.manager import IntelManager
 from ad_classifier.knowledge.manager import KnowledgeManager
 from ad_classifier.vectors.sqlite_vec import SqliteVecStore
 
@@ -96,6 +99,17 @@ def create_app(
         knowledge_db_path=kb_path,
     )
 
+    # Intelligence crawler (separate store; reads submitted/graph data read-only). Uses
+    # intelligence_crawler.yaml beside config.yaml if present; otherwise defaults with the
+    # DB placed next to the main SQLite DB.
+    intel_config_path = config_file.parent / "intelligence_crawler.yaml"
+    intel_config = load_intel_config(intel_config_path)
+    if not intel_config_path.exists():
+        intel_config = intel_config.model_copy(
+            update={"db_path": resolved_db.parent / "intelligence_crawler.db"}
+        )
+    app.state.intel_manager = IntelManager(intel_config)
+
     @app.get("/", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "ad-classifier"}
@@ -140,6 +154,7 @@ def create_app(
     app.include_router(knowledge_router, prefix="/api")
     app.include_router(embeddings_router, prefix="/api")
     app.include_router(entity_graph_router, prefix="/api")
+    app.include_router(intelligence_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
     if config.api.public.enabled:
         app.include_router(public_router, prefix="/api")
