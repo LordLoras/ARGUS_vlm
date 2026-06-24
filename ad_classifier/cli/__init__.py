@@ -8,6 +8,7 @@ from ad_classifier.cli.campaigns import campaigns_app
 from ad_classifier.cli.dedup import dedup_check
 from ad_classifier.cli.entity_graph import entity_graph_app
 from ad_classifier.cli.ingest import ingest
+from ad_classifier.intelligence_crawler.cli import intel_app
 from ad_classifier.cli.ocr import ocr_cmd
 from ad_classifier.cli.operational import api, init_db, recover_jobs, reindex_visual_frames, worker
 
@@ -66,3 +67,4 @@ app.command("bench-vectors")(bench_vectors)
 app.add_typer(campaigns_app, name="campaigns")
 app.add_typer(agent_app, name="agent")
 app.add_typer(entity_graph_app, name="entity-graph")
+app.add_typer(intel_app, name="intel")

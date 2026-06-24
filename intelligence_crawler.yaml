@@ -1,0 +1,81 @@
+# Intelligence crawler configuration (US market only).
+#
+# Brand-anchored awareness crawler: detects when a watched US brand publishes a new
+# ad/campaign. Separate from entity_crawler.yaml. All sources are DISABLED by default,
+# so an unconfigured install is a no-op. Secrets (API keys) go in .env.local and are
+# referenced here by env-var NAME only — never paste secrets into this file.
+
+enabled: true
+db_path: ./intelligence_crawler.db
+cache_dir: ./data/intelligence_crawler_cache
+market: US
+
+http:
+  respect_robots_txt: true
+  timeout_s: 12.0
+  rate_limit_per_minute: 20
+  max_page_bytes: 2000000
+  user_agent: "ARGUS-IntelligenceCrawler/0.1 (+local analyst tool)"
+
+detection:
+  # Newly-seen items older than this (by publish date) are recorded as backfill, not
+  # emitted as live "new ad" signals. The first poll of any source is always baseline.
+  new_signal_lookback_days: 30
+  stale_after_days: 45
+
+scoring:
+  tier_weights: {A: 0.55, B: 0.35, C: 0.15}
+  ad_likeness_bonus: 0.15
+  corroboration_bonus: 0.2
+  corroboration_cap: 0.4
+  corroborated_min_confidence: 0.7
+
+watchlist:
+  # Watchlist = entity-graph brand nodes (read-only) UNION the seed list below.
+  include_graph_brands: true
+  entity_graph_db_path: ./entity_graph.db
+  seed_brands:
+    - Toyota
+    - Ford
+    - Jeep
+    - T-Mobile
+    - Apple
+    - McDonald's
+    - Progressive
+    - Geico
+
+sources:
+  # --- Real adapters (Phase 3/4 — currently skeletons, keep disabled) -------------
+  # - id: toyota_youtube
+  #   brand: Toyota
+  #   source_type: youtube_channel
+  #   tier: A
+  #   enabled: false
+  #   platform: youtube
+  #   platform_id: "UC-OFFICIAL-TOYOTA-USA-CHANNEL-ID"   # pin the US channel
+  #   poll_interval_hours: 12
+  #   config:
+  #     api_key_env: YOUTUBE_API_KEY   # only needed for enrich-on-new; detection is feed-only
+  #
+  # - id: toyota_newsroom
+  #   brand: Toyota
+  #   source_type: rss
+  #   tier: A
+  #   enabled: false
+  #   url: "https://pressroom.toyota.com/feed/"          # pin the US newsroom
+  #   poll_interval_hours: 12
+
+  # --- Offline demo source (no network). Flip enabled: true to try the pipeline. ---
+  - id: demo_mock
+    brand: Toyota
+    source_type: mock
+    tier: A
+    enabled: false
+    config:
+      items:
+        - external_id: yt_demo_0001
+          url: https://www.youtube.com/watch?v=demo0001
+          resource_type: video
+          title: "Toyota Camry Reborn — Official Commercial"
+          description: "Introducing the all-new Camry campaign."
+          published_at: "2026-06-20T15:00:00+00:00"

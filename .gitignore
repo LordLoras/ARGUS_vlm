@@ -99,3 +99,6 @@ prompts/agent_schema_summary.txt
 #samples
 /samples/
 *.mp4
+
+# Local-only planning/design docs (not version-controlled)
+/docs/
