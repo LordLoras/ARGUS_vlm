@@ -14,6 +14,7 @@ from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
     DigestEntry,
     IntelSignal,
+    IntelSource,
     WatchedBrand,
 )
 from ad_classifier.intelligence_crawler.repository import IntelRepository
@@ -63,3 +64,37 @@ class IntelManager:
         return IntelRunner(self.config, repo=self.repo).run(
             due=due, source_id=source_id, brand=brand
         )
+
+    # ---- source registry (DB is the source of truth; the UI/CLI curate it) -------
+
+    def list_sources(
+        self, *, enabled_only: bool = False, brand: str | None = None
+    ) -> list[IntelSource]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_sources(conn, enabled_only=enabled_only, brand=brand)
+
+    def get_source(self, source_id: str) -> IntelSource | None:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.get_source(conn, source_id)
+
+    def upsert_source(self, source: IntelSource) -> IntelSource:
+        """Create or update a source. Preserves any existing `source_activated_at`."""
+        with self.repo.connect() as conn:
+            self.repo.sync_sources(conn, [source])
+            conn.commit()
+            stored = self.repo.get_source(conn, source.id)
+        if stored is None:  # pragma: no cover - just written
+            raise KeyError(source.id)
+        return stored
+
+    def set_source_enabled(self, source_id: str, enabled: bool) -> IntelSource | None:
+        with self.repo.connect() as conn:
+            self.repo.set_source_enabled(conn, source_id, enabled)
+            conn.commit()
+            return self.repo.get_source(conn, source_id)
+
+    def delete_source(self, source_id: str) -> bool:
+        with self.repo.connect() as conn:
+            deleted = self.repo.delete_source(conn, source_id)
+            conn.commit()
+            return deleted

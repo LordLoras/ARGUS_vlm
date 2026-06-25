@@ -13,7 +13,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from ad_classifier.entity_graph.utils import digest, normalize_name
 from ad_classifier.intelligence_crawler.manager import IntelManager
+from ad_classifier.intelligence_crawler.models import IntelSource, Tier
 from ad_classifier.intelligence_crawler.timeutils import parse_iso, utcnow
 
 router = APIRouter(tags=["intelligence"])
@@ -23,6 +25,39 @@ class CrawlPayload(BaseModel):
     due: bool = True
     source_id: str | None = None
     brand: str | None = None
+
+
+class SourceCreatePayload(BaseModel):
+    id: str | None = None
+    brand: str
+    source_type: str
+    tier: Tier = "B"
+    url: str | None = None
+    platform: str | None = None
+    platform_id: str | None = None
+    enabled: bool = False
+    poll_interval_hours: float = 12.0
+    config: dict = {}
+
+
+class SourceUpdatePayload(BaseModel):
+    brand: str | None = None
+    source_type: str | None = None
+    tier: Tier | None = None
+    url: str | None = None
+    platform: str | None = None
+    platform_id: str | None = None
+    enabled: bool | None = None
+    poll_interval_hours: float | None = None
+    config: dict | None = None
+
+
+def _new_source_id(payload: SourceCreatePayload) -> str:
+    if payload.id:
+        return payload.id
+    base = normalize_name(payload.brand).replace(" ", "_") or "brand"
+    suffix = digest(payload.source_type, payload.url or payload.platform_id or "")[:6]
+    return f"{base}_{payload.source_type}_{suffix}"
 
 
 def _manager(request: Request) -> IntelManager:
@@ -88,4 +123,60 @@ def run_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
     summary = _manager(request).run_crawl(
         due=payload.due, source_id=payload.source_id, brand=payload.brand
     )
+    return summary.model_dump(mode="json")
+
+
+# ---- source registry (the "Watcher" curation surface) -------------------------
+
+
+@router.get("/intelligence/sources")
+def list_sources(
+    request: Request,
+    brand: str | None = None,
+    enabled_only: bool = Query(default=False),
+) -> dict[str, Any]:
+    items = _manager(request).list_sources(enabled_only=enabled_only, brand=brand)
+    return {"items": [source.model_dump(mode="json") for source in items]}
+
+
+@router.post("/intelligence/sources")
+def create_source(payload: SourceCreatePayload, request: Request) -> dict[str, Any]:
+    source = IntelSource(
+        id=_new_source_id(payload),
+        brand_name=payload.brand,
+        source_type=payload.source_type,
+        tier=payload.tier,
+        url=payload.url,
+        platform=payload.platform,
+        platform_id=payload.platform_id,
+        enabled=payload.enabled,
+        poll_interval_hours=payload.poll_interval_hours,
+        config=payload.config,
+    )
+    return _manager(request).upsert_source(source).model_dump(mode="json")
+
+
+@router.patch("/intelligence/sources/{source_id}")
+def update_source(source_id: str, payload: SourceUpdatePayload, request: Request) -> dict[str, Any]:
+    manager = _manager(request)
+    existing = manager.get_source(source_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="source not found")
+    updates = payload.model_dump(exclude_unset=True)
+    if "brand" in updates:
+        updates["brand_name"] = updates.pop("brand")
+    merged = existing.model_copy(update=updates)
+    return manager.upsert_source(merged).model_dump(mode="json")
+
+
+@router.delete("/intelligence/sources/{source_id}")
+def delete_source(source_id: str, request: Request) -> dict[str, Any]:
+    if not _manager(request).delete_source(source_id):
+        raise HTTPException(status_code=404, detail="source not found")
+    return {"deleted": source_id}
+
+
+@router.post("/intelligence/sources/{source_id}/crawl")
+def crawl_source(source_id: str, request: Request) -> dict[str, Any]:
+    summary = _manager(request).run_crawl(source_id=source_id)
     return summary.model_dump(mode="json")

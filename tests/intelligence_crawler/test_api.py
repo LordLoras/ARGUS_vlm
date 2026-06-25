@@ -94,3 +94,35 @@ def test_crawl_endpoint_runs(tmp_path):
     assert resp.status_code == 200
     # No enabled sources -> a clean, empty run.
     assert resp.json()["status"] in {"completed", "degraded"}
+
+
+def test_source_crud_api(tmp_path):
+    client = _client(tmp_path)
+
+    created = client.post(
+        "/api/intelligence/sources",
+        json={
+            "brand": "Toyota",
+            "source_type": "rss",
+            "tier": "A",
+            "url": "https://pressroom.toyota.com/product/feed/",
+            "enabled": True,
+        },
+    )
+    assert created.status_code == 200
+    source = created.json()
+    sid = source["id"]
+    assert source["brand_name"] == "Toyota" and source["enabled"] is True
+
+    listed = client.get("/api/intelligence/sources").json()["items"]
+    assert any(s["id"] == sid for s in listed)
+    enabled = client.get("/api/intelligence/sources", params={"enabled_only": True}).json()["items"]
+    assert any(s["id"] == sid for s in enabled)
+
+    disabled = client.patch(f"/api/intelligence/sources/{sid}", json={"enabled": False})
+    assert disabled.status_code == 200 and disabled.json()["enabled"] is False
+
+    assert client.delete(f"/api/intelligence/sources/{sid}").status_code == 200
+    assert (
+        client.patch(f"/api/intelligence/sources/{sid}", json={"enabled": True}).status_code == 404
+    )

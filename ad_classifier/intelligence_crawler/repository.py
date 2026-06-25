@@ -85,6 +85,36 @@ class IntelRepository:
         row = conn.execute("SELECT * FROM intel_sources WHERE id = ?", (source_id,)).fetchone()
         return _source(row) if row else None
 
+    def list_sources(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        enabled_only: bool = False,
+        brand: str | None = None,
+    ) -> list[IntelSource]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if enabled_only:
+            clauses.append("enabled = 1")
+        if brand:
+            clauses.append("LOWER(brand_name) = LOWER(?)")
+            params.append(brand)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM intel_sources {where} ORDER BY brand_name, id", params
+        ).fetchall()
+        return [_source(row) for row in rows]
+
+    def set_source_enabled(self, conn: sqlite3.Connection, source_id: str, enabled: bool) -> None:
+        conn.execute(
+            "UPDATE intel_sources SET enabled = ?, updated_at = datetime('now') WHERE id = ?",
+            (int(enabled), source_id),
+        )
+
+    def delete_source(self, conn: sqlite3.Connection, source_id: str) -> bool:
+        cur = conn.execute("DELETE FROM intel_sources WHERE id = ?", (source_id,))
+        return cur.rowcount > 0
+
     def set_source_activated(
         self, conn: sqlite3.Connection, source_id: str, activated_at: datetime
     ) -> None:

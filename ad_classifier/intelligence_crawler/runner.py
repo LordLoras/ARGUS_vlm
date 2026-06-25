@@ -13,9 +13,8 @@ from datetime import datetime
 
 import structlog
 
-from ad_classifier.entity_graph.utils import normalize_name
 from ad_classifier.intelligence_crawler import dedup, detect, scoring
-from ad_classifier.intelligence_crawler.config import IntelConfig, SourceConfig
+from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.ids import evidence_id, new_run_id, signal_id
 from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
@@ -60,7 +59,6 @@ class IntelRunner:
         self, *, due: bool = False, source_id: str | None = None, brand: str | None = None
     ) -> CrawlRunSummary:
         run_id = new_run_id()
-        selected = self._select_sources(due=due, source_id=source_id, brand=brand)
         items: list[SourceRunItem] = []
         total_resources = 0
         total_signals = 0
@@ -68,20 +66,24 @@ class IntelRunner:
 
         with self.repo.connect() as conn:
             self.repo.create_run(conn, run_id)
+            # YAML sources are a seed: upsert them, then select from the DB — the source of
+            # truth, which also holds sources added via the API/UI. (`due` is accepted for
+            # API/CLI compatibility; today it means "all enabled".)
             self.repo.sync_sources(conn, [s.to_source() for s in self.config.sources])
             conn.commit()
+            selected = self._select_sources(conn, source_id=source_id, brand=brand)
 
-            for source_cfg in selected:
+            for source_ref in selected:
                 try:
-                    item = self._process_source(conn, run_id, source_cfg)
+                    item = self._process_source(conn, run_id, source_ref)
                     conn.commit()
                 except Exception as exc:  # whole-source failure: isolate and continue
                     conn.rollback()
                     degraded = True
-                    logger.error("intel_source_failed", source_id=source_cfg.id, error=str(exc))
-                    self._record_source_error(conn, source_cfg.id, exc)
+                    logger.error("intel_source_failed", source_id=source_ref.id, error=str(exc))
+                    self._record_source_error(conn, source_ref.id, exc)
                     item = SourceRunItem(
-                        source_id=source_cfg.id, status="failed", reason=str(exc)[:240]
+                        source_id=source_ref.id, status="failed", reason=str(exc)[:240]
                     )
                 items.append(item)
                 total_resources += item.new_resources
@@ -111,20 +113,20 @@ class IntelRunner:
         )
 
     def _process_source(
-        self, conn: sqlite3.Connection, run_id: str, source_cfg: SourceConfig
+        self, conn: sqlite3.Connection, run_id: str, source_ref: IntelSource
     ) -> SourceRunItem:
         now = as_utc(self.now_fn())
         assert now is not None
         if not self.repo.acquire_lease(
-            conn, source_cfg.id, self.owner, now=now, ttl_seconds=LEASE_TTL_SECONDS
+            conn, source_ref.id, self.owner, now=now, ttl_seconds=LEASE_TTL_SECONDS
         ):
             return SourceRunItem(
-                source_id=source_cfg.id, status="skipped", reason="locked by another run"
+                source_id=source_ref.id, status="skipped", reason="locked by another run"
             )
         try:
-            source = self.repo.get_source(conn, source_cfg.id)
+            source = self.repo.get_source(conn, source_ref.id)
             if source is None:  # pragma: no cover - synced just above
-                return SourceRunItem(source_id=source_cfg.id, status="skipped", reason="not synced")
+                return SourceRunItem(source_id=source_ref.id, status="skipped", reason="not synced")
             state = self.repo.get_source_state(conn, source.id)
             adapter = self.adapter_factory(source.source_type)
             self.repo.update_source_state(conn, source.id, last_attempt_at=now)
@@ -186,7 +188,7 @@ class IntelRunner:
                 reason=reason,
             )
         finally:
-            self.repo.release_lease(conn, source_cfg.id)
+            self.repo.release_lease(conn, source_ref.id)
 
     def _build_resource(
         self, decision, source: IntelSource, run_id: str, now: datetime
@@ -269,14 +271,11 @@ class IntelRunner:
             logger.warning("intel_error_record_failed", source_id=source_id)
 
     def _select_sources(
-        self, *, due: bool, source_id: str | None, brand: str | None
-    ) -> list[SourceConfig]:
+        self, conn: sqlite3.Connection, *, source_id: str | None, brand: str | None
+    ) -> list[IntelSource]:
+        """Select crawl targets from the DB registry (source of truth)."""
         if source_id:  # explicit single source: run even if disabled
-            return [s for s in self.config.sources if s.id == source_id]
-        selected = self.config.enabled_sources()
-        if brand:
-            key = normalize_name(brand)
-            selected = [s for s in selected if normalize_name(s.brand) == key]
-        # NOTE: --due currently means "all enabled". Per-source next_due_at filtering using
-        # intel_source_state is a planned refinement (runbook §32.5 scheduling).
-        return selected
+            source = self.repo.get_source(conn, source_id)
+            return [source] if source is not None else []
+        # Per-source next_due_at filtering is a planned refinement (runbook §32.5).
+        return self.repo.list_sources(conn, enabled_only=True, brand=brand)
