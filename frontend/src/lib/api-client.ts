@@ -39,6 +39,13 @@ import type {
   SubmittedAdCrawlQueueItem,
   TranscriptSegment
 } from "./types";
+import type {
+  IntelCrawlSummary,
+  IntelDigestEntry,
+  IntelSignal,
+  IntelSource,
+  IntelSourceCreate
+} from "./intel-types";
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -509,7 +516,53 @@ export const api = {
     apiFetch<IngestAssistResult>("/api/entity-graph/ingest-assist/preview", {
       method: "POST",
       body: JSON.stringify(body)
-    })
+    }),
+
+  listIntelSources: (query: { brand?: string; enabled_only?: boolean } = {}) =>
+    apiFetch<{ items: IntelSource[] }>(`/api/intelligence/sources${params(query)}`),
+
+  createIntelSource: (body: IntelSourceCreate) =>
+    apiFetch<IntelSource>("/api/intelligence/sources", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  updateIntelSource: (
+    sourceId: string,
+    body: Partial<IntelSourceCreate> & { enabled?: boolean }
+  ) =>
+    apiFetch<IntelSource>(`/api/intelligence/sources/${encodeURIComponent(sourceId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+
+  deleteIntelSource: (sourceId: string) =>
+    apiFetch<{ deleted: string }>(`/api/intelligence/sources/${encodeURIComponent(sourceId)}`, {
+      method: "DELETE"
+    }),
+
+  crawlIntelSource: (sourceId: string) =>
+    apiFetch<IntelCrawlSummary>(
+      `/api/intelligence/sources/${encodeURIComponent(sourceId)}/crawl`,
+      { method: "POST" }
+    ),
+
+  runIntelCrawl: (body: { due?: boolean; source_id?: string; brand?: string } = {}) =>
+    apiFetch<IntelCrawlSummary>("/api/intelligence/crawl", {
+      method: "POST",
+      body: JSON.stringify({ due: true, ...body })
+    }),
+
+  listIntelSignals: (
+    query: { brand?: string; since?: string; status?: string; limit?: number } = {}
+  ) =>
+    apiFetch<{ items: IntelSignal[]; limit: number }>(`/api/intelligence/signals${params(query)}`),
+
+  getIntelDigest: (since = "30d") =>
+    apiFetch<{ entries: IntelDigestEntry[] }>(`/api/intelligence/digest${params({ since })}`),
+
+  listIntelSourceTypes: () =>
+    apiFetch<{ source_types: string[] }>("/api/intelligence/source-types")
 };
 
 export function streamJobEvents(jobId: string, onEvent: (event: JobStreamEvent) => void) {

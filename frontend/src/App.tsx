@@ -83,6 +83,10 @@ const TaxonomyMapping = lazy(() =>
   import("./pages/TaxonomyMapping").then((m) => ({ default: m.TaxonomyMapping }))
 );
 
+const Watcher = lazy(() =>
+  import("./pages/Watcher").then((m) => ({ default: m.Watcher }))
+);
+
 function RouteFallback() {
   return (
     <div className="page">
@@ -124,6 +128,7 @@ export default function App() {
         <Route path="/experimental/brand-graph" element={route(<BrandGraph />)} />
         <Route path="/experimental/entity-resolver" element={route(<EntityResolver />)} />
         <Route path="/experimental/taxonomy-mapping" element={route(<TaxonomyMapping />)} />
+        <Route path="/experimental/watcher" element={route(<Watcher />)} />
       </Route>
     </Routes>
   );
