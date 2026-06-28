@@ -1,26 +1,36 @@
-"""YouTube official-channel adapter — feed-first detection (Phase 3).
+"""YouTube official-channel adapter — feed-first detection + duration enrichment.
 
 Detection uses the **public channel Atom feed**
 ``https://www.youtube.com/feeds/videos.xml?channel_id=<id>`` — no API key, no quota —
 with ETag / Last-Modified conditional requests for incremental polling. This is the
 cheapest, ToS-clean way to learn "did this channel upload something new."
 
-Data-API enrichment (``videos.list`` for duration/tags behind ``YOUTUBE_API_KEY``) is a
-documented follow-up hook (``_ENRICHMENT_TODO``); detection works fully without a key.
+The feed carries no **duration**, which is the strongest ad-likelihood cue (ads cluster
+at ~5-95s; long-form content is almost never an ad). When a ``YOUTUBE_API_KEY`` is
+available we enrich the feed items with a single Data-API ``videos.list`` call
+(``part=contentDetails``, ≈1 quota unit per ≤50 ids) to fill ``duration_ms``. Enrichment
+is best-effort: any failure (no key, network, quota, malformed JSON) leaves duration
+unset and the ad-gate falls back to keyword-only.
 
-Network is injected (``http``) so the adapter is fully testable offline.
+Both network channels are injected (``http`` for the feed, ``json_http`` for the Data
+API) so the adapter is fully testable offline. When the feed fetcher is injected (tests),
+the Data-API client defaults to **disabled** unless one is injected too — so a machine
+that happens to hold a real key never makes a live call from a unit test.
 """
 
 from __future__ import annotations
 
+import json
+import re
 import urllib.request
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 
 import structlog
 
+from ad_classifier._env import resolve_api_key
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
@@ -40,7 +50,15 @@ _NS = {
     "media": "http://search.yahoo.com/mrss/",
 }
 _FEED_TEMPLATE = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-_ENRICHMENT_TODO = "videos.list duration/tags enrichment behind YOUTUBE_API_KEY (Phase 3 follow-up)"
+_VIDEOS_LIST_TEMPLATE = (
+    "https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id={ids}&key={key}"
+)
+_VIDEOS_LIST_BATCH = 50  # Data API caps the id list at 50 per call
+_DEFAULT_API_KEY_ENV = "YOUTUBE_API_KEY"
+# ISO 8601 duration as returned by contentDetails.duration, e.g. "PT1M35S", "PT1H2M3S".
+_ISO8601_DURATION = re.compile(
+    r"^P(?:(?P<days>\d+)D)?T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +71,8 @@ class FeedResponse:
 
 # (url, request_headers) -> FeedResponse. Injected so tests need no network.
 FeedFetcher = Callable[[str, dict[str, str]], FeedResponse]
+# url -> parsed JSON dict (Data API videos.list). Injected so enrichment is testable offline.
+JsonFetcher = Callable[[str], dict]
 
 
 @register_source("youtube_channel")
@@ -60,10 +80,25 @@ class YouTubeChannelAdapter:
     tier: Tier = "A"
 
     def __init__(
-        self, *, http: FeedFetcher | None = None, intel_config: IntelConfig | None = None
+        self,
+        *,
+        http: FeedFetcher | None = None,
+        intel_config: IntelConfig | None = None,
+        json_http: JsonFetcher | None = None,
+        api_key: str | None = None,
     ) -> None:
         self._fetch: FeedFetcher = http or _default_fetch
         self._config = intel_config
+        self._api_key = api_key
+        # The Data-API client shares the feed's network posture: when the feed fetcher is
+        # injected (tests/offline) we do NOT silently fall back to a live call — enrichment
+        # stays disabled unless a json client is injected too.
+        if json_http is not None:
+            self._json_fetch: JsonFetcher | None = json_http
+        elif http is None:
+            self._json_fetch = _default_json_fetch  # production default
+        else:
+            self._json_fetch = None
 
     def poll(self, source: IntelSource, state: SourceState, *, now: datetime) -> SourcePollResult:
         feed_url = source.url or _feed_url(source.platform_id)
@@ -98,6 +133,7 @@ class YouTubeChannelAdapter:
             )
 
         items = _parse_feed(response.body)
+        self._enrich_durations(source, items)
         watermark = _latest_published(items) or state.watermark
         return SourcePollResult(
             source_id=source.id,
@@ -106,6 +142,35 @@ class YouTubeChannelAdapter:
             etag=response.etag or state.etag,
             last_modified=response.last_modified or state.last_modified,
         )
+
+    def _enrich_durations(self, source: IntelSource, items: list[RawSourceItem]) -> None:
+        """Fill ``duration_ms`` on feed items via the Data-API ``videos.list``.
+
+        Best-effort and never raises into ``poll``: on any failure the items keep
+        ``duration_ms=None`` and the ad-gate falls back to its keyword-only signal.
+        """
+        if self._json_fetch is None or not items:
+            return
+        env_name = str(source.config.get("api_key_env") or _DEFAULT_API_KEY_ENV)
+        api_key = self._api_key or resolve_api_key(env_name)
+        if not api_key:  # no key configured → keyword-only gate (documented fallback)
+            return
+
+        by_id = {item.external_id: item for item in items}
+        durations: dict[str, int] = {}
+        for batch in _batched(list(by_id), _VIDEOS_LIST_BATCH):
+            url = _VIDEOS_LIST_TEMPLATE.format(ids=",".join(batch), key=api_key)
+            try:
+                payload = self._json_fetch(url)
+            except Exception as exc:  # network/quota/transport — keep keyword-only gate
+                logger.warning("youtube_enrich_failed", source_id=source.id, error=str(exc)[:200])
+                return
+            durations.update(_parse_durations(payload))
+
+        for vid, ms in durations.items():
+            item = by_id.get(vid)
+            if item is not None:
+                item.duration_ms = ms
 
 
 def _feed_url(channel_id: str | None) -> str | None:
@@ -140,6 +205,39 @@ def _parse_feed(body: str) -> list[RawSourceItem]:
             )
         )
     return items
+
+
+def _parse_durations(payload: dict) -> dict[str, int]:
+    """Map video id -> duration_ms from a ``videos.list`` JSON payload."""
+    out: dict[str, int] = {}
+    for entry in payload.get("items", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        vid = entry.get("id")
+        content_details = entry.get("contentDetails") or {}
+        iso = content_details.get("duration") if isinstance(content_details, dict) else None
+        ms = _duration_to_ms(iso) if isinstance(iso, str) else None
+        if isinstance(vid, str) and ms is not None:
+            out[vid] = ms
+    return out
+
+
+def _duration_to_ms(value: str) -> int | None:
+    """Parse an ISO 8601 duration (``PT1M35S``) to milliseconds; None if unparseable."""
+    match = _ISO8601_DURATION.fullmatch(value.strip())
+    if match is None:
+        return None
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
+    total_seconds = ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+    return total_seconds * 1000
+
+
+def _batched(seq: list[str], size: int) -> Iterator[list[str]]:
+    for start in range(0, len(seq), size):
+        yield seq[start : start + size]
 
 
 def _alternate_link(entry: ET.Element) -> str | None:
@@ -177,3 +275,12 @@ def _default_fetch(url: str, headers: dict[str, str]) -> FeedResponse:  # pragma
         if exc.code == 304:
             return FeedResponse(status_code=304, body="")
         return FeedResponse(status_code=int(exc.code), body="")
+
+
+def _default_json_fetch(url: str) -> dict:  # pragma: no cover - network
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ARGUS-IntelligenceCrawler/0.1"}, method="GET"
+    )
+    with urllib.request.urlopen(request, timeout=12) as response:
+        body = response.read(2_000_000).decode("utf-8", errors="replace")
+    return json.loads(body)
