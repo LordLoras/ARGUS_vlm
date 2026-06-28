@@ -85,6 +85,11 @@ class ScoringConfig(BaseModel):
     corroboration_bonus: float = Field(default=0.2, ge=0.0, le=1.0)
     corroboration_cap: float = Field(default=0.4, ge=0.0, le=1.0)
     corroborated_min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Ad-likelihood gate: a *video* item must clear this to emit an ad signal (filters
+    # channel content that isn't an ad — walkarounds, interviews, owner how-tos).
+    min_ad_likelihood: float = Field(default=0.4, ge=0.0, le=1.0)
+    ad_typical_max_seconds: int = Field(default=95, ge=1)  # :06/:15/:30/:60/:90 ads
+    ad_longform_seconds: int = Field(default=180, ge=1)  # beyond this → unlikely an ad
     ad_like_terms: list[str] = Field(
         default_factory=lambda: [
             "ad",

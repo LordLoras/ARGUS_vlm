@@ -88,6 +88,23 @@ def test_repoll_is_idempotent(tmp_path):
     assert second.signal_count == 0  # nothing new on re-poll
 
 
+def test_non_ad_video_is_filtered_not_signaled(tmp_path):
+    db = tmp_path / "intel.db"
+    IntelRunner(_config(db, [OLD_ITEM]), now_fn=lambda: T0).run(due=True)  # baseline activates
+    walkaround = {
+        "external_id": "walk1",
+        "url": "https://yt/walk1",
+        "resource_type": "video",
+        "title": "2026 RAV4 full walkaround",  # no ad cue, no duration -> below the gate
+        "published_at": T1.isoformat(),
+    }
+    summary = IntelRunner(_config(db, [OLD_ITEM, walkaround]), now_fn=lambda: T1).run(due=True)
+    assert summary.signal_count == 0
+    item = summary.items[0]
+    assert item.filtered == 1
+    assert item.new_resources == 1  # recorded as a resource, just not emitted as a signal
+
+
 class _BoomAdapter:
     tier = "A"
 

@@ -177,6 +177,7 @@ class SourceRunItem(StrictModel):
     new_resources: int = 0
     new_signals: int = 0
     backfilled: int = 0
+    filtered: int = 0  # live items recorded but not emitted (failed the ad-likelihood gate)
     baseline: bool = False
     reason: str | None = None
 

@@ -145,6 +145,7 @@ class IntelRunner:
             new_resources = 0
             new_signals = 0
             backfilled = 0
+            filtered = 0
             for decision in detection.decisions:
                 if self.repo.insert_resource(
                     conn, self._build_resource(decision, source, run_id, now)
@@ -152,6 +153,11 @@ class IntelRunner:
                     new_resources += 1
                 if decision.kind == "backfill":
                     backfilled += 1
+                    continue
+                # Ad-likelihood gate: a non-ad-like video (walkaround, interview, how-to) is
+                # recorded as a resource but does not emit a `new_ad_upload` signal.
+                if not scoring.is_ad_signal_candidate(decision.item, self.config.scoring):
+                    filtered += 1
                     continue
                 if self._emit_signal(conn, source, decision, now):
                     new_signals += 1
@@ -184,6 +190,7 @@ class IntelRunner:
                 new_resources=new_resources,
                 new_signals=new_signals,
                 backfilled=backfilled,
+                filtered=filtered,
                 baseline=detection.baseline_mode,
                 reason=reason,
             )
