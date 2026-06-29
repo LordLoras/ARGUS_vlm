@@ -12,8 +12,40 @@ import type { IntelCrawlSummary, IntelSource, IntelTier } from "../lib/intel-typ
 const TARGET_HINT: Record<string, string> = {
   youtube_channel: "Put the official channel id (UC…) in “Channel / platform id”.",
   rss: "Put the feed URL (newsroom/trade-press) in “URL”.",
+  meta_ad_library_ui:
+    "Put the verified Meta page id in “Channel / page / platform id”. First poll is baseline; later new Library IDs become signals.",
   mock: "Offline test source (items come from config)."
 };
+
+const SOURCE_PRESETS = [
+  {
+    label: "Toyota Meta",
+    brand: "Toyota",
+    sourceType: "meta_ad_library_ui",
+    tier: "B" as IntelTier,
+    platformId: "197052454200"
+  },
+  {
+    label: "Jeep Meta",
+    brand: "Jeep",
+    sourceType: "meta_ad_library_ui",
+    tier: "B" as IntelTier,
+    platformId: "7037526514"
+  }
+];
+
+function configForSourceType(sourceType: string): Record<string, unknown> {
+  if (sourceType === "meta_ad_library_ui") {
+    return { active_status: "all", scrolls: 4, max_cards: 40 };
+  }
+  return {};
+}
+
+function platformForSourceType(sourceType: string): string | null {
+  if (sourceType === "meta_ad_library_ui") return "meta";
+  if (sourceType === "youtube_channel") return "youtube";
+  return null;
+}
 
 export function Watcher() {
   const health = useApiHealth();
@@ -53,8 +85,10 @@ export function Watcher() {
         source_type: sourceType,
         tier,
         url: url.trim() || null,
+        platform: platformForSourceType(sourceType),
         platform_id: platformId.trim() || null,
-        enabled
+        enabled,
+        config: configForSourceType(sourceType)
       }),
     onSuccess: () => {
       setError(null);
@@ -101,6 +135,14 @@ export function Watcher() {
   const enabledCount = sources.filter((source) => source.enabled).length;
   const crawlBusy = crawlAllMutation.isPending || crawlSourceMutation.isPending;
 
+  const applyPreset = (preset: (typeof SOURCE_PRESETS)[number]) => {
+    setBrand(preset.brand);
+    setSourceType(preset.sourceType);
+    setTier(preset.tier);
+    setPlatformId(preset.platformId);
+    setUrl("");
+  };
+
   return (
     <>
       <Topbar crumbs={["Experimental", "Watcher"]} />
@@ -126,6 +168,19 @@ export function Watcher() {
 
         <section className="entity-panel">
           <div className="entity-panel-title">Add a source</div>
+          <div className="entity-inline-actions">
+            {SOURCE_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                className="btn btn-compact"
+                type="button"
+                onClick={() => applyPreset(preset)}
+              >
+                <CheckIcon size={11} />
+                <span>{preset.label}</span>
+              </button>
+            ))}
+          </div>
           <div className="crawler-run-grid">
             <label className="entity-field">
               <span>Brand</span>
@@ -172,12 +227,12 @@ export function Watcher() {
               />
             </label>
             <label className="entity-field crawler-ad-field">
-              <span>Channel / platform id (YouTube)</span>
+              <span>Channel / page / platform id</span>
               <input
                 className="input"
                 value={platformId}
                 onChange={(event) => setPlatformId(event.target.value)}
-                placeholder="UC-official-channel-id"
+                placeholder="YouTube UC… or Meta page id"
               />
             </label>
             <label className="entity-field">

@@ -85,7 +85,7 @@ def test_digest_and_source_types(tmp_path):
     assert entries[0]["evidence_urls"] == ["https://www.youtube.com/watch?v=VID1"]
 
     types = client.get("/api/intelligence/source-types").json()["source_types"]
-    assert {"mock", "rss", "youtube_channel"} <= set(types)
+    assert {"mock", "rss", "youtube_channel", "meta_ad_library_ui"} <= set(types)
 
 
 def test_crawl_endpoint_runs(tmp_path):
