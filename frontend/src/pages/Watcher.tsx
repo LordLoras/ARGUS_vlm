@@ -1,4 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  CirclePlay,
+  ExternalLink,
+  Plus,
+  Radio,
+  Search,
+  Trash2,
+  ToggleLeft,
+  ToggleRight
+} from "lucide-react";
 import { useState } from "react";
 
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
@@ -6,8 +19,8 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
-import { AlertIcon, CheckIcon, SearchIcon, XIcon } from "../lib/icons";
 import type { IntelCrawlSummary, IntelSource, IntelTier } from "../lib/intel-types";
+import "./Watcher.css";
 
 const TARGET_HINT: Record<string, string> = {
   youtube_channel: "Put the official channel id (UC…) in “Channel / platform id”.",
@@ -15,6 +28,13 @@ const TARGET_HINT: Record<string, string> = {
   meta_ad_library_ui:
     "Put the verified Meta page id in “Channel / page / platform id”. Defaults crawl active US ads; optional URL override can test a pasted Ad Library URL.",
   mock: "Offline test source (items come from config)."
+};
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  meta_ad_library_ui: "Meta Ad Library",
+  youtube_channel: "YouTube channel",
+  rss: "RSS / newsroom feed",
+  mock: "Mock source"
 };
 
 const META_DEFAULT_CONFIG = {
@@ -25,6 +45,11 @@ const META_DEFAULT_CONFIG = {
   max_cards: 250,
   wait_ms: 1800,
   stop_after_no_new: 3
+};
+
+const META_SORT_LABELS: Record<string, string> = {
+  relevancy_monthly_grouped: "Monthly relevancy",
+  total_impressions: "Total impressions"
 };
 
 const SOURCE_PRESETS = [
@@ -60,10 +85,30 @@ function platformForSourceType(sourceType: string): string | null {
 function formatMetaSourceConfig(source: IntelSource) {
   const config = source.config ?? {};
   const status = String(config.active_status ?? META_DEFAULT_CONFIG.active_status);
-  const sort = String(config.sort_mode ?? META_DEFAULT_CONFIG.sort_mode);
+  const sort = formatMetaSortMode(String(config.sort_mode ?? META_DEFAULT_CONFIG.sort_mode));
   const maxCards = String(config.max_cards ?? META_DEFAULT_CONFIG.max_cards);
   const scrolls = String(config.scrolls ?? META_DEFAULT_CONFIG.scrolls);
   return `${status} · ${sort} · ${scrolls} scrolls · ${maxCards} cards`;
+}
+
+function sourceTarget(source: IntelSource) {
+  return source.url || source.platform_id || "No target configured";
+}
+
+function sourceStateLabel(source: IntelSource) {
+  return source.source_activated_at ? "activated" : "baseline pending";
+}
+
+function sourceTypeLabel(sourceType: string) {
+  return SOURCE_TYPE_LABELS[sourceType] ?? sourceType.replace(/_/g, " ");
+}
+
+function formatMetaSortMode(sortMode: string) {
+  return META_SORT_LABELS[sortMode] ?? sortMode.replace(/_/g, " ");
+}
+
+function formatConfidence(value: number) {
+  return `${Math.round(value * 100)}%`;
 }
 
 export function Watcher() {
@@ -170,41 +215,45 @@ export function Watcher() {
       <Topbar crumbs={["Experimental", "Watcher"]} />
       <ApiOfflineBanner offline={health.isError} />
 
-      <div className="page entity-page">
-        <section className="entity-hero">
-          <div>
-            <span className="entity-kicker">Brand-anchored awareness crawler</span>
+      <div className="page watcher-page">
+        <section className="watcher-hero">
+          <div className="watcher-hero-copy">
+            <span className="watcher-kicker">Brand intelligence</span>
             <h1 className="page-title">Watcher</h1>
             <p className="page-sub">
-              Curate the sources to watch per brand (YouTube channels, newsroom/trade-press feeds).
-              First poll of a source is a baseline (records, no alerts); after that, genuinely new
-              ad/campaign releases surface as signals.
+              Maintain brand source coverage, run active crawls, and review new campaign signals
+              from one operational surface.
             </p>
           </div>
-          <div className="entity-stat-strip">
+          <div className="watcher-metrics">
             <Metric label="Sources" value={sources.length} />
             <Metric label="Enabled" value={enabledCount} />
             <Metric label="Signals" value={signals.length} />
           </div>
         </section>
 
-        <section className="entity-panel">
-          <div className="entity-panel-title">Add a source</div>
-          <div className="entity-inline-actions">
-            {SOURCE_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                className="btn btn-compact"
-                type="button"
-                onClick={() => applyPreset(preset)}
-              >
-                <CheckIcon size={11} />
-                <span>{preset.label}</span>
-              </button>
-            ))}
+        <section className="watcher-panel watcher-add-panel">
+          <div className="watcher-panel-header">
+            <div>
+              <span className="watcher-section-kicker">Source registry</span>
+              <h2>Add a source</h2>
+            </div>
+            <div className="watcher-presets" aria-label="Source presets">
+              {SOURCE_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  className="watcher-preset"
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>{preset.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="crawler-run-grid">
-            <label className="entity-field">
+          <div className="watcher-form-grid">
+            <label className="watcher-field">
               <span>Brand</span>
               <input
                 className="input"
@@ -213,7 +262,7 @@ export function Watcher() {
                 placeholder="Toyota"
               />
             </label>
-            <label className="entity-field">
+            <label className="watcher-field">
               <span>Type</span>
               <select
                 className="input"
@@ -222,12 +271,12 @@ export function Watcher() {
               >
                 {sourceTypes.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {sourceTypeLabel(type)}
                   </option>
                 ))}
               </select>
             </label>
-            <label className="entity-field">
+            <label className="watcher-field">
               <span>Tier</span>
               <select
                 className="input"
@@ -239,7 +288,7 @@ export function Watcher() {
                 <option value="C">C — corroboration</option>
               </select>
             </label>
-            <label className="entity-field crawler-ad-field">
+            <label className="watcher-field watcher-wide-field">
               <span>{isMetaSource ? "URL override (optional)" : "URL (feeds)"}</span>
               <input
                 className="input"
@@ -252,7 +301,7 @@ export function Watcher() {
                 }
               />
             </label>
-            <label className="entity-field crawler-ad-field">
+            <label className="watcher-field watcher-wide-field">
               <span>Channel / page / platform id</span>
               <input
                 className="input"
@@ -261,46 +310,47 @@ export function Watcher() {
                 placeholder="YouTube UC… or Meta page id"
               />
             </label>
-            <label className="entity-field">
-              <span>Enabled</span>
+            <label className="watcher-toggle">
               <input
                 type="checkbox"
                 checked={enabled}
                 onChange={(event) => setEnabled(event.target.checked)}
                 aria-label="Enabled"
               />
+              <span className="watcher-switch" aria-hidden="true" />
+              <span>Enabled on create</span>
             </label>
-            <div className="crawler-run-actions">
+            <div className="watcher-form-actions">
               <button
-                className="btn btn-primary"
+                className="watcher-primary-action"
                 disabled={!brand.trim() || createMutation.isPending}
                 onClick={() => createMutation.mutate()}
               >
-                <CheckIcon size={12} />
+                <Plus size={14} />
                 <span>{createMutation.isPending ? "Adding" : "Add source"}</span>
               </button>
               <button
-                className="btn"
+                className="watcher-secondary-action"
                 disabled={crawlBusy || enabledCount === 0}
                 onClick={() => crawlAllMutation.mutate()}
               >
-                <SearchIcon size={12} />
+                <Search size={14} />
                 <span>{crawlAllMutation.isPending ? "Crawling" : "Crawl all enabled"}</span>
               </button>
             </div>
           </div>
-          <p className="entity-section-note">{TARGET_HINT[sourceType] ?? ""}</p>
+          <p className="watcher-help">{TARGET_HINT[sourceType] ?? ""}</p>
           {isMetaSource ? (
-            <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
-              <Metric label="Status" value={String(META_DEFAULT_CONFIG.active_status)} />
-              <Metric label="Sort" value={String(META_DEFAULT_CONFIG.sort_mode)} />
-              <Metric label="Max scrolls" value={META_DEFAULT_CONFIG.scrolls} />
-              <Metric label="Card cap" value={META_DEFAULT_CONFIG.max_cards} />
+            <div className="watcher-config-strip">
+              <ConfigPill label="Status" value={String(META_DEFAULT_CONFIG.active_status)} />
+              <ConfigPill label="Sort" value={formatMetaSortMode(String(META_DEFAULT_CONFIG.sort_mode))} />
+              <ConfigPill label="Max scrolls" value={String(META_DEFAULT_CONFIG.scrolls)} />
+              <ConfigPill label="Card cap" value={String(META_DEFAULT_CONFIG.max_cards)} />
             </div>
           ) : null}
-          {error ? <div className="entity-error-line">{error}</div> : null}
+          {error ? <div className="watcher-error">{error}</div> : null}
           {lastRun ? (
-            <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
+            <div className="watcher-run-summary">
               <Metric label="Status" value={lastRun.status} />
               <Metric label="Sources" value={lastRun.source_count} />
               <Metric label="New resources" value={lastRun.resource_count} />
@@ -309,157 +359,132 @@ export function Watcher() {
           ) : null}
         </section>
 
-        <section className="entity-panel">
-          <div className="entity-panel-title">Watched sources</div>
+        <section className="watcher-panel">
+          <div className="watcher-panel-header">
+            <div>
+              <span className="watcher-section-kicker">Registry</span>
+              <h2>Watched sources</h2>
+            </div>
+          </div>
           {sourcesQuery.isLoading ? (
-            <div className="entity-empty-line">Loading sources…</div>
+            <div className="watcher-muted-line">Loading sources…</div>
           ) : sources.length === 0 ? (
             <EmptyState
-              icon={<SearchIcon size={18} />}
+              icon={<Search size={18} />}
               title="No sources yet"
               hint="Add a Meta page id, official YouTube channel, or newsroom feed above to start watching."
             />
           ) : (
-            <div className="entity-table-wrap">
-              <table className="entity-table">
-                <thead>
-                  <tr>
-                    <th>Brand</th>
-                    <th>Type</th>
-                    <th>Target</th>
-                    <th>Tier</th>
-                    <th>State</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sources.map((source) => (
-                    <tr key={source.id}>
-                      <td>
-                        <span className="entity-link-strong">{source.brand_name}</span>
-                        <div className="entity-row-sub">{source.id}</div>
-                      </td>
-                      <td>
-                        <span className="entity-chip">{source.source_type}</span>
-                      </td>
-                      <td>
-                        <span className="entity-wrap-text">
-                          {source.url || source.platform_id || "—"}
-                        </span>
-                        {source.source_type === "meta_ad_library_ui" ? (
-                          <div className="entity-row-sub">{formatMetaSourceConfig(source)}</div>
-                        ) : null}
-                      </td>
-                      <td>{source.tier}</td>
-                      <td>
-                        <span
-                          className={`entity-status entity-status-${
-                            source.enabled ? "confirmed_unreviewed" : "candidate"
-                          }`}
-                        >
-                          {source.enabled ? "enabled" : "disabled"}
-                        </span>
-                        <div className="entity-row-sub">
-                          {source.source_activated_at ? "activated" : "baseline pending"}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="entity-inline-actions">
-                          <button
-                            className="btn btn-compact"
-                            disabled={crawlBusy}
-                            onClick={() => crawlSourceMutation.mutate(source.id)}
-                          >
-                            <SearchIcon size={11} />
-                            <span>{runningSourceId === source.id ? "Running" : "Run"}</span>
-                          </button>
-                          <button
-                            className="btn btn-compact"
-                            disabled={toggleMutation.isPending}
-                            onClick={() => toggleMutation.mutate(source)}
-                          >
-                            <span>{source.enabled ? "Disable" : "Enable"}</span>
-                          </button>
-                          <button
-                            className="btn btn-compact"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => deleteMutation.mutate(source.id)}
-                          >
-                            <XIcon size={11} />
-                            <span>Delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="watcher-source-grid">
+              {sources.map((source) => (
+                <article
+                  className={`watcher-source-card ${source.enabled ? "is-enabled" : ""}`}
+                  key={source.id}
+                >
+                  <div className="watcher-source-card-head">
+                    <div>
+                      <strong>{source.brand_name}</strong>
+                      <span>{sourceTypeLabel(source.source_type)} source</span>
+                    </div>
+                    <span className={`watcher-state-pill ${source.enabled ? "enabled" : "disabled"}`}>
+                      {source.enabled ? "enabled" : "disabled"}
+                    </span>
+                  </div>
+                  <div className="watcher-source-tags">
+                    <span>{sourceTypeLabel(source.source_type)}</span>
+                    <span>Tier {source.tier}</span>
+                    <span>{sourceStateLabel(source)}</span>
+                  </div>
+                  <div className="watcher-target-card">
+                    <span>Target</span>
+                    <strong>{sourceTarget(source)}</strong>
+                    {source.source_type === "meta_ad_library_ui" ? (
+                      <em>{formatMetaSourceConfig(source)}</em>
+                    ) : null}
+                  </div>
+                  <div className="watcher-source-actions">
+                    <button
+                      className="watcher-card-action"
+                      disabled={crawlBusy}
+                      onClick={() => crawlSourceMutation.mutate(source.id)}
+                    >
+                      <CirclePlay size={14} />
+                      <span>{runningSourceId === source.id ? "Running" : "Run"}</span>
+                    </button>
+                    <button
+                      className="watcher-card-action"
+                      disabled={toggleMutation.isPending}
+                      onClick={() => toggleMutation.mutate(source)}
+                    >
+                      {source.enabled ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
+                      <span>{source.enabled ? "Disable" : "Enable"}</span>
+                    </button>
+                    <button
+                      className="watcher-card-action danger"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(source.id)}
+                    >
+                      <Trash2 size={14} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </section>
 
-        <section className="entity-panel">
-          <div className="entity-panel-title">Signals</div>
+        <section className="watcher-panel">
+          <div className="watcher-panel-header">
+            <div>
+              <span className="watcher-section-kicker">Activity</span>
+              <h2>Signals</h2>
+            </div>
+          </div>
           {signalsQuery.isLoading ? (
-            <div className="entity-empty-line">Loading signals…</div>
+            <div className="watcher-muted-line">Loading signals…</div>
           ) : signals.length === 0 ? (
             <EmptyState
-              icon={<AlertIcon size={18} />}
+              icon={<AlertTriangle size={18} />}
               title="No signals yet"
               hint="Run a source twice: the first poll is baseline; new releases after that become signals."
             />
           ) : (
-            <div className="entity-table-wrap">
-              <table className="entity-table">
-                <thead>
-                  <tr>
-                    <th>Brand</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Confidence</th>
-                    <th>Title</th>
-                    <th>Evidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {signals.map((signal) => (
-                    <tr key={signal.id}>
-                      <td>
-                        <span className="entity-link-strong">{signal.brand_name}</span>
-                      </td>
-                      <td>
-                        <span className="entity-chip">{signal.signal_type}</span>
-                      </td>
-                      <td>
-                        <span className={`entity-status entity-status-${signal.status}`}>
-                          {signal.status}
-                        </span>
-                      </td>
-                      <td>{Math.round(signal.confidence * 100)}%</td>
-                      <td>
-                        <span className="entity-wrap-text">
-                          {signal.campaign_name || signal.title}
-                        </span>
-                        <div className="entity-row-sub">{formatDate(signal.source_published_at)}</div>
-                      </td>
-                      <td>
-                        {signal.evidence[0]?.url ? (
-                          <a
-                            className="entity-link-strong"
-                            href={signal.evidence[0].url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            open
-                          </a>
-                        ) : (
-                          <span className="entity-muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="watcher-signal-list">
+              {signals.map((signal) => (
+                <article className="watcher-signal-card" key={signal.id}>
+                  <div className="watcher-signal-icon">
+                    <Radio size={16} />
+                  </div>
+                  <div className="watcher-signal-main">
+                    <div className="watcher-signal-title">
+                      <strong>{signal.campaign_name || signal.title}</strong>
+                      <span>{signal.brand_name}</span>
+                    </div>
+                    <div className="watcher-source-tags">
+                      <span>{signal.signal_type}</span>
+                      <span>{signal.status}</span>
+                      <span>{formatConfidence(signal.confidence)}</span>
+                      {signal.source_published_at ? (
+                        <span>{formatDate(signal.source_published_at)}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {signal.evidence[0]?.url ? (
+                    <a
+                      className="watcher-card-action"
+                      href={signal.evidence[0].url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink size={14} />
+                      <span>Open</span>
+                    </a>
+                  ) : (
+                    <span className="watcher-muted-line">No evidence URL</span>
+                  )}
+                </article>
+              ))}
             </div>
           )}
         </section>
@@ -470,10 +495,20 @@ export function Watcher() {
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="entity-metric">
+    <div className="watcher-metric">
       <strong>{typeof value === "number" ? value.toLocaleString() : value}</strong>
       <span>{label}</span>
     </div>
+  );
+}
+
+function ConfigPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="watcher-config-pill">
+      <Activity size={12} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </span>
   );
 }
 
