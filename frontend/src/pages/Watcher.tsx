@@ -153,6 +153,7 @@ export function Watcher() {
   const sourceTypes = sourceTypesQuery.data?.source_types ?? ["youtube_channel", "rss"];
   const enabledCount = sources.filter((source) => source.enabled).length;
   const crawlBusy = crawlAllMutation.isPending || crawlSourceMutation.isPending;
+  const runningSourceId = crawlSourceMutation.isPending ? crawlSourceMutation.variables : null;
   const isMetaSource = sourceType === "meta_ad_library_ui";
 
   const applyPreset = (preset: (typeof SOURCE_PRESETS)[number]) => {
@@ -370,7 +371,7 @@ export function Watcher() {
                             onClick={() => crawlSourceMutation.mutate(source.id)}
                           >
                             <SearchIcon size={11} />
-                            <span>Run</span>
+                            <span>{runningSourceId === source.id ? "Running" : "Run"}</span>
                           </button>
                           <button
                             className="btn btn-compact"

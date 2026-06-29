@@ -21,6 +21,8 @@ from ad_classifier.intelligence_crawler.models import (
 from ad_classifier.intelligence_crawler.schema import initialize_intelligence_crawler_db
 from ad_classifier.intelligence_crawler.timeutils import as_utc, iso, parse_iso
 
+SQLITE_BUSY_TIMEOUT_MS = 30_000
+
 
 class IntelRepository:
     def __init__(self, db_path: Path) -> None:
@@ -31,12 +33,18 @@ class IntelRepository:
     def connect(self, *, readonly: bool = False) -> Generator[sqlite3.Connection, None, None]:
         if readonly:
             conn = sqlite3.connect(
-                self.db_path.as_uri() + "?mode=ro", uri=True, check_same_thread=False
+                self.db_path.as_uri() + "?mode=ro",
+                uri=True,
+                check_same_thread=False,
+                timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
             )
         else:
-            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn = sqlite3.connect(
+                self.db_path, check_same_thread=False, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000
+            )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
         if readonly:
             conn.execute("PRAGMA query_only = ON")
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -126,3 +127,18 @@ def test_source_crud_api(tmp_path):
     assert (
         client.patch(f"/api/intelligence/sources/{sid}", json={"enabled": True}).status_code == 404
     )
+
+
+def test_source_delete_reports_busy_database(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+    manager = client.app.state.intel_manager
+
+    def locked(_source_id: str) -> bool:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(manager, "delete_source", locked)
+
+    response = client.delete("/api/intelligence/sources/source_under_crawl")
+
+    assert response.status_code == 409
+    assert "database is busy" in response.json()["detail"]

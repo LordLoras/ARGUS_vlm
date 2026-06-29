@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 
 from ad_classifier.intelligence_crawler.config import IntelConfig, SourceConfig, WatchlistConfig
+from ad_classifier.intelligence_crawler.models import SourcePollResult
 from ad_classifier.intelligence_crawler.repository import IntelRepository
 from ad_classifier.intelligence_crawler.runner import IntelRunner
 
@@ -124,3 +126,47 @@ def test_source_failure_marks_run_degraded(tmp_path):
     ).run(due=True)
     assert summary.status == "degraded"
     assert summary.items[0].status == "failed"
+
+
+def test_slow_poll_does_not_hold_write_lock(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [])
+    repo = IntelRepository(db)
+    entered_poll = threading.Event()
+    release_poll = threading.Event()
+    result = {}
+
+    class BlockingAdapter:
+        tier = "A"
+
+        def poll(self, source, state, *, now):
+            entered_poll.set()
+            assert release_poll.wait(timeout=5)
+            return SourcePollResult(source_id=source.id)
+
+    runner = IntelRunner(
+        cfg,
+        repo=repo,
+        now_fn=lambda: T1,
+        adapter_factory=lambda _stype: BlockingAdapter(),
+    )
+
+    def run() -> None:
+        result["summary"] = runner.run(source_id="s1")
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    try:
+        assert entered_poll.wait(timeout=5)
+        with repo.connect() as conn:
+            deleted = repo.delete_source(conn, "s1")
+            conn.commit()
+        assert deleted is True
+    finally:
+        release_poll.set()
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    summary = result["summary"]
+    assert summary.items[0].status == "skipped"
+    assert summary.items[0].reason == "source deleted during poll"

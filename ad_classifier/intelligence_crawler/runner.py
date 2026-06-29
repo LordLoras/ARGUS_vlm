@@ -130,8 +130,15 @@ class IntelRunner:
             state = self.repo.get_source_state(conn, source.id)
             adapter = self.adapter_factory(source.source_type)
             self.repo.update_source_state(conn, source.id, last_attempt_at=now)
+            conn.commit()
 
             result = adapter.poll(source, state, now=now)
+            if self.repo.get_source(conn, source.id) is None:
+                return SourceRunItem(
+                    source_id=source.id,
+                    status="skipped",
+                    reason="source deleted during poll",
+                )
             seen_ids = self.repo.existing_resource_ids(conn, source.id)
             detection = detect.classify(
                 source=source,

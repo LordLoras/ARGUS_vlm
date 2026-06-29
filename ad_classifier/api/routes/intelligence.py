@@ -7,6 +7,8 @@ synchronous) crawl run for local/service use. Never leaks tracebacks.
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -76,6 +78,18 @@ def _parse_since(value: str | None):
     return parse_iso(value)
 
 
+def _call_manager(fn: Callable[[], Any]) -> Any:
+    try:
+        return fn()
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+            raise HTTPException(
+                status_code=409,
+                detail="intelligence crawler database is busy; retry after the current action finishes",
+            ) from exc
+        raise
+
+
 @router.get("/intelligence/signals")
 def list_signals(
     request: Request,
@@ -84,15 +98,17 @@ def list_signals(
     status: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> dict[str, Any]:
-    items = _manager(request).list_signals(
-        brand=brand, since=_parse_since(since), status=status, limit=limit
+    items = _call_manager(
+        lambda: _manager(request).list_signals(
+            brand=brand, since=_parse_since(since), status=status, limit=limit
+        )
     )
     return {"items": [item.model_dump(mode="json") for item in items], "limit": limit}
 
 
 @router.get("/intelligence/signals/{signal_id}")
 def get_signal(signal_id: str, request: Request) -> dict[str, Any]:
-    signal = _manager(request).get_signal(signal_id)
+    signal = _call_manager(lambda: _manager(request).get_signal(signal_id))
     if signal is None:
         raise HTTPException(status_code=404, detail="signal not found")
     return signal.model_dump(mode="json")
@@ -103,25 +119,27 @@ def get_digest(
     request: Request,
     since: str | None = Query(default="7d"),
 ) -> dict[str, Any]:
-    entries = _manager(request).digest(since=_parse_since(since))
+    entries = _call_manager(lambda: _manager(request).digest(since=_parse_since(since)))
     return {"entries": [entry.model_dump(mode="json") for entry in entries]}
 
 
 @router.get("/intelligence/watchlist")
 def get_watchlist(request: Request) -> dict[str, Any]:
-    brands = _manager(request).watchlist()
+    brands = _call_manager(lambda: _manager(request).watchlist())
     return {"items": [brand.model_dump(mode="json") for brand in brands]}
 
 
 @router.get("/intelligence/source-types")
 def get_source_types(request: Request) -> dict[str, Any]:
-    return {"source_types": _manager(request).source_types()}
+    return {"source_types": _call_manager(lambda: _manager(request).source_types())}
 
 
 @router.post("/intelligence/crawl")
 def run_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
-    summary = _manager(request).run_crawl(
-        due=payload.due, source_id=payload.source_id, brand=payload.brand
+    summary = _call_manager(
+        lambda: _manager(request).run_crawl(
+            due=payload.due, source_id=payload.source_id, brand=payload.brand
+        )
     )
     return summary.model_dump(mode="json")
 
@@ -135,7 +153,9 @@ def list_sources(
     brand: str | None = None,
     enabled_only: bool = Query(default=False),
 ) -> dict[str, Any]:
-    items = _manager(request).list_sources(enabled_only=enabled_only, brand=brand)
+    items = _call_manager(
+        lambda: _manager(request).list_sources(enabled_only=enabled_only, brand=brand)
+    )
     return {"items": [source.model_dump(mode="json") for source in items]}
 
 
@@ -153,30 +173,30 @@ def create_source(payload: SourceCreatePayload, request: Request) -> dict[str, A
         poll_interval_hours=payload.poll_interval_hours,
         config=payload.config,
     )
-    return _manager(request).upsert_source(source).model_dump(mode="json")
+    return _call_manager(lambda: _manager(request).upsert_source(source)).model_dump(mode="json")
 
 
 @router.patch("/intelligence/sources/{source_id}")
 def update_source(source_id: str, payload: SourceUpdatePayload, request: Request) -> dict[str, Any]:
     manager = _manager(request)
-    existing = manager.get_source(source_id)
+    existing = _call_manager(lambda: manager.get_source(source_id))
     if existing is None:
         raise HTTPException(status_code=404, detail="source not found")
     updates = payload.model_dump(exclude_unset=True)
     if "brand" in updates:
         updates["brand_name"] = updates.pop("brand")
     merged = existing.model_copy(update=updates)
-    return manager.upsert_source(merged).model_dump(mode="json")
+    return _call_manager(lambda: manager.upsert_source(merged)).model_dump(mode="json")
 
 
 @router.delete("/intelligence/sources/{source_id}")
 def delete_source(source_id: str, request: Request) -> dict[str, Any]:
-    if not _manager(request).delete_source(source_id):
+    if not _call_manager(lambda: _manager(request).delete_source(source_id)):
         raise HTTPException(status_code=404, detail="source not found")
     return {"deleted": source_id}
 
 
 @router.post("/intelligence/sources/{source_id}/crawl")
 def crawl_source(source_id: str, request: Request) -> dict[str, Any]:
-    summary = _manager(request).run_crawl(source_id=source_id)
+    summary = _call_manager(lambda: _manager(request).run_crawl(source_id=source_id))
     return summary.model_dump(mode="json")
