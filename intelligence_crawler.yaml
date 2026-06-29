@@ -74,9 +74,13 @@ sources:
   #   platform_id: "197052454200"                        # verified Toyota USA page id
   #   poll_interval_hours: 24
   #   config:
-  #     active_status: all                               # baseline all; filter status locally
-  #     scrolls: 4
-  #     max_cards: 40
+  #     active_status: active                            # active US ads only
+  #     sort_mode: relevancy_monthly_grouped             # UI param; override when testing
+  #     sort_direction: desc
+  #     scrolls: 20                                      # max scrolls; stops early if stable
+  #     max_cards: 250
+  #     wait_ms: 1800
+  #     stop_after_no_new: 3
   #
   # - id: jeep_meta_ads
   #   brand: Jeep
@@ -87,9 +91,13 @@ sources:
   #   platform_id: "7037526514"                          # verified Jeep page id
   #   poll_interval_hours: 24
   #   config:
-  #     active_status: all
-  #     scrolls: 4
-  #     max_cards: 40
+  #     active_status: active
+  #     sort_mode: relevancy_monthly_grouped
+  #     sort_direction: desc
+  #     scrolls: 20
+  #     max_cards: 250
+  #     wait_ms: 1800
+  #     stop_after_no_new: 3
 
   # --- Offline demo source (no network). Flip enabled: true to try the pipeline. ---
   - id: demo_mock

@@ -135,6 +135,14 @@ def meta_probe(
     max_cards: Annotated[
         int, typer.Option("--max-cards", help="Maximum candidate cards to capture.")
     ] = 30,
+    wait_ms: Annotated[int, typer.Option("--wait-ms", help="Wait after load/scroll in ms.")] = 1800,
+    stop_after_no_new: Annotated[
+        int,
+        typer.Option(
+            "--stop-after-no-new",
+            help="Stop after this many scrolls without new Library IDs; 0 disables.",
+        ),
+    ] = 3,
     headed: Annotated[bool, typer.Option("--headed", help="Show Chromium while probing.")] = False,
 ) -> None:
     """Experimental Playwright probe for the public Meta Ad Library UI."""
@@ -144,6 +152,8 @@ def meta_probe(
         scrolls=scrolls,
         max_cards=max_cards,
         headed=headed,
+        wait_ms=wait_ms,
+        stop_after_no_new=stop_after_no_new,
     )
     typer.echo(
         json.dumps(
@@ -151,6 +161,9 @@ def meta_probe(
                 "source_url": result.source_url,
                 "final_url": result.final_url,
                 "cards_count": result.cards_count,
+                "scrolls_completed": result.scrolls_completed,
+                "unique_library_ids_seen": result.unique_library_ids_seen,
+                "stopped_after_no_new": result.stopped_after_no_new,
                 "json_path": str(out_dir / "meta_ad_library_probe.json"),
                 "full_page_screenshot": result.full_page_screenshot,
             },

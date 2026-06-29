@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
@@ -32,6 +33,8 @@ from ad_classifier.intelligence_crawler.sources.base import register_source
 from ad_classifier.intelligence_crawler.timeutils import parse_iso
 
 META_AD_LIBRARY_SOURCE_TYPE = "meta_ad_library_ui"
+DEFAULT_SORT_MODE = "relevancy_monthly_grouped"
+DEFAULT_SORT_DIRECTION = "desc"
 
 ProbeRunner = Callable[..., MetaProbeResult]
 
@@ -60,15 +63,24 @@ class MetaAdLibraryUiAdapter:
                 errors=["meta_ad_library_ui source needs platform_id set to the Meta page id"],
             )
 
-        active_status = str(source.config.get("active_status") or "all")
-        if active_status not in {"active", "all", "inactive"}:
-            active_status = "all"
-        scrolls = _int_config(source.config.get("scrolls"), default=4, minimum=0, maximum=50)
-        max_cards = _int_config(source.config.get("max_cards"), default=40, minimum=1, maximum=250)
+        active_status = _active_status(source.config.get("active_status"), default="active")
+        sort_mode = _string_config(source.config.get("sort_mode"), default=DEFAULT_SORT_MODE)
+        sort_direction = _sort_direction(source.config.get("sort_direction"))
+        scrolls = _int_config(source.config.get("scrolls"), default=20, minimum=0, maximum=200)
+        max_cards = _int_config(source.config.get("max_cards"), default=250, minimum=1, maximum=1000)
         wait_ms = _int_config(source.config.get("wait_ms"), default=1800, minimum=250, maximum=15000)
+        stop_after_no_new = _int_config(
+            source.config.get("stop_after_no_new"), default=3, minimum=0, maximum=20
+        )
         headed = bool(source.config.get("headed") or False)
+        include_statuses = _status_list(source.config.get("include_statuses"))
 
-        url = source.url or build_meta_ad_library_url(page_id, active_status=active_status)
+        url = source.url or build_meta_ad_library_url(
+            page_id,
+            active_status=active_status,
+            sort_mode=sort_mode,
+            sort_direction=sort_direction,
+        )
         out_dir = _source_output_dir(self._config.cache_dir, source.id)
         try:
             result = self._probe_runner(
@@ -78,11 +90,13 @@ class MetaAdLibraryUiAdapter:
                 max_cards=max_cards,
                 headed=headed,
                 wait_ms=wait_ms,
+                stop_after_no_new=stop_after_no_new,
             )
         except Exception as exc:
             return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
 
-        items = [_card_to_item(source, result.source_url, card) for card in result.cards]
+        cards = [card for card in result.cards if _include_card(card, include_statuses)]
+        items = [_card_to_item(source, result.source_url, card) for card in cards]
         return SourcePollResult(
             source_id=source.id,
             items=items,
@@ -90,19 +104,35 @@ class MetaAdLibraryUiAdapter:
         )
 
 
-def build_meta_ad_library_url(page_id: str, *, active_status: str = "all") -> str:
-    safe_status = active_status if active_status in {"active", "all", "inactive"} else "all"
-    return (
-        "https://www.facebook.com/ads/library/"
-        f"?active_status={safe_status}&ad_type=all&country=US&is_targeted_country=false"
-        "&media_type=all&search_type=page&sort_data[mode]=total_impressions"
-        f"&sort_data[direction]=desc&view_all_page_id={page_id}"
-    )
+def build_meta_ad_library_url(
+    page_id: str,
+    *,
+    active_status: str = "active",
+    sort_mode: str = DEFAULT_SORT_MODE,
+    sort_direction: str = DEFAULT_SORT_DIRECTION,
+) -> str:
+    params = {
+        "active_status": _active_status(active_status, default="active"),
+        "ad_type": "all",
+        "country": "US",
+        "is_targeted_country": "false",
+        "media_type": "all",
+        "search_type": "page",
+        "sort_data[mode]": _string_config(sort_mode, default=DEFAULT_SORT_MODE),
+        "sort_data[direction]": _sort_direction(sort_direction),
+        "view_all_page_id": page_id.strip(),
+    }
+    return "https://www.facebook.com/ads/library/?" + urlencode(params)
 
 
 def _card_to_item(source: IntelSource, source_url: str, card) -> RawSourceItem:
     external_id = card.library_id or f"meta_card_{card.index}"
     direct_url = f"https://www.facebook.com/ads/library/?id={external_id}"
+    thumbnail_url = _first_present(
+        card.image_sources,
+        card.video_posters,
+        card.background_image_sources,
+    )
     return RawSourceItem(
         external_id=external_id,
         url=direct_url,
@@ -111,7 +141,7 @@ def _card_to_item(source: IntelSource, source_url: str, card) -> RawSourceItem:
         title=_title_for_card(source.brand_name, card.text),
         description=card.text,
         published_at=_parse_started_running(card.started_running),
-        thumbnail_url=card.image_sources[0] if card.image_sources else None,
+        thumbnail_url=thumbnail_url,
         raw={
             "source": META_AD_LIBRARY_SOURCE_TYPE,
             "source_url": source_url,
@@ -121,6 +151,9 @@ def _card_to_item(source: IntelSource, source_url: str, card) -> RawSourceItem:
             "platforms": card.platforms,
             "links": card.links,
             "image_sources": card.image_sources,
+            "video_sources": card.video_sources,
+            "video_posters": card.video_posters,
+            "background_image_sources": card.background_image_sources,
             "video_count": card.video_count,
             "screenshot_path": card.screenshot_path,
             "rect": card.rect,
@@ -164,6 +197,38 @@ def _safe_path_segment(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value)[:120]
 
 
+def _active_status(value, *, default: str) -> str:
+    parsed = str(value or default).strip().lower()
+    return parsed if parsed in {"active", "all", "inactive"} else default
+
+
+def _sort_direction(value) -> str:
+    parsed = str(value or DEFAULT_SORT_DIRECTION).strip().lower()
+    return parsed if parsed in {"asc", "desc"} else DEFAULT_SORT_DIRECTION
+
+
+def _string_config(value, *, default: str) -> str:
+    parsed = str(value or default).strip()
+    if not parsed or len(parsed) > 80:
+        return default
+    return parsed
+
+
+def _status_list(value) -> set[str] | None:
+    if value is None:
+        return None
+    raw_values = value if isinstance(value, list) else [value]
+    statuses = {str(item).strip().lower() for item in raw_values if str(item).strip()}
+    statuses = statuses.intersection({"active", "inactive", "unknown"})
+    return statuses or None
+
+
+def _include_card(card, include_statuses: set[str] | None) -> bool:
+    if include_statuses is None:
+        return True
+    return (card.status or "unknown") in include_statuses
+
+
 def _int_config(value, *, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
@@ -175,3 +240,10 @@ def _int_config(value, *, default: int, minimum: int, maximum: int) -> int:
 def _latest_published(items: list[RawSourceItem]) -> str | None:
     dates = [item.published_at for item in items if item.published_at is not None]
     return max(dates).isoformat() if dates else None
+
+
+def _first_present(*groups: list[str]) -> str | None:
+    for group in groups:
+        if group:
+            return group[0]
+    return None

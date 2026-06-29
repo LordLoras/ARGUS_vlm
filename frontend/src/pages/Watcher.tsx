@@ -13,8 +13,18 @@ const TARGET_HINT: Record<string, string> = {
   youtube_channel: "Put the official channel id (UC…) in “Channel / platform id”.",
   rss: "Put the feed URL (newsroom/trade-press) in “URL”.",
   meta_ad_library_ui:
-    "Put the verified Meta page id in “Channel / page / platform id”. First poll is baseline; later new Library IDs become signals.",
+    "Put the verified Meta page id in “Channel / page / platform id”. Defaults crawl active US ads; optional URL override can test a pasted Ad Library URL.",
   mock: "Offline test source (items come from config)."
+};
+
+const META_DEFAULT_CONFIG = {
+  active_status: "active",
+  sort_mode: "relevancy_monthly_grouped",
+  sort_direction: "desc",
+  scrolls: 20,
+  max_cards: 250,
+  wait_ms: 1800,
+  stop_after_no_new: 3
 };
 
 const SOURCE_PRESETS = [
@@ -36,7 +46,7 @@ const SOURCE_PRESETS = [
 
 function configForSourceType(sourceType: string): Record<string, unknown> {
   if (sourceType === "meta_ad_library_ui") {
-    return { active_status: "all", scrolls: 4, max_cards: 40 };
+    return { ...META_DEFAULT_CONFIG };
   }
   return {};
 }
@@ -45,6 +55,15 @@ function platformForSourceType(sourceType: string): string | null {
   if (sourceType === "meta_ad_library_ui") return "meta";
   if (sourceType === "youtube_channel") return "youtube";
   return null;
+}
+
+function formatMetaSourceConfig(source: IntelSource) {
+  const config = source.config ?? {};
+  const status = String(config.active_status ?? META_DEFAULT_CONFIG.active_status);
+  const sort = String(config.sort_mode ?? META_DEFAULT_CONFIG.sort_mode);
+  const maxCards = String(config.max_cards ?? META_DEFAULT_CONFIG.max_cards);
+  const scrolls = String(config.scrolls ?? META_DEFAULT_CONFIG.scrolls);
+  return `${status} · ${sort} · ${scrolls} scrolls · ${maxCards} cards`;
 }
 
 export function Watcher() {
@@ -134,6 +153,7 @@ export function Watcher() {
   const sourceTypes = sourceTypesQuery.data?.source_types ?? ["youtube_channel", "rss"];
   const enabledCount = sources.filter((source) => source.enabled).length;
   const crawlBusy = crawlAllMutation.isPending || crawlSourceMutation.isPending;
+  const isMetaSource = sourceType === "meta_ad_library_ui";
 
   const applyPreset = (preset: (typeof SOURCE_PRESETS)[number]) => {
     setBrand(preset.brand);
@@ -141,6 +161,7 @@ export function Watcher() {
     setTier(preset.tier);
     setPlatformId(preset.platformId);
     setUrl("");
+    setEnabled(true);
   };
 
   return (
@@ -218,12 +239,16 @@ export function Watcher() {
               </select>
             </label>
             <label className="entity-field crawler-ad-field">
-              <span>URL (feeds)</span>
+              <span>{isMetaSource ? "URL override (optional)" : "URL (feeds)"}</span>
               <input
                 className="input"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://pressroom.toyota.com/product/feed/"
+                placeholder={
+                  isMetaSource
+                    ? "Paste an Ad Library URL only when testing custom sort/filter params"
+                    : "https://pressroom.toyota.com/product/feed/"
+                }
               />
             </label>
             <label className="entity-field crawler-ad-field">
@@ -264,6 +289,14 @@ export function Watcher() {
             </div>
           </div>
           <p className="entity-section-note">{TARGET_HINT[sourceType] ?? ""}</p>
+          {isMetaSource ? (
+            <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
+              <Metric label="Status" value={String(META_DEFAULT_CONFIG.active_status)} />
+              <Metric label="Sort" value={String(META_DEFAULT_CONFIG.sort_mode)} />
+              <Metric label="Max scrolls" value={META_DEFAULT_CONFIG.scrolls} />
+              <Metric label="Card cap" value={META_DEFAULT_CONFIG.max_cards} />
+            </div>
+          ) : null}
           {error ? <div className="entity-error-line">{error}</div> : null}
           {lastRun ? (
             <div className="entity-stat-strip entity-stat-strip-tight crawler-run-result">
@@ -283,7 +316,7 @@ export function Watcher() {
             <EmptyState
               icon={<SearchIcon size={18} />}
               title="No sources yet"
-              hint="Add a brand's official YouTube channel or newsroom feed above to start watching."
+              hint="Add a Meta page id, official YouTube channel, or newsroom feed above to start watching."
             />
           ) : (
             <div className="entity-table-wrap">
@@ -312,6 +345,9 @@ export function Watcher() {
                         <span className="entity-wrap-text">
                           {source.url || source.platform_id || "—"}
                         </span>
+                        {source.source_type === "meta_ad_library_ui" ? (
+                          <div className="entity-row-sub">{formatMetaSourceConfig(source)}</div>
+                        ) : null}
                       </td>
                       <td>{source.tier}</td>
                       <td>
