@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
+    TOYOTA_META_AD_LIBRARY_URL,
+    _clean_image_sources,
+    _clean_links,
+    _parse_card_text,
+    _safe_filename,
+)
+
+
+def test_toyota_meta_probe_url_is_page_search_for_us_active_ads() -> None:
+    assert "facebook.com/ads/library/" in TOYOTA_META_AD_LIBRARY_URL
+    assert "active_status=active" in TOYOTA_META_AD_LIBRARY_URL
+    assert "country=US" in TOYOTA_META_AD_LIBRARY_URL
+    assert "view_all_page_id=197052454200" in TOYOTA_META_AD_LIBRARY_URL
+
+
+def test_parse_card_text_extracts_library_id_status_date_and_platforms() -> None:
+    parsed = _parse_card_text(
+        """
+        Active
+        Library ID: 1234567890
+        Started running on Jun 25, 2026
+        Platforms Facebook Instagram Messenger
+        Toyota Summer Sales Event
+        """
+    )
+
+    assert parsed == {
+        "library_id": "1234567890",
+        "status": "active",
+        "started_running": "Jun 25, 2026",
+        "platforms": ["Facebook", "Instagram", "Messenger"],
+    }
+
+
+def test_parse_card_text_handles_missing_optional_fields() -> None:
+    parsed = _parse_card_text("Library ID 987 Some Toyota creative text")
+
+    assert parsed["library_id"] == "987"
+    assert parsed["status"] is None
+    assert parsed["started_running"] is None
+    assert parsed["platforms"] == []
+
+
+def test_clean_helpers_dedupe_and_limit_values() -> None:
+    links = _clean_links(
+        [
+            {"text": " Toyota ", "href": "https://toyota.com"},
+            {"text": "Toyota", "href": "https://toyota.com"},
+            {"text": "", "href": ""},
+            {"text": "Learn more", "href": ""},
+        ]
+    )
+    images = _clean_image_sources(["https://img/1", "https://img/1", "", None, "https://img/2"])
+
+    assert links == [
+        {"text": "Toyota", "href": "https://toyota.com"},
+        {"text": "Learn more", "href": ""},
+    ]
+    assert images == ["https://img/1", "https://img/2"]
+
+
+def test_safe_filename_strips_problem_characters() -> None:
+    assert _safe_filename(" 123/456:789 ") == "123_456_789"

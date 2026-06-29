@@ -11,6 +11,10 @@ import typer
 
 from ad_classifier.intelligence_crawler.config import IntelConfig, load_intel_config
 from ad_classifier.intelligence_crawler.digest import build_digest
+from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
+    TOYOTA_META_AD_LIBRARY_URL,
+    run_meta_ad_library_probe,
+)
 from ad_classifier.intelligence_crawler.repository import IntelRepository
 from ad_classifier.intelligence_crawler.runner import IntelRunner
 from ad_classifier.intelligence_crawler.schema import initialize_intelligence_crawler_db
@@ -112,3 +116,44 @@ def digest(
     repo = IntelRepository(cfg.db_path)
     entries = build_digest(repo, since=_parse_since(since))
     typer.echo(json.dumps([e.model_dump() for e in entries], indent=2))
+
+
+@intel_app.command("meta-probe")
+def meta_probe(
+    url: Annotated[
+        str,
+        typer.Option(
+            "--url",
+            help="Public Meta Ad Library URL to observe.",
+        ),
+    ] = TOYOTA_META_AD_LIBRARY_URL,
+    out_dir: Annotated[
+        Path,
+        typer.Option("--out-dir", help="Directory for screenshots and JSON output."),
+    ] = Path("./output/meta_ad_library_probe/toyota"),
+    scrolls: Annotated[int, typer.Option("--scrolls", help="Number of page scrolls.")] = 6,
+    max_cards: Annotated[
+        int, typer.Option("--max-cards", help="Maximum candidate cards to capture.")
+    ] = 30,
+    headed: Annotated[bool, typer.Option("--headed", help="Show Chromium while probing.")] = False,
+) -> None:
+    """Experimental Playwright probe for the public Meta Ad Library UI."""
+    result = run_meta_ad_library_probe(
+        url=url,
+        out_dir=out_dir,
+        scrolls=scrolls,
+        max_cards=max_cards,
+        headed=headed,
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "source_url": result.source_url,
+                "final_url": result.final_url,
+                "cards_count": result.cards_count,
+                "json_path": str(out_dir / "meta_ad_library_probe.json"),
+                "full_page_screenshot": result.full_page_screenshot,
+            },
+            indent=2,
+        )
+    )
