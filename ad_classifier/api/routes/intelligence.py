@@ -134,6 +134,41 @@ def get_source_types(request: Request) -> dict[str, Any]:
     return {"source_types": _call_manager(lambda: _manager(request).source_types())}
 
 
+@router.get("/intelligence/adapters")
+def get_adapters(request: Request) -> dict[str, Any]:
+    adapters = _call_manager(lambda: _manager(request).adapters())
+    return {"items": [adapter.model_dump(mode="json") for adapter in adapters]}
+
+
+@router.get("/intelligence/brands")
+def list_brands(
+    request: Request,
+    q: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    brands = _call_manager(lambda: _manager(request).list_brand_overviews(query=q, limit=limit))
+    return {"items": [brand.model_dump(mode="json") for brand in brands], "limit": limit}
+
+
+@router.get("/intelligence/resources")
+def list_resources(
+    request: Request,
+    brand: str | None = None,
+    source_id: str | None = None,
+    include_backfill: bool = Query(default=True),
+    limit: int = Query(default=50, ge=1, le=250),
+) -> dict[str, Any]:
+    resources = _call_manager(
+        lambda: _manager(request).list_resources(
+            brand=brand,
+            source_id=source_id,
+            include_backfill=include_backfill,
+            limit=limit,
+        )
+    )
+    return {"items": [resource.model_dump(mode="json") for resource in resources], "limit": limit}
+
+
 @router.post("/intelligence/crawl")
 def run_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
     summary = _call_manager(

@@ -40,8 +40,11 @@ import type {
   TranscriptSegment
 } from "./types";
 import type {
+  IntelAdapterDescriptor,
+  IntelBrandOverview,
   IntelCrawlSummary,
   IntelDigestEntry,
+  IntelResource,
   IntelSignal,
   IntelSource,
   IntelSourceCreate
@@ -520,6 +523,26 @@ export const api = {
 
   listIntelSources: (query: { brand?: string; enabled_only?: boolean } = {}) =>
     apiFetch<{ items: IntelSource[] }>(`/api/intelligence/sources${params(query)}`),
+
+  listIntelAdapters: () =>
+    apiFetch<{ items: IntelAdapterDescriptor[] }>("/api/intelligence/adapters"),
+
+  listIntelBrands: (query: { q?: string; limit?: number } = {}) =>
+    apiFetch<{ items: IntelBrandOverview[]; limit: number }>(
+      `/api/intelligence/brands${params(query)}`
+    ),
+
+  listIntelResources: (
+    query: {
+      brand?: string;
+      source_id?: string;
+      include_backfill?: boolean;
+      limit?: number;
+    } = {}
+  ) =>
+    apiFetch<{ items: IntelResource[]; limit: number }>(
+      `/api/intelligence/resources${params(query)}`
+    ),
 
   createIntelSource: (body: IntelSourceCreate) =>
     apiFetch<IntelSource>("/api/intelligence/sources", {

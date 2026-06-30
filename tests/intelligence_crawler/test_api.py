@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from ad_classifier.api.routes.intelligence import router
 from ad_classifier.intelligence_crawler.config import IntelConfig, SourceConfig, WatchlistConfig
 from ad_classifier.intelligence_crawler.manager import IntelManager
-from ad_classifier.intelligence_crawler.models import IntelEvidence, IntelSignal
+from ad_classifier.intelligence_crawler.models import IntelEvidence, IntelResource, IntelSignal
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=UTC)
 
@@ -25,7 +25,27 @@ def _client(tmp_path) -> TestClient:
         ],
     )
     manager = IntelManager(config)
-    # Seed one signal with evidence directly through the repository.
+    # Seed one resource + signal with evidence directly through the repository.
+    resource = IntelResource(
+        id="res_demo",
+        source_id="s1",
+        resource_type="meta_ad",
+        url="https://www.facebook.com/ads/library/?id=123",
+        platform="meta",
+        platform_id="123",
+        title="Toyota: Camry Reborn",
+        description="Visible Meta card copy",
+        published_at=NOW,
+        first_seen_at=NOW,
+        fetched_at=NOW,
+        is_backfill=True,
+        metadata={
+            "screenshot_path": "C:/tmp/card_123.png",
+            "image_sources": ["https://cdn.example/image.jpg"],
+            "video_sources": ["https://cdn.example/video.mp4"],
+            "links": [{"text": "Toyota", "href": "https://toyota.com"}],
+        },
+    )
     signal = IntelSignal(
         id="sig_demo",
         brand_name="Toyota",
@@ -41,6 +61,8 @@ def _client(tmp_path) -> TestClient:
             IntelEvidence(
                 id="ev1",
                 signal_id="sig_demo",
+                resource_id="res_demo",
+                source_id="s1",
                 evidence_type="video",
                 url="https://www.youtube.com/watch?v=VID1",
                 text="Camry Reborn",
@@ -49,6 +71,8 @@ def _client(tmp_path) -> TestClient:
         ],
     )
     with manager.repo.connect() as conn:
+        manager.repo.sync_sources(conn, [source.to_source() for source in config.sources])
+        manager.repo.insert_resource(conn, resource)
         manager.repo.insert_signal(conn, signal)
         conn.commit()
 
@@ -87,6 +111,31 @@ def test_digest_and_source_types(tmp_path):
 
     types = client.get("/api/intelligence/source-types").json()["source_types"]
     assert {"mock", "rss", "youtube_channel", "meta_ad_library_ui"} <= set(types)
+
+    adapters = client.get("/api/intelligence/adapters").json()["items"]
+    meta = next(item for item in adapters if item["source_type"] == "meta_ad_library_ui")
+    assert meta["label"] == "Meta Ad Library"
+    assert "card screenshots" in meta["provides"]
+
+
+def test_brand_and_resource_artifact_endpoints(tmp_path):
+    client = _client(tmp_path)
+
+    brands = client.get("/api/intelligence/brands").json()["items"]
+    toyota = next(item for item in brands if item["brand_name"] == "Toyota")
+    assert toyota["source_count"] == 1
+    assert toyota["resource_count"] == 1
+    assert toyota["backfill_resource_count"] == 1
+    assert toyota["signal_count"] == 1
+    assert toyota["artifact_summary"]["screenshot_count"] == 1
+    assert toyota["artifact_summary"]["image_source_count"] == 1
+
+    resources = client.get("/api/intelligence/resources", params={"brand": "Toyota"}).json()[
+        "items"
+    ]
+    assert [resource["id"] for resource in resources] == ["res_demo"]
+    artifact_types = {artifact["artifact_type"] for artifact in resources[0]["artifacts"]}
+    assert {"card_screenshot", "image_url", "video_url", "link"} <= artifact_types
 
 
 def test_crawl_endpoint_runs(tmp_path):

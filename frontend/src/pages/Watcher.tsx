@@ -2,9 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
-  CheckCircle2,
+  Archive,
+  Box,
+  Boxes,
+  ChevronRight,
   CirclePlay,
+  Database,
   ExternalLink,
+  FileImage,
+  Film,
+  Image,
+  Link as LinkIcon,
   Plus,
   Radio,
   Search,
@@ -12,83 +20,85 @@ import {
   ToggleLeft,
   ToggleRight
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
 import { api } from "../lib/api-client";
-import type { IntelCrawlSummary, IntelSource, IntelTier } from "../lib/intel-types";
+import type {
+  IntelAdapterDescriptor,
+  IntelArtifactSummary,
+  IntelBrandOverview,
+  IntelCrawlSummary,
+  IntelResource,
+  IntelResourceArtifact,
+  IntelSignal,
+  IntelSource,
+  IntelTier
+} from "../lib/intel-types";
 import "./Watcher.css";
 
-const TARGET_HINT: Record<string, string> = {
-  youtube_channel: "Put the official channel id (UC…) in “Channel / platform id”.",
-  rss: "Put the feed URL (newsroom/trade-press) in “URL”.",
-  meta_ad_library_ui:
-    "Put the verified Meta page id in “Channel / page / platform id”. Defaults crawl active US ads; optional URL override can test a pasted Ad Library URL.",
-  mock: "Offline test source (items come from config)."
-};
-
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  meta_ad_library_ui: "Meta Ad Library",
-  youtube_channel: "YouTube channel",
-  rss: "RSS / newsroom feed",
-  mock: "Mock source"
-};
-
-const META_DEFAULT_CONFIG = {
-  active_status: "active",
-  sort_mode: "relevancy_monthly_grouped",
-  sort_direction: "desc",
-  scrolls: 20,
-  max_cards: 250,
-  wait_ms: 1800,
-  stop_after_no_new: 3
-};
-
-const META_SORT_LABELS: Record<string, string> = {
-  relevancy_monthly_grouped: "Monthly relevancy",
-  total_impressions: "Total impressions"
-};
-
-const SOURCE_PRESETS = [
+const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
   {
-    label: "Toyota Meta",
-    brand: "Toyota",
-    sourceType: "meta_ad_library_ui",
-    tier: "B" as IntelTier,
-    platformId: "197052454200"
+    source_type: "meta_ad_library_ui",
+    label: "Meta Ad Library",
+    target_label: "Meta page ID",
+    target_placeholder: "197052454200",
+    helper_text:
+      "Public Meta Ad Library monitoring for active US ads. Stores visible cards, screenshots, copy, image URLs, and exposed video URLs.",
+    default_tier: "B",
+    platform: "meta",
+    requires_url: false,
+    requires_platform_id: true,
+    config: {
+      active_status: "active",
+      sort_mode: "relevancy_monthly_grouped",
+      sort_direction: "desc",
+      scrolls: 20,
+      max_cards: 250,
+      wait_ms: 1800,
+      stop_after_no_new: 3
+    },
+    provides: [
+      "Meta library IDs",
+      "card screenshots",
+      "visible ad copy",
+      "image URLs",
+      "video URLs when exposed"
+    ]
   },
   {
-    label: "Jeep Meta",
-    brand: "Jeep",
-    sourceType: "meta_ad_library_ui",
-    tier: "B" as IntelTier,
-    platformId: "7037526514"
+    source_type: "youtube_channel",
+    label: "YouTube channel",
+    target_label: "Channel ID",
+    target_placeholder: "UC...",
+    helper_text: "Official channel monitoring through public feeds and video metadata.",
+    default_tier: "A",
+    platform: "youtube",
+    requires_url: false,
+    requires_platform_id: true,
+    config: {},
+    provides: ["video ids", "titles", "descriptions", "publish dates", "thumbnails"]
+  },
+  {
+    source_type: "rss",
+    label: "RSS / newsroom feed",
+    target_label: "Feed URL",
+    target_placeholder: "https://pressroom.toyota.com/product/feed/",
+    helper_text: "Robots-gated feed monitoring for newsroom and trade-press releases.",
+    default_tier: "A",
+    platform: null,
+    requires_url: true,
+    requires_platform_id: false,
+    config: {},
+    provides: ["article URLs", "titles", "descriptions", "publish dates"]
   }
 ];
 
-function configForSourceType(sourceType: string): Record<string, unknown> {
-  if (sourceType === "meta_ad_library_ui") {
-    return { ...META_DEFAULT_CONFIG };
-  }
-  return {};
-}
-
-function platformForSourceType(sourceType: string): string | null {
-  if (sourceType === "meta_ad_library_ui") return "meta";
-  if (sourceType === "youtube_channel") return "youtube";
-  return null;
-}
-
-function formatMetaSourceConfig(source: IntelSource) {
-  const config = source.config ?? {};
-  const status = String(config.active_status ?? META_DEFAULT_CONFIG.active_status);
-  const sort = formatMetaSortMode(String(config.sort_mode ?? META_DEFAULT_CONFIG.sort_mode));
-  const maxCards = String(config.max_cards ?? META_DEFAULT_CONFIG.max_cards);
-  const scrolls = String(config.scrolls ?? META_DEFAULT_CONFIG.scrolls);
-  return `${status} · ${sort} · ${scrolls} scrolls · ${maxCards} cards`;
+function adapterLabel(sourceType: string, adapters: IntelAdapterDescriptor[]) {
+  return adapters.find((adapter) => adapter.source_type === sourceType)?.label ?? sourceType.replace(/_/g, " ");
 }
 
 function sourceTarget(source: IntelSource) {
@@ -99,12 +109,16 @@ function sourceStateLabel(source: IntelSource) {
   return source.source_activated_at ? "activated" : "baseline pending";
 }
 
-function sourceTypeLabel(sourceType: string) {
-  return SOURCE_TYPE_LABELS[sourceType] ?? sourceType.replace(/_/g, " ");
-}
-
-function formatMetaSortMode(sortMode: string) {
-  return META_SORT_LABELS[sortMode] ?? sortMode.replace(/_/g, " ");
+function artifactTotal(summary: IntelArtifactSummary) {
+  return (
+    summary.screenshot_count +
+    summary.image_source_count +
+    summary.video_source_count +
+    summary.video_poster_count +
+    summary.background_image_source_count +
+    summary.link_count +
+    summary.media_asset_count
+  );
 }
 
 function formatConfidence(value: number) {
@@ -115,18 +129,24 @@ export function Watcher() {
   const health = useApiHealth();
   const queryClient = useQueryClient();
 
+  const [brandSearch, setBrandSearch] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [brand, setBrand] = useState("");
-  const [sourceType, setSourceType] = useState("youtube_channel");
+  const [sourceType, setSourceType] = useState("meta_ad_library_ui");
   const [url, setUrl] = useState("");
   const [platformId, setPlatformId] = useState("");
-  const [tier, setTier] = useState<IntelTier>("A");
+  const [tier, setTier] = useState<IntelTier>("B");
   const [enabled, setEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IntelCrawlSummary | null>(null);
 
-  const sourceTypesQuery = useQuery({
-    queryKey: ["intel-source-types"],
-    queryFn: () => api.listIntelSourceTypes()
+  const adaptersQuery = useQuery({
+    queryKey: ["intel-adapters"],
+    queryFn: () => api.listIntelAdapters()
+  });
+  const brandsQuery = useQuery({
+    queryKey: ["intel-brands", brandSearch],
+    queryFn: () => api.listIntelBrands({ q: brandSearch.trim() || undefined, limit: 100 })
   });
   const sourcesQuery = useQuery({
     queryKey: ["intel-sources"],
@@ -136,27 +156,71 @@ export function Watcher() {
     queryKey: ["intel-signals"],
     queryFn: () => api.listIntelSignals({ limit: 100 })
   });
+  const resourcesQuery = useQuery({
+    queryKey: ["intel-resources", selectedBrand],
+    queryFn: () => api.listIntelResources({ brand: selectedBrand ?? undefined, limit: 40 }),
+    enabled: Boolean(selectedBrand)
+  });
+
+  const adapters = adaptersQuery.data?.items?.length ? adaptersQuery.data.items : FALLBACK_ADAPTERS;
+  const selectedAdapter =
+    adapters.find((adapter) => adapter.source_type === sourceType) ?? adapters[0] ?? FALLBACK_ADAPTERS[0];
+  const brands = brandsQuery.data?.items ?? [];
+  const sources = sourcesQuery.data?.items ?? [];
+  const signals = signalsQuery.data?.items ?? [];
+  const resources = resourcesQuery.data?.items ?? [];
+  const selectedBrandOverview = brands.find((item) => item.brand_name === selectedBrand) ?? null;
+  const selectedSources = sources.filter((source) => source.brand_name === selectedBrand);
+  const selectedSignals = signals.filter((signal) => signal.brand_name === selectedBrand);
+  const enabledCount = sources.filter((source) => source.enabled).length;
+  const totalResources = brands.reduce((sum, item) => sum + item.resource_count, 0);
+
+  const sourceTypeOptions = useMemo(
+    () => adapters.map((adapter) => adapter.source_type),
+    [adapters]
+  );
+
+  useEffect(() => {
+    if (!selectedBrand && brands.length > 0) {
+      setSelectedBrand(brands[0].brand_name);
+    }
+  }, [brands, selectedBrand]);
+
+  useEffect(() => {
+    if (selectedBrand && !brand) {
+      setBrand(selectedBrand);
+    }
+  }, [brand, selectedBrand]);
+
+  useEffect(() => {
+    if (sourceTypeOptions.length > 0 && !sourceTypeOptions.includes(sourceType)) {
+      setSourceType(sourceTypeOptions[0]);
+    }
+  }, [sourceType, sourceTypeOptions]);
 
   const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["intel-brands"] });
     void queryClient.invalidateQueries({ queryKey: ["intel-sources"] });
     void queryClient.invalidateQueries({ queryKey: ["intel-signals"] });
+    void queryClient.invalidateQueries({ queryKey: ["intel-resources"] });
   };
 
   const createMutation = useMutation({
     mutationFn: () =>
       api.createIntelSource({
         brand: brand.trim(),
-        source_type: sourceType,
+        source_type: selectedAdapter.source_type,
         tier,
         url: url.trim() || null,
-        platform: platformForSourceType(sourceType),
+        platform: selectedAdapter.platform ?? platformForSourceType(selectedAdapter.source_type),
         platform_id: platformId.trim() || null,
         enabled,
-        config: configForSourceType(sourceType)
+        config: selectedAdapter.config
       }),
-    onSuccess: () => {
+    onSuccess: (source) => {
       setError(null);
-      setBrand("");
+      setSelectedBrand(source.brand_name);
+      setBrand(source.brand_name);
       setUrl("");
       setPlatformId("");
       invalidate();
@@ -183,8 +247,8 @@ export function Watcher() {
     },
     onError: (err) => setError(errorMessage(err))
   });
-  const crawlAllMutation = useMutation({
-    mutationFn: () => api.runIntelCrawl({ due: true }),
+  const crawlBrandMutation = useMutation({
+    mutationFn: (brandName: string) => api.runIntelCrawl({ due: true, brand: brandName }),
     onSuccess: (summary) => {
       setError(null);
       setLastRun(summary);
@@ -193,22 +257,26 @@ export function Watcher() {
     onError: (err) => setError(errorMessage(err))
   });
 
-  const sources = sourcesQuery.data?.items ?? [];
-  const signals = signalsQuery.data?.items ?? [];
-  const sourceTypes = sourceTypesQuery.data?.source_types ?? ["youtube_channel", "rss"];
-  const enabledCount = sources.filter((source) => source.enabled).length;
-  const crawlBusy = crawlAllMutation.isPending || crawlSourceMutation.isPending;
+  const crawlBusy = crawlBrandMutation.isPending || crawlSourceMutation.isPending;
   const runningSourceId = crawlSourceMutation.isPending ? crawlSourceMutation.variables : null;
-  const isMetaSource = sourceType === "meta_ad_library_ui";
 
-  const applyPreset = (preset: (typeof SOURCE_PRESETS)[number]) => {
-    setBrand(preset.brand);
-    setSourceType(preset.sourceType);
-    setTier(preset.tier);
-    setPlatformId(preset.platformId);
+  const onSourceTypeChange = (nextSourceType: string) => {
+    const nextAdapter = adapters.find((adapter) => adapter.source_type === nextSourceType);
+    setSourceType(nextSourceType);
+    setTier(nextAdapter?.default_tier ?? "B");
     setUrl("");
-    setEnabled(true);
+    setPlatformId("");
   };
+
+  const onSelectBrand = (nextBrand: string) => {
+    setSelectedBrand(nextBrand);
+    setBrand(nextBrand);
+  };
+
+  const targetMissing =
+    (selectedAdapter.requires_platform_id && !platformId.trim()) ||
+    (selectedAdapter.requires_url && !url.trim());
+  const canCreateSource = Boolean(brand.trim()) && !targetMissing && !createMutation.isPending;
 
   return (
     <>
@@ -221,275 +289,478 @@ export function Watcher() {
             <span className="watcher-kicker">Brand intelligence</span>
             <h1 className="page-title">Watcher</h1>
             <p className="page-sub">
-              Maintain brand source coverage, run active crawls, and review new campaign signals
-              from one operational surface.
+              Monitor brands through adapter-backed sources, inspect what each adapter captured,
+              and separate baseline backfill from live campaign signals.
             </p>
           </div>
           <div className="watcher-metrics">
-            <Metric label="Sources" value={sources.length} />
-            <Metric label="Enabled" value={enabledCount} />
+            <Metric label="Brands" value={brands.length} />
+            <Metric label="Sources" value={`${enabledCount}/${sources.length}`} />
+            <Metric label="Resources" value={totalResources} />
             <Metric label="Signals" value={signals.length} />
           </div>
         </section>
 
-        <section className="watcher-panel watcher-add-panel">
-          <div className="watcher-panel-header">
-            <div>
-              <span className="watcher-section-kicker">Source registry</span>
-              <h2>Add a source</h2>
+        <section className="watcher-panel watcher-toolbar">
+          <label className="watcher-search-field">
+            <Search size={15} />
+            <input
+              value={brandSearch}
+              onChange={(event) => setBrandSearch(event.target.value)}
+              placeholder="Search monitored brands"
+            />
+          </label>
+          <button
+            className="watcher-secondary-action"
+            disabled={!selectedBrand || crawlBusy}
+            onClick={() => selectedBrand && crawlBrandMutation.mutate(selectedBrand)}
+          >
+            <CirclePlay size={14} />
+            <span>{crawlBrandMutation.isPending ? "Running brand" : "Run selected brand"}</span>
+          </button>
+        </section>
+
+        <div className="watcher-brand-layout">
+          <section className="watcher-panel">
+            <div className="watcher-panel-header">
+              <div>
+                <span className="watcher-section-kicker">Brands</span>
+                <h2>Coverage map</h2>
+              </div>
             </div>
-            <div className="watcher-presets" aria-label="Source presets">
-              {SOURCE_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  className="watcher-preset"
-                  type="button"
-                  onClick={() => applyPreset(preset)}
-                >
-                  <CheckCircle2 size={13} />
-                  <span>{preset.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="watcher-form-grid">
-            <label className="watcher-field">
-              <span>Brand</span>
-              <input
-                className="input"
-                value={brand}
-                onChange={(event) => setBrand(event.target.value)}
-                placeholder="Toyota"
+            {brandsQuery.isLoading ? (
+              <div className="watcher-muted-line">Loading brands...</div>
+            ) : brands.length === 0 ? (
+              <EmptyState
+                icon={<Search size={18} />}
+                title="No monitored brands"
+                hint="Add the first source for a brand to create its Watcher profile."
               />
-            </label>
-            <label className="watcher-field">
-              <span>Type</span>
-              <select
-                className="input"
-                value={sourceType}
-                onChange={(event) => setSourceType(event.target.value)}
-              >
-                {sourceTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {sourceTypeLabel(type)}
-                  </option>
+            ) : (
+              <div className="watcher-brand-grid">
+                {brands.map((item) => (
+                  <BrandCard
+                    adapters={adapters}
+                    brand={item}
+                    isSelected={item.brand_name === selectedBrand}
+                    key={item.brand_name}
+                    onSelect={() => onSelectBrand(item.brand_name)}
+                  />
                 ))}
-              </select>
-            </label>
-            <label className="watcher-field">
-              <span>Tier</span>
-              <select
-                className="input"
-                value={tier}
-                onChange={(event) => setTier(event.target.value as IntelTier)}
-              >
-                <option value="A">A — strong</option>
-                <option value="B">B — medium</option>
-                <option value="C">C — corroboration</option>
-              </select>
-            </label>
-            <label className="watcher-field watcher-wide-field">
-              <span>{isMetaSource ? "URL override (optional)" : "URL (feeds)"}</span>
-              <input
-                className="input"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder={
-                  isMetaSource
-                    ? "Paste an Ad Library URL only when testing custom sort/filter params"
-                    : "https://pressroom.toyota.com/product/feed/"
-                }
-              />
-            </label>
-            <label className="watcher-field watcher-wide-field">
-              <span>Channel / page / platform id</span>
-              <input
-                className="input"
-                value={platformId}
-                onChange={(event) => setPlatformId(event.target.value)}
-                placeholder="YouTube UC… or Meta page id"
-              />
-            </label>
-            <label className="watcher-toggle">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(event) => setEnabled(event.target.checked)}
-                aria-label="Enabled"
-              />
-              <span className="watcher-switch" aria-hidden="true" />
-              <span>Enabled on create</span>
-            </label>
-            <div className="watcher-form-actions">
-              <button
-                className="watcher-primary-action"
-                disabled={!brand.trim() || createMutation.isPending}
-                onClick={() => createMutation.mutate()}
-              >
-                <Plus size={14} />
-                <span>{createMutation.isPending ? "Adding" : "Add source"}</span>
-              </button>
-              <button
-                className="watcher-secondary-action"
-                disabled={crawlBusy || enabledCount === 0}
-                onClick={() => crawlAllMutation.mutate()}
-              >
-                <Search size={14} />
-                <span>{crawlAllMutation.isPending ? "Crawling" : "Crawl all enabled"}</span>
-              </button>
-            </div>
-          </div>
-          <p className="watcher-help">{TARGET_HINT[sourceType] ?? ""}</p>
-          {isMetaSource ? (
-            <div className="watcher-config-strip">
-              <ConfigPill label="Status" value={String(META_DEFAULT_CONFIG.active_status)} />
-              <ConfigPill label="Sort" value={formatMetaSortMode(String(META_DEFAULT_CONFIG.sort_mode))} />
-              <ConfigPill label="Max scrolls" value={String(META_DEFAULT_CONFIG.scrolls)} />
-              <ConfigPill label="Card cap" value={String(META_DEFAULT_CONFIG.max_cards)} />
-            </div>
-          ) : null}
-          {error ? <div className="watcher-error">{error}</div> : null}
-          {lastRun ? (
-            <div className="watcher-run-summary">
-              <Metric label="Status" value={lastRun.status} />
-              <Metric label="Sources" value={lastRun.source_count} />
-              <Metric label="New resources" value={lastRun.resource_count} />
-              <Metric label="New signals" value={lastRun.signal_count} />
-            </div>
-          ) : null}
-        </section>
+              </div>
+            )}
+          </section>
 
-        <section className="watcher-panel">
-          <div className="watcher-panel-header">
-            <div>
-              <span className="watcher-section-kicker">Registry</span>
-              <h2>Watched sources</h2>
+          <section className="watcher-panel watcher-brand-detail">
+            <div className="watcher-detail-header">
+              <div>
+                <span className="watcher-section-kicker">Selected brand</span>
+                <h2>{selectedBrand ?? "Choose a brand"}</h2>
+              </div>
+              {selectedBrandOverview ? (
+                <div className="watcher-detail-stats">
+                  <Metric label="Resources" value={selectedBrandOverview.resource_count} />
+                  <Metric label="Artifacts" value={artifactTotal(selectedBrandOverview.artifact_summary)} />
+                  <Metric label="Signals" value={selectedBrandOverview.signal_count} />
+                </div>
+              ) : null}
             </div>
-          </div>
-          {sourcesQuery.isLoading ? (
-            <div className="watcher-muted-line">Loading sources…</div>
-          ) : sources.length === 0 ? (
-            <EmptyState
-              icon={<Search size={18} />}
-              title="No sources yet"
-              hint="Add a Meta page id, official YouTube channel, or newsroom feed above to start watching."
-            />
-          ) : (
-            <div className="watcher-source-grid">
-              {sources.map((source) => (
-                <article
-                  className={`watcher-source-card ${source.enabled ? "is-enabled" : ""}`}
-                  key={source.id}
-                >
-                  <div className="watcher-source-card-head">
-                    <div>
-                      <strong>{source.brand_name}</strong>
-                      <span>{sourceTypeLabel(source.source_type)} source</span>
-                    </div>
-                    <span className={`watcher-state-pill ${source.enabled ? "enabled" : "disabled"}`}>
-                      {source.enabled ? "enabled" : "disabled"}
-                    </span>
-                  </div>
-                  <div className="watcher-source-tags">
-                    <span>{sourceTypeLabel(source.source_type)}</span>
-                    <span>Tier {source.tier}</span>
-                    <span>{sourceStateLabel(source)}</span>
-                  </div>
-                  <div className="watcher-target-card">
-                    <span>Target</span>
-                    <strong>{sourceTarget(source)}</strong>
-                    {source.source_type === "meta_ad_library_ui" ? (
-                      <em>{formatMetaSourceConfig(source)}</em>
-                    ) : null}
-                  </div>
-                  <div className="watcher-source-actions">
-                    <button
-                      className="watcher-card-action"
-                      disabled={crawlBusy}
-                      onClick={() => crawlSourceMutation.mutate(source.id)}
-                    >
-                      <CirclePlay size={14} />
-                      <span>{runningSourceId === source.id ? "Running" : "Run"}</span>
-                    </button>
-                    <button
-                      className="watcher-card-action"
-                      disabled={toggleMutation.isPending}
-                      onClick={() => toggleMutation.mutate(source)}
-                    >
-                      {source.enabled ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
-                      <span>{source.enabled ? "Disable" : "Enable"}</span>
-                    </button>
-                    <button
-                      className="watcher-card-action danger"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(source.id)}
-                    >
-                      <Trash2 size={14} />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
 
-        <section className="watcher-panel">
-          <div className="watcher-panel-header">
-            <div>
-              <span className="watcher-section-kicker">Activity</span>
-              <h2>Signals</h2>
-            </div>
-          </div>
-          {signalsQuery.isLoading ? (
-            <div className="watcher-muted-line">Loading signals…</div>
-          ) : signals.length === 0 ? (
-            <EmptyState
-              icon={<AlertTriangle size={18} />}
-              title="No signals yet"
-              hint="Run a source twice: the first poll is baseline; new releases after that become signals."
-            />
-          ) : (
-            <div className="watcher-signal-list">
-              {signals.map((signal) => (
-                <article className="watcher-signal-card" key={signal.id}>
-                  <div className="watcher-signal-icon">
-                    <Radio size={16} />
-                  </div>
-                  <div className="watcher-signal-main">
-                    <div className="watcher-signal-title">
-                      <strong>{signal.campaign_name || signal.title}</strong>
-                      <span>{signal.brand_name}</span>
-                    </div>
-                    <div className="watcher-source-tags">
-                      <span>{signal.signal_type}</span>
-                      <span>{signal.status}</span>
-                      <span>{formatConfidence(signal.confidence)}</span>
-                      {signal.source_published_at ? (
-                        <span>{formatDate(signal.source_published_at)}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                  {signal.evidence[0]?.url ? (
-                    <a
-                      className="watcher-card-action"
-                      href={signal.evidence[0].url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ExternalLink size={14} />
-                      <span>Open</span>
-                    </a>
-                  ) : (
-                    <span className="watcher-muted-line">No evidence URL</span>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+            <section className="watcher-split-panel">
+              <div>
+                <span className="watcher-section-kicker">Add adapter</span>
+                <h3>Attach a source</h3>
+              </div>
+              <div className="watcher-form-grid">
+                <label className="watcher-field">
+                  <span>Brand</span>
+                  <input
+                    className="input"
+                    value={brand}
+                    onChange={(event) => setBrand(event.target.value)}
+                    placeholder="Toyota"
+                  />
+                </label>
+                <label className="watcher-field">
+                  <span>Adapter</span>
+                  <select
+                    className="input"
+                    value={sourceType}
+                    onChange={(event) => onSourceTypeChange(event.target.value)}
+                  >
+                    {sourceTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {adapterLabel(type, adapters)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="watcher-field">
+                  <span>Tier</span>
+                  <select
+                    className="input"
+                    value={tier}
+                    onChange={(event) => setTier(event.target.value as IntelTier)}
+                  >
+                    <option value="A">A - strong</option>
+                    <option value="B">B - medium</option>
+                    <option value="C">C - corroboration</option>
+                  </select>
+                </label>
+                <label className="watcher-field watcher-wide-field">
+                  <span>{selectedAdapter.target_label}</span>
+                  <input
+                    className="input"
+                    value={selectedAdapter.requires_url ? url : platformId}
+                    onChange={(event) =>
+                      selectedAdapter.requires_url
+                        ? setUrl(event.target.value)
+                        : setPlatformId(event.target.value)
+                    }
+                    placeholder={selectedAdapter.target_placeholder}
+                  />
+                </label>
+                {!selectedAdapter.requires_url ? (
+                  <label className="watcher-field">
+                    <span>URL override</span>
+                    <input
+                      className="input"
+                      value={url}
+                      onChange={(event) => setUrl(event.target.value)}
+                      placeholder="Optional adapter URL"
+                    />
+                  </label>
+                ) : null}
+                <label className="watcher-toggle">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(event) => setEnabled(event.target.checked)}
+                    aria-label="Enabled"
+                  />
+                  <span className="watcher-switch" aria-hidden="true" />
+                  <span>Enabled</span>
+                </label>
+                <div className="watcher-form-actions">
+                  <button
+                    className="watcher-primary-action"
+                    disabled={!canCreateSource}
+                    onClick={() => createMutation.mutate()}
+                  >
+                    <Plus size={14} />
+                    <span>{createMutation.isPending ? "Adding" : "Add source"}</span>
+                  </button>
+                </div>
+              </div>
+              <AdapterCapability adapter={selectedAdapter} />
+              {error ? <div className="watcher-error">{error}</div> : null}
+              {lastRun ? (
+                <div className="watcher-run-summary">
+                  <Metric label="Status" value={lastRun.status} />
+                  <Metric label="Sources" value={lastRun.source_count} />
+                  <Metric label="New resources" value={lastRun.resource_count} />
+                  <Metric label="New signals" value={lastRun.signal_count} />
+                </div>
+              ) : null}
+            </section>
+
+            <section className="watcher-split-panel">
+              <div className="watcher-panel-header">
+                <div>
+                  <span className="watcher-section-kicker">Adapters</span>
+                  <h3>Sources for {selectedBrand ?? "brand"}</h3>
+                </div>
+              </div>
+              {selectedBrand && selectedSources.length === 0 ? (
+                <EmptyState
+                  icon={<Database size={18} />}
+                  title="No sources for this brand"
+                  hint="Attach Meta, YouTube, RSS, or another adapter to start collecting resources."
+                />
+              ) : (
+                <div className="watcher-source-list">
+                  {selectedSources.map((source) => (
+                    <SourceRow
+                      adapters={adapters}
+                      crawlBusy={crawlBusy}
+                      isRunning={runningSourceId === source.id}
+                      key={source.id}
+                      onDelete={() => deleteMutation.mutate(source.id)}
+                      onRun={() => crawlSourceMutation.mutate(source.id)}
+                      onToggle={() => toggleMutation.mutate(source)}
+                      source={source}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="watcher-split-panel">
+              <div className="watcher-panel-header">
+                <div>
+                  <span className="watcher-section-kicker">Artifacts</span>
+                  <h3>Resources captured</h3>
+                </div>
+                <span className="watcher-muted-line">
+                  {resources.length ? `${resources.length} latest` : ""}
+                </span>
+              </div>
+              {resourcesQuery.isLoading ? (
+                <div className="watcher-muted-line">Loading resources...</div>
+              ) : !selectedBrand || resources.length === 0 ? (
+                <EmptyState
+                  icon={<Archive size={18} />}
+                  title="No resources yet"
+                  hint="Run an adapter to backfill observed ads and source artifacts."
+                />
+              ) : (
+                <div className="watcher-resource-list">
+                  {resources.map((resource) => (
+                    <ResourceCard
+                      adapters={adapters}
+                      key={resource.id}
+                      resource={resource}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="watcher-split-panel">
+              <div className="watcher-panel-header">
+                <div>
+                  <span className="watcher-section-kicker">Signals</span>
+                  <h3>Live campaign activity</h3>
+                </div>
+              </div>
+              {selectedSignals.length === 0 ? (
+                <EmptyState
+                  icon={<AlertTriangle size={18} />}
+                  title="No live signals for this brand"
+                  hint="Baseline resources are stored first; new post-activation items become signals."
+                />
+              ) : (
+                <div className="watcher-signal-list">
+                  {selectedSignals.map((signal) => (
+                    <SignalCard key={signal.id} signal={signal} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </section>
+        </div>
       </div>
     </>
+  );
+}
+
+function BrandCard({
+  adapters,
+  brand,
+  isSelected,
+  onSelect
+}: {
+  adapters: IntelAdapterDescriptor[];
+  brand: IntelBrandOverview;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button className={`watcher-brand-card ${isSelected ? "is-selected" : ""}`} onClick={onSelect}>
+      <div className="watcher-brand-card-top">
+        <div>
+          <strong>{brand.brand_name}</strong>
+          <span>{brand.source_types.map((type) => adapterLabel(type, adapters)).join(", ") || "No adapters"}</span>
+        </div>
+        <ChevronRight size={16} />
+      </div>
+      <div className="watcher-brand-stats">
+        <span>{brand.enabled_source_count}/{brand.source_count} sources</span>
+        <span>{brand.resource_count} resources</span>
+        <span>{artifactTotal(brand.artifact_summary)} artifacts</span>
+        <span>{brand.signal_count} signals</span>
+      </div>
+    </button>
+  );
+}
+
+function AdapterCapability({ adapter }: { adapter: IntelAdapterDescriptor }) {
+  return (
+    <div className="watcher-adapter-card">
+      <div>
+        <strong>{adapter.label}</strong>
+        <span>{adapter.helper_text}</span>
+      </div>
+      <div className="watcher-provider-chips">
+        {adapter.provides.map((item) => (
+          <span key={item}>{item}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SourceRow({
+  adapters,
+  crawlBusy,
+  isRunning,
+  onDelete,
+  onRun,
+  onToggle,
+  source
+}: {
+  adapters: IntelAdapterDescriptor[];
+  crawlBusy: boolean;
+  isRunning: boolean;
+  onDelete: () => void;
+  onRun: () => void;
+  onToggle: () => void;
+  source: IntelSource;
+}) {
+  return (
+    <article className={`watcher-source-row ${source.enabled ? "is-enabled" : ""}`}>
+      <div>
+        <strong>{adapterLabel(source.source_type, adapters)}</strong>
+        <span>{sourceTarget(source)}</span>
+      </div>
+      <div className="watcher-source-tags">
+        <span>Tier {source.tier}</span>
+        <span>{sourceStateLabel(source)}</span>
+        <span>{source.enabled ? "enabled" : "disabled"}</span>
+      </div>
+      <div className="watcher-source-actions">
+        <button className="watcher-card-action" disabled={crawlBusy} onClick={onRun}>
+          <CirclePlay size={14} />
+          <span>{isRunning ? "Running" : "Run"}</span>
+        </button>
+        <button className="watcher-card-action" onClick={onToggle}>
+          {source.enabled ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
+          <span>{source.enabled ? "Disable" : "Enable"}</span>
+        </button>
+        <button className="watcher-card-action danger" onClick={onDelete}>
+          <Trash2 size={14} />
+          <span>Delete</span>
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ResourceCard({
+  adapters,
+  resource
+}: {
+  adapters: IntelAdapterDescriptor[];
+  resource: IntelResource;
+}) {
+  return (
+    <article className="watcher-resource-card">
+      <div className="watcher-resource-head">
+        <div>
+          <strong>{resource.title || resource.platform_id || resource.id}</strong>
+          <span>
+            {adapterLabel(resource.source_type, adapters)} · {resource.resource_type} ·{" "}
+            {formatDate(resource.published_at || resource.first_seen_at)}
+          </span>
+        </div>
+        <span className={`watcher-state-pill ${resource.is_backfill ? "disabled" : "enabled"}`}>
+          {resource.is_backfill ? "backfill" : "live"}
+        </span>
+      </div>
+      {resource.description ? <p>{resource.description}</p> : null}
+      <ArtifactSummary summary={resource.artifact_summary} />
+      <div className="watcher-artifact-strip">
+        {resource.artifacts.slice(0, 8).map((artifact, index) => (
+          <ArtifactLink artifact={artifact} key={`${artifact.artifact_type}-${index}`} />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function ArtifactSummary({ summary }: { summary: IntelArtifactSummary }) {
+  const chips = [
+    { icon: <FileImage size={12} />, label: "screens", value: summary.screenshot_count },
+    { icon: <Image size={12} />, label: "images", value: summary.image_source_count },
+    { icon: <Film size={12} />, label: "videos", value: summary.video_source_count },
+    { icon: <LinkIcon size={12} />, label: "links", value: summary.link_count },
+    { icon: <Boxes size={12} />, label: "assets", value: summary.media_asset_count }
+  ].filter((item) => item.value > 0);
+  if (chips.length === 0) {
+    return <span className="watcher-muted-line">No artifacts extracted</span>;
+  }
+  return (
+    <div className="watcher-artifact-summary">
+      {chips.map((item) => (
+        <span key={item.label}>
+          {item.icon}
+          {item.value} {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ArtifactLink({ artifact }: { artifact: IntelResourceArtifact }) {
+  const icon = artifact.artifact_type.includes("video") ? (
+    <Film size={12} />
+  ) : artifact.artifact_type.includes("link") ? (
+    <LinkIcon size={12} />
+  ) : artifact.artifact_type.includes("screenshot") ? (
+    <FileImage size={12} />
+  ) : (
+    <Box size={12} />
+  );
+  const label = artifact.label || artifact.artifact_type;
+  if (artifact.url) {
+    return (
+      <a className="watcher-artifact-link" href={artifact.url} target="_blank" rel="noreferrer">
+        {icon}
+        <span>{label}</span>
+        <ExternalLink size={11} />
+      </a>
+    );
+  }
+  return (
+    <span className="watcher-artifact-link">
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function SignalCard({ signal }: { signal: IntelSignal }) {
+  return (
+    <article className="watcher-signal-card">
+      <div className="watcher-signal-icon">
+        <Radio size={16} />
+      </div>
+      <div className="watcher-signal-main">
+        <div className="watcher-signal-title">
+          <strong>{signal.campaign_name || signal.title}</strong>
+          <span>{signal.brand_name}</span>
+        </div>
+        <div className="watcher-source-tags">
+          <span>{signal.signal_type}</span>
+          <span>{signal.status}</span>
+          <span>{formatConfidence(signal.confidence)}</span>
+          {signal.source_published_at ? <span>{formatDate(signal.source_published_at)}</span> : null}
+        </div>
+      </div>
+      {signal.evidence[0]?.url ? (
+        <a
+          className="watcher-card-action"
+          href={signal.evidence[0].url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ExternalLink size={14} />
+          <span>Open</span>
+        </a>
+      ) : (
+        <span className="watcher-muted-line">No evidence URL</span>
+      )}
+    </article>
   );
 }
 
@@ -502,14 +773,10 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function ConfigPill({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="watcher-config-pill">
-      <Activity size={12} />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </span>
-  );
+function platformForSourceType(nextSourceType: string) {
+  if (nextSourceType === "meta_ad_library_ui") return "meta";
+  if (nextSourceType === "youtube_channel") return "youtube";
+  return null;
 }
 
 function formatDate(value: string | null | undefined) {

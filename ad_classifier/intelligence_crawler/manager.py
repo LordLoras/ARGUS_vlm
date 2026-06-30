@@ -13,6 +13,9 @@ from ad_classifier.intelligence_crawler.digest import build_digest
 from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
     DigestEntry,
+    IntelAdapterDescriptor,
+    IntelBrandOverview,
+    IntelResourceView,
     IntelSignal,
     IntelSource,
     WatchedBrand,
@@ -21,6 +24,69 @@ from ad_classifier.intelligence_crawler.repository import IntelRepository
 from ad_classifier.intelligence_crawler.runner import IntelRunner
 from ad_classifier.intelligence_crawler.sources.base import available_source_types
 from ad_classifier.intelligence_crawler.watchlist import build_watchlist
+
+ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
+    "meta_ad_library_ui": IntelAdapterDescriptor(
+        source_type="meta_ad_library_ui",
+        label="Meta Ad Library",
+        target_label="Meta page ID",
+        target_placeholder="197052454200",
+        helper_text=(
+            "Public Meta Ad Library page monitoring for active US ads. Stores visible cards, "
+            "copy, library ids, screenshots, image URLs, and exposed video URLs."
+        ),
+        default_tier="B",
+        platform="meta",
+        requires_platform_id=True,
+        config={
+            "active_status": "active",
+            "sort_mode": "relevancy_monthly_grouped",
+            "sort_direction": "desc",
+            "scrolls": 20,
+            "max_cards": 250,
+            "wait_ms": 1800,
+            "stop_after_no_new": 3,
+        },
+        provides=[
+            "Meta library IDs",
+            "card screenshots",
+            "visible ad copy",
+            "image URLs",
+            "video URLs when exposed",
+            "started-running dates",
+        ],
+    ),
+    "youtube_channel": IntelAdapterDescriptor(
+        source_type="youtube_channel",
+        label="YouTube channel",
+        target_label="Channel ID",
+        target_placeholder="UC...",
+        helper_text="Official channel monitoring through public feeds and video metadata.",
+        default_tier="A",
+        platform="youtube",
+        requires_platform_id=True,
+        provides=["video ids", "titles", "descriptions", "publish dates", "thumbnails"],
+    ),
+    "rss": IntelAdapterDescriptor(
+        source_type="rss",
+        label="RSS / newsroom feed",
+        target_label="Feed URL",
+        target_placeholder="https://pressroom.toyota.com/product/feed/",
+        helper_text="Robots-gated feed monitoring for newsroom and trade-press releases.",
+        default_tier="A",
+        requires_url=True,
+        provides=["article URLs", "titles", "descriptions", "publish dates"],
+    ),
+    "mock": IntelAdapterDescriptor(
+        source_type="mock",
+        label="Mock source",
+        target_label="Fixture config",
+        target_placeholder="Configured in JSON",
+        helper_text="Offline deterministic adapter for tests and demos.",
+        default_tier="A",
+        provides=["configured fixture resources"],
+    ),
+}
 
 
 class IntelManager:
@@ -57,6 +123,44 @@ class IntelManager:
 
     def source_types(self) -> list[str]:
         return available_source_types()
+
+    def adapters(self) -> list[IntelAdapterDescriptor]:
+        descriptors = []
+        for source_type in available_source_types():
+            descriptor = ADAPTER_DESCRIPTORS.get(source_type)
+            if descriptor is None:
+                descriptor = IntelAdapterDescriptor(
+                    source_type=source_type,
+                    label=source_type.replace("_", " ").title(),
+                    target_label="Target",
+                    target_placeholder="Source target",
+                    helper_text="Adapter registered locally; no UI descriptor has been added yet.",
+                )
+            descriptors.append(descriptor)
+        return descriptors
+
+    def list_brand_overviews(
+        self, *, query: str | None = None, limit: int = 100
+    ) -> list[IntelBrandOverview]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_brand_overviews(conn, query=query, limit=limit)
+
+    def list_resources(
+        self,
+        *,
+        brand: str | None = None,
+        source_id: str | None = None,
+        include_backfill: bool = True,
+        limit: int = 50,
+    ) -> list[IntelResourceView]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_resources(
+                conn,
+                brand=brand,
+                source_id=source_id,
+                include_backfill=include_backfill,
+                limit=limit,
+            )
 
     def run_crawl(
         self, *, due: bool = False, source_id: str | None = None, brand: str | None = None

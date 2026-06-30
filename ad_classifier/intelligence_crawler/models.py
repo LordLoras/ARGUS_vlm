@@ -122,6 +122,70 @@ class IntelResource(StrictModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class IntelArtifactSummary(StrictModel):
+    screenshot_count: int = 0
+    image_source_count: int = 0
+    video_source_count: int = 0
+    video_poster_count: int = 0
+    background_image_source_count: int = 0
+    link_count: int = 0
+    media_asset_count: int = 0
+
+
+class IntelResourceArtifact(StrictModel):
+    artifact_type: str
+    label: str
+    url: str | None = None
+    path: str | None = None
+    text: str | None = None
+
+
+class IntelResourceView(StrictModel):
+    id: str
+    brand_name: str
+    source_id: str
+    source_type: str
+    resource_type: str
+    url: str | None = None
+    platform_id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    published_at: datetime | None = None
+    first_seen_at: datetime
+    fetched_at: datetime
+    is_backfill: bool = False
+    artifact_summary: IntelArtifactSummary = Field(default_factory=IntelArtifactSummary)
+    artifacts: list[IntelResourceArtifact] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+
+
+class IntelBrandOverview(StrictModel):
+    brand_name: str
+    source_count: int = 0
+    enabled_source_count: int = 0
+    resource_count: int = 0
+    backfill_resource_count: int = 0
+    signal_count: int = 0
+    latest_resource_seen_at: datetime | None = None
+    latest_signal_seen_at: datetime | None = None
+    source_types: list[str] = Field(default_factory=list)
+    artifact_summary: IntelArtifactSummary = Field(default_factory=IntelArtifactSummary)
+
+
+class IntelAdapterDescriptor(StrictModel):
+    source_type: str
+    label: str
+    target_label: str
+    target_placeholder: str
+    helper_text: str
+    default_tier: Tier = "B"
+    platform: str | None = None
+    requires_url: bool = False
+    requires_platform_id: bool = False
+    config: dict = Field(default_factory=dict)
+    provides: list[str] = Field(default_factory=list)
+
+
 class IntelEvidence(StrictModel):
     id: str
     signal_id: str

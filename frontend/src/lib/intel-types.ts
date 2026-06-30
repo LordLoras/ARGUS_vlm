@@ -50,6 +50,70 @@ export type IntelSignal = {
   evidence: IntelEvidence[];
 };
 
+export type IntelArtifactSummary = {
+  screenshot_count: number;
+  image_source_count: number;
+  video_source_count: number;
+  video_poster_count: number;
+  background_image_source_count: number;
+  link_count: number;
+  media_asset_count: number;
+};
+
+export type IntelResourceArtifact = {
+  artifact_type: string;
+  label: string;
+  url?: string | null;
+  path?: string | null;
+  text?: string | null;
+};
+
+export type IntelResource = {
+  id: string;
+  brand_name: string;
+  source_id: string;
+  source_type: string;
+  resource_type: string;
+  url?: string | null;
+  platform_id?: string | null;
+  title?: string | null;
+  description?: string | null;
+  published_at?: string | null;
+  first_seen_at: string;
+  fetched_at: string;
+  is_backfill: boolean;
+  artifact_summary: IntelArtifactSummary;
+  artifacts: IntelResourceArtifact[];
+  metadata: Record<string, unknown>;
+};
+
+export type IntelBrandOverview = {
+  brand_name: string;
+  source_count: number;
+  enabled_source_count: number;
+  resource_count: number;
+  backfill_resource_count: number;
+  signal_count: number;
+  latest_resource_seen_at?: string | null;
+  latest_signal_seen_at?: string | null;
+  source_types: string[];
+  artifact_summary: IntelArtifactSummary;
+};
+
+export type IntelAdapterDescriptor = {
+  source_type: string;
+  label: string;
+  target_label: string;
+  target_placeholder: string;
+  helper_text: string;
+  default_tier: IntelTier;
+  platform?: string | null;
+  requires_url: boolean;
+  requires_platform_id: boolean;
+  config: Record<string, unknown>;
+  provides: string[];
+};
+
 export type IntelDigestEntry = {
   brand_name: string;
   campaign_group_id?: string | null;
