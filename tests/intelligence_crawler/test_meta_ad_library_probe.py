@@ -32,7 +32,28 @@ def test_parse_card_text_extracts_library_id_status_date_and_platforms() -> None
         "status": "active",
         "started_running": "Jun 25, 2026",
         "platforms": ["Facebook", "Instagram", "Messenger"],
+        "creative_variant_count": None,
+        "has_multiple_versions": False,
     }
+
+
+def test_parse_card_text_extracts_multiple_version_count() -> None:
+    parsed = _parse_card_text(
+        """
+        Toyota
+        Active
+        Library ID: 2900281893668121
+        Started running on Jun 25, 2026
+        Platforms
+        This ad has multiple versions
+        5 ads use this creative and text
+        Open Dropdown
+        """
+    )
+
+    assert parsed["library_id"] == "2900281893668121"
+    assert parsed["creative_variant_count"] == 5
+    assert parsed["has_multiple_versions"] is True
 
 
 def test_parse_card_text_handles_missing_optional_fields() -> None:
@@ -42,6 +63,8 @@ def test_parse_card_text_handles_missing_optional_fields() -> None:
     assert parsed["status"] is None
     assert parsed["started_running"] is None
     assert parsed["platforms"] == []
+    assert parsed["creative_variant_count"] is None
+    assert parsed["has_multiple_versions"] is False
 
 
 def test_clean_helpers_dedupe_and_limit_values() -> None:

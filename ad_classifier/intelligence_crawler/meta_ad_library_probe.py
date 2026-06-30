@@ -33,6 +33,10 @@ _STARTED_RE = re.compile(
     r"Started\s+running\s+on\s+(.+?)(?:\s+(?:Platforms|Active|Inactive|Library ID)\b|$)",
     re.IGNORECASE,
 )
+_VERSIONS_RE = re.compile(
+    r"\b([0-9]+)\s+ads?\s+use\s+this\s+creative\s+and\s+text\b",
+    re.IGNORECASE,
+)
 _PLATFORMS = ("Facebook", "Instagram", "Messenger", "Audience Network", "Threads")
 
 
@@ -51,6 +55,8 @@ class MetaProbeCard:
     video_posters: list[str] = field(default_factory=list)
     background_image_sources: list[str] = field(default_factory=list)
     video_count: int = 0
+    creative_variant_count: int | None = None
+    has_multiple_versions: bool = False
     screenshot_path: str | None = None
     rect: dict[str, float] = field(default_factory=dict)
 
@@ -170,6 +176,8 @@ def run_meta_ad_library_probe(
                             raw.get("background_image_sources")
                         ),
                         video_count=int(raw.get("video_count") or 0),
+                        creative_variant_count=parsed["creative_variant_count"],
+                        has_multiple_versions=parsed["has_multiple_versions"],
                         screenshot_path=str(screenshot_path) if screenshot_path else None,
                         rect=_clean_rect(raw.get("rect")),
                     )
@@ -387,6 +395,7 @@ def _parse_card_text(text: str) -> dict[str, Any]:
     compact = _collapse_whitespace(text)
     library_match = _LIBRARY_ID_RE.search(compact)
     started_match = _STARTED_RE.search(compact)
+    versions_match = _VERSIONS_RE.search(compact)
     status = None
     if re.search(r"\bActive\b", compact, re.IGNORECASE):
         status = "active"
@@ -398,6 +407,10 @@ def _parse_card_text(text: str) -> dict[str, Any]:
         "status": status,
         "started_running": started_match.group(1).strip() if started_match else None,
         "platforms": platforms,
+        "creative_variant_count": int(versions_match.group(1)) if versions_match else None,
+        "has_multiple_versions": bool(
+            re.search(r"\bmultiple\s+versions\b", compact, re.IGNORECASE)
+        ),
     }
 
 

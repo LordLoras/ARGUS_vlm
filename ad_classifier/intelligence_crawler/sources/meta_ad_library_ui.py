@@ -12,6 +12,7 @@ Production semantics come from the runner:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -138,8 +139,8 @@ def _card_to_item(source: IntelSource, source_url: str, card) -> RawSourceItem:
         url=direct_url,
         canonical_url=direct_url,
         resource_type="meta_ad",
-        title=_title_for_card(source.brand_name, card.text),
-        description=card.text,
+        title=_title_for_card(source.brand_name, external_id),
+        description=_creative_copy_for_card(source.brand_name, card.text),
         published_at=_parse_started_running(card.started_running),
         thumbnail_url=thumbnail_url,
         raw={
@@ -155,6 +156,9 @@ def _card_to_item(source: IntelSource, source_url: str, card) -> RawSourceItem:
             "video_posters": card.video_posters,
             "background_image_sources": card.background_image_sources,
             "video_count": card.video_count,
+            "creative_variant_count": card.creative_variant_count,
+            "has_multiple_versions": card.has_multiple_versions,
+            "raw_card_text": card.text,
             "screenshot_path": card.screenshot_path,
             "rect": card.rect,
         },
@@ -178,15 +182,64 @@ def _parse_started_running(value: str | None) -> datetime | None:
     return None
 
 
-def _title_for_card(brand_name: str, text: str) -> str:
+def _title_for_card(brand_name: str, library_id: str | None) -> str:
+    if library_id:
+        return f"{brand_name} Meta ad {library_id}"
+    return f"{brand_name} Meta ad"
+
+
+def _creative_copy_for_card(brand_name: str, text: str) -> str:
     compact = " ".join((text or "").split())
     if not compact:
-        return f"{brand_name} Meta ad"
-    # Remove the mechanical card header if present and keep the creative-facing copy.
+        return ""
     marker = f"{brand_name} Sponsored"
     if marker in compact:
         compact = compact.split(marker, 1)[1].strip()
-    return f"{brand_name}: {compact[:180]}"
+    else:
+        brand_marker = re.search(
+            rf"\b{re.escape(brand_name)}(?:\s+USA)?\s+Sponsored\b",
+            compact,
+            flags=re.IGNORECASE,
+        )
+        if brand_marker:
+            compact = compact[brand_marker.end() :].strip()
+    compact = re.sub(
+        r"\b(?:Active|Inactive)?\s*Library\s+ID[:\s]*[0-9]+\b", " ", compact
+    )
+    compact = re.sub(
+        r"^\s*(?:Active|Inactive)?\s*(?:Low|Medium|High)?\s*impression\s+count\s+"
+        r"(?:Impressions:\s*<?[0-9,]+)?\s*(?:See ad)?\s*",
+        " ",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    compact = re.sub(
+        r"\b(?:Low|Medium|High)\s+impression\s+count\b",
+        " ",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    compact = re.sub(
+        r"\bStarted\s+running\s+on\s+.+?(?=\b(?:Platforms|This ad|Open "
+        r"Dropdown|See summary|Details)\b|$)",
+        " ",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    compact = re.sub(
+        r"\bThis\s+ad\s+has\s+multiple\s+versions\b.*?\bcreative\s+and\s+text\b",
+        " ",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    compact = re.sub(
+        r"\b(?:Platforms|Open Dropdown|See summary details?|Details)\b",
+        " ",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    compact = re.sub(r"\b(?:Facebook|Instagram|Messenger|Audience Network|Threads)\b", " ", compact)
+    return " ".join(compact.split())
 
 
 def _source_output_dir(cache_dir: Path, source_id: str) -> Path:

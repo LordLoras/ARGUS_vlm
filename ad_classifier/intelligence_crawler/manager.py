@@ -29,11 +29,12 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
     "meta_ad_library_ui": IntelAdapterDescriptor(
         source_type="meta_ad_library_ui",
         label="Meta Ad Library",
-        target_label="Meta page ID",
-        target_placeholder="197052454200",
+        target_label="Meta advertiser Page ID",
+        target_placeholder="Toyota Facebook Page ID, e.g. 197052454200",
         helper_text=(
-            "Public Meta Ad Library page monitoring for active US ads. Stores visible cards, "
-            "copy, library ids, screenshots, image URLs, and exposed video URLs."
+            "Public Meta Ad Library monitoring for a Facebook advertiser Page ID, not a "
+            "single ad or campaign id. Stores visible cards, copy, library ids, screenshots, "
+            "image URLs, exposed video URLs, and multiple-version counts when shown."
         ),
         default_tier="B",
         platform="meta",
@@ -54,6 +55,7 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
             "image URLs",
             "video URLs when exposed",
             "started-running dates",
+            "multiple-version counts",
         ],
     ),
     "youtube_channel": IntelAdapterDescriptor(

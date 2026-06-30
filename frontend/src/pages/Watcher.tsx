@@ -44,10 +44,11 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
   {
     source_type: "meta_ad_library_ui",
     label: "Meta Ad Library",
-    target_label: "Meta page ID",
-    target_placeholder: "197052454200",
+    target_label: "Meta advertiser Page ID",
+    target_placeholder: "Toyota Facebook Page ID, e.g. 197052454200",
     helper_text:
-      "Public Meta Ad Library monitoring for active US ads. Stores visible cards, screenshots, copy, image URLs, and exposed video URLs.",
+      "Public Meta Ad Library monitoring for a Facebook advertiser Page ID, not a single ad or campaign id. " +
+      "Stores visible cards, screenshots, copy, image URLs, exposed video URLs, and multiple-version counts when shown.",
     default_tier: "B",
     platform: "meta",
     requires_url: false,
@@ -66,7 +67,8 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
       "card screenshots",
       "visible ad copy",
       "image URLs",
-      "video URLs when exposed"
+      "video URLs when exposed",
+      "multiple-version counts"
     ]
   },
   {
@@ -96,6 +98,20 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
     provides: ["article URLs", "titles", "descriptions", "publish dates"]
   }
 ];
+
+const META_SORT_OPTIONS = [
+  { value: "relevancy_monthly_grouped", label: "Meta default" },
+  { value: "total_impressions", label: "Highest impressions" }
+] as const;
+
+const RESOURCE_SORT_OPTIONS = [
+  { value: "newest", label: "Newest first" },
+  { value: "versions", label: "Most versions" },
+  { value: "videos", label: "Video first" },
+  { value: "artifacts", label: "Most artifacts" }
+] as const;
+
+type ResourceSort = (typeof RESOURCE_SORT_OPTIONS)[number]["value"];
 
 function adapterLabel(sourceType: string, adapters: IntelAdapterDescriptor[]) {
   return adapters.find((adapter) => adapter.source_type === sourceType)?.label ?? sourceType.replace(/_/g, " ");
@@ -137,6 +153,8 @@ export function Watcher() {
   const [platformId, setPlatformId] = useState("");
   const [tier, setTier] = useState<IntelTier>("B");
   const [enabled, setEnabled] = useState(true);
+  const [metaSortMode, setMetaSortMode] = useState("relevancy_monthly_grouped");
+  const [resourceSort, setResourceSort] = useState<ResourceSort>("newest");
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IntelCrawlSummary | null>(null);
 
@@ -169,6 +187,10 @@ export function Watcher() {
   const sources = sourcesQuery.data?.items ?? [];
   const signals = signalsQuery.data?.items ?? [];
   const resources = resourcesQuery.data?.items ?? [];
+  const sortedResources = useMemo(
+    () => sortResources(resources, resourceSort),
+    [resources, resourceSort]
+  );
   const selectedBrandOverview = brands.find((item) => item.brand_name === selectedBrand) ?? null;
   const selectedSources = sources.filter((source) => source.brand_name === selectedBrand);
   const selectedSignals = signals.filter((signal) => signal.brand_name === selectedBrand);
@@ -215,7 +237,7 @@ export function Watcher() {
         platform: selectedAdapter.platform ?? platformForSourceType(selectedAdapter.source_type),
         platform_id: platformId.trim() || null,
         enabled,
-        config: selectedAdapter.config
+        config: buildSourceConfig(selectedAdapter, metaSortMode)
       }),
     onSuccess: (source) => {
       setError(null);
@@ -264,6 +286,7 @@ export function Watcher() {
     const nextAdapter = adapters.find((adapter) => adapter.source_type === nextSourceType);
     setSourceType(nextSourceType);
     setTier(nextAdapter?.default_tier ?? "B");
+    setMetaSortMode(String(nextAdapter?.config?.sort_mode ?? "relevancy_monthly_grouped"));
     setUrl("");
     setPlatformId("");
   };
@@ -431,6 +454,22 @@ export function Watcher() {
                     />
                   </label>
                 ) : null}
+                {selectedAdapter.source_type === "meta_ad_library_ui" ? (
+                  <label className="watcher-field">
+                    <span>Meta sort</span>
+                    <select
+                      className="input"
+                      value={metaSortMode}
+                      onChange={(event) => setMetaSortMode(event.target.value)}
+                    >
+                      {META_SORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="watcher-toggle">
                   <input
                     type="checkbox"
@@ -501,9 +540,22 @@ export function Watcher() {
                   <span className="watcher-section-kicker">Artifacts</span>
                   <h3>Resources captured</h3>
                 </div>
-                <span className="watcher-muted-line">
-                  {resources.length ? `${resources.length} latest` : ""}
-                </span>
+                <div className="watcher-resource-controls">
+                  <span className="watcher-muted-line">
+                    {resources.length ? `${resources.length} captured` : ""}
+                  </span>
+                  <select
+                    className="input watcher-compact-select"
+                    value={resourceSort}
+                    onChange={(event) => setResourceSort(event.target.value as ResourceSort)}
+                  >
+                    {RESOURCE_SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               {resourcesQuery.isLoading ? (
                 <div className="watcher-muted-line">Loading resources...</div>
@@ -515,7 +567,7 @@ export function Watcher() {
                 />
               ) : (
                 <div className="watcher-resource-list">
-                  {resources.map((resource) => (
+                  {sortedResources.map((resource) => (
                     <ResourceCard
                       adapters={adapters}
                       key={resource.id}
@@ -653,11 +705,16 @@ function ResourceCard({
   adapters: IntelAdapterDescriptor[];
   resource: IntelResource;
 }) {
+  const title = resourceTitle(resource);
+  const copy = resourceCopy(resource);
+  const facts = resourceFacts(resource);
+  const hiddenArtifacts = Math.max(0, resource.artifacts.length - 8);
+
   return (
     <article className="watcher-resource-card">
       <div className="watcher-resource-head">
         <div>
-          <strong>{resource.title || resource.platform_id || resource.id}</strong>
+          <strong>{title}</strong>
           <span>
             {adapterLabel(resource.source_type, adapters)} · {resource.resource_type} ·{" "}
             {formatDate(resource.published_at || resource.first_seen_at)}
@@ -667,12 +724,24 @@ function ResourceCard({
           {resource.is_backfill ? "backfill" : "live"}
         </span>
       </div>
-      {resource.description ? <p>{resource.description}</p> : null}
+      {facts.length > 0 ? (
+        <div className="watcher-resource-meta">
+          {facts.map((fact) => (
+            <span key={`${fact.label}-${fact.value}`}>
+              {fact.label}: {fact.value}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {copy ? <p className="watcher-resource-copy">{copy}</p> : null}
       <ArtifactSummary summary={resource.artifact_summary} />
       <div className="watcher-artifact-strip">
         {resource.artifacts.slice(0, 8).map((artifact, index) => (
           <ArtifactLink artifact={artifact} key={`${artifact.artifact_type}-${index}`} />
         ))}
+        {hiddenArtifacts > 0 ? (
+          <span className="watcher-artifact-link">+{hiddenArtifacts} more</span>
+        ) : null}
       </div>
     </article>
   );
@@ -762,6 +831,138 @@ function SignalCard({ signal }: { signal: IntelSignal }) {
       )}
     </article>
   );
+}
+
+function buildSourceConfig(adapter: IntelAdapterDescriptor, metaSortMode: string) {
+  if (adapter.source_type !== "meta_ad_library_ui") {
+    return adapter.config;
+  }
+  return {
+    ...adapter.config,
+    sort_mode: metaSortMode,
+    sort_direction: "desc"
+  };
+}
+
+function sortResources(resources: IntelResource[], sort: ResourceSort) {
+  const copy = [...resources];
+  const byNewest = (resource: IntelResource) =>
+    Date.parse(resource.published_at || resource.first_seen_at || "") || 0;
+  copy.sort((left, right) => {
+    if (sort === "versions") {
+      return metaVariantCount(right) - metaVariantCount(left) || byNewest(right) - byNewest(left);
+    }
+    if (sort === "videos") {
+      return videoTotal(right) - videoTotal(left) || byNewest(right) - byNewest(left);
+    }
+    if (sort === "artifacts") {
+      return (
+        artifactTotal(right.artifact_summary) - artifactTotal(left.artifact_summary) ||
+        byNewest(right) - byNewest(left)
+      );
+    }
+    return byNewest(right) - byNewest(left);
+  });
+  return copy;
+}
+
+function resourceTitle(resource: IntelResource) {
+  const libraryId = stringMetadata(resource, "library_id") || resource.platform_id;
+  if (resource.source_type === "meta_ad_library_ui") {
+    return libraryId ? `${resource.brand_name} Meta ad ${libraryId}` : `${resource.brand_name} Meta ad`;
+  }
+  return normalizeDisplayText(resource.title || resource.platform_id || resource.id);
+}
+
+function resourceCopy(resource: IntelResource) {
+  const text = normalizeDisplayText(resource.description || stringMetadata(resource, "raw_card_text"));
+  if (resource.source_type !== "meta_ad_library_ui") {
+    return text;
+  }
+  return cleanMetaCopy(resource.brand_name, text);
+}
+
+function resourceFacts(resource: IntelResource) {
+  const facts: Array<{ label: string; value: string }> = [];
+  const libraryId = stringMetadata(resource, "library_id") || resource.platform_id;
+  const status = stringMetadata(resource, "status");
+  const started = stringMetadata(resource, "started_running");
+  const platforms = listMetadata(resource, "platforms");
+  const variants = metaVariantCount(resource);
+  const videos = videoTotal(resource);
+
+  if (libraryId) facts.push({ label: "Library ID", value: libraryId });
+  if (status) facts.push({ label: "Status", value: status });
+  if (started) facts.push({ label: "Started", value: started });
+  if (platforms.length > 0) facts.push({ label: "Platforms", value: platforms.join(", ") });
+  if (variants > 0) facts.push({ label: "Versions", value: String(variants) });
+  if (videos > 0) facts.push({ label: "Videos", value: String(videos) });
+  return facts;
+}
+
+function metaVariantCount(resource: IntelResource) {
+  const value = resource.metadata.creative_variant_count;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function videoTotal(resource: IntelResource) {
+  const value = resource.metadata.video_count;
+  const declared = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return declared + resource.artifact_summary.video_source_count + resource.artifact_summary.video_poster_count;
+}
+
+function stringMetadata(resource: IntelResource, key: string) {
+  const value = resource.metadata[key];
+  return typeof value === "string" ? normalizeDisplayText(value) : "";
+}
+
+function listMetadata(resource: IntelResource, key: string) {
+  const value = resource.metadata[key];
+  return Array.isArray(value)
+    ? value.map((item) => normalizeDisplayText(String(item))).filter(Boolean)
+    : [];
+}
+
+function cleanMetaCopy(brandName: string, value: string) {
+  let text = value;
+  const marker = `${brandName} Sponsored`;
+  if (text.includes(marker)) {
+    text = text.split(marker, 2)[1] ?? "";
+  } else {
+    const brandMarker = new RegExp(
+      `\\b${escapeRegExp(brandName)}(?:\\s+USA)?\\s+Sponsored\\b`,
+      "i"
+    );
+    const match = brandMarker.exec(text);
+    if (match?.index !== undefined) {
+      text = text.slice(match.index + match[0].length);
+    }
+  }
+  text = text.replace(/\b(?:Active|Inactive)?\s*Library\s+ID[:\s]*[0-9]+\b/gi, " ");
+  text = text.replace(
+    /^\s*(?:Active|Inactive)?\s*(?:Low|Medium|High)?\s*impression\s+count\s+(?:Impressions:\s*<?[0-9,]+)?\s*(?:See ad)?\s*/i,
+    " "
+  );
+  text = text.replace(/\b(?:Low|Medium|High)\s+impression\s+count\b/gi, " ");
+  text = text.replace(
+    /\bStarted\s+running\s+on\s+.+?(?=\b(?:Platforms|This ad|Open Dropdown|See summary|Details)\b|$)/gi,
+    " "
+  );
+  text = text.replace(
+    /\bThis\s+ad\s+has\s+multiple\s+versions\b.*?\bcreative\s+and\s+text\b/gi,
+    " "
+  );
+  text = text.replace(/\b(?:Platforms|Open Dropdown|See summary details?|Details)\b/gi, " ");
+  text = text.replace(/\b(?:Facebook|Instagram|Messenger|Audience Network|Threads)\b/g, " ");
+  return normalizeDisplayText(text);
+}
+
+function normalizeDisplayText(value: string) {
+  return value.replace(/\u200B/g, "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {

@@ -40,6 +40,8 @@ def _probe_result(**_kwargs) -> MetaProbeResult:
                 video_posters=["https://example.test/poster.jpg"],
                 background_image_sources=["https://example.test/background.jpg"],
                 video_count=1,
+                creative_variant_count=5,
+                has_multiple_versions=True,
                 screenshot_path="cache/card.png",
             )
         ],
@@ -89,11 +91,15 @@ def test_meta_adapter_converts_probe_cards_to_raw_source_items(tmp_path) -> None
     item = result.items[0]
     assert item.external_id == "1500648444745170"
     assert item.resource_type == "meta_ad"
+    assert item.title == "Jeep Meta ad 1500648444745170"
+    assert item.description == "Go all the way to the All-New Jeep Cherokee Hybrid"
     assert item.url == "https://www.facebook.com/ads/library/?id=1500648444745170"
     assert item.thumbnail_url == "https://example.test/creative.jpg"
     assert item.published_at == datetime(2026, 4, 21, tzinfo=UTC)
     assert item.raw["status"] == "active"
     assert item.raw["video_count"] == 1
+    assert item.raw["creative_variant_count"] == 5
+    assert item.raw["has_multiple_versions"] is True
     assert item.raw["video_sources"] == ["blob:https://www.facebook.com/video"]
     assert item.raw["video_posters"] == ["https://example.test/poster.jpg"]
 
