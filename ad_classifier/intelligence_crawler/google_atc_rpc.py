@@ -43,9 +43,15 @@ _FORMAT_LABELS = {1: "text", 2: "image", 3: "video"}
 RpcFetch = Callable[[str, dict], dict]
 
 
-def advertiser_creatives_freq(advertiser_id: str, *, region: int, page_size: int) -> dict:
-    """Build the ``SearchCreatives`` ``f.req`` payload for one advertiser, region-scoped."""
-    return {
+def advertiser_creatives_freq(
+    advertiser_id: str, *, region: int, page_size: int, after: str | None = None
+) -> dict:
+    """Build the ``SearchCreatives`` ``f.req`` payload for one advertiser, region-scoped.
+
+    ``after`` is the continuation token from a previous response (its field ``"2"``); passing
+    it as request field ``"4"`` returns the next page (the offset field ``7.2`` does not work).
+    """
+    freq: dict = {
         "2": page_size,
         "3": {
             "8": [region],
@@ -54,6 +60,9 @@ def advertiser_creatives_freq(advertiser_id: str, *, region: int, page_size: int
         },
         "7": {"1": 1, "2": 0, "3": 2100},
     }
+    if after:
+        freq["4"] = after
+    return freq
 
 
 def parse_creatives(payload: dict) -> list[dict]:
@@ -91,13 +100,35 @@ def search_creatives(
     fetch: RpcFetch,
     region: int = US_REGION_CODE,
     page_size: int = _DEFAULT_PAGE_SIZE,
+    max_pages: int = 1,
 ) -> list[dict]:
-    """Fetch + normalize one advertiser's region-scoped creatives (single page)."""
-    payload = fetch(
-        "SearchService/SearchCreatives",
-        advertiser_creatives_freq(advertiser_id, region=region, page_size=page_size),
-    )
-    return parse_creatives(payload if isinstance(payload, dict) else {})
+    """Fetch + normalize an advertiser's region-scoped creatives, following the cursor.
+
+    Pages up to ``max_pages`` times via the response continuation token (field ``"2"``),
+    de-duplicating by creative id. Stops early when the token is empty, a page is empty, or
+    a page yields nothing new.
+    """
+    creatives: list[dict] = []
+    seen: set[str] = set()
+    token: str | None = None
+    for _ in range(max(max_pages, 1)):
+        payload = fetch(
+            "SearchService/SearchCreatives",
+            advertiser_creatives_freq(
+                advertiser_id, region=region, page_size=page_size, after=token
+            ),
+        )
+        if not isinstance(payload, dict):
+            break
+        page = parse_creatives(payload)
+        fresh = [c for c in page if c["creative_id"] not in seen]
+        for creative in fresh:
+            seen.add(creative["creative_id"])
+        creatives.extend(fresh)
+        token = payload.get("2") if isinstance(payload.get("2"), str) else None
+        if not token or not page or not fresh:
+            break
+    return creatives
 
 
 def search_advertisers(

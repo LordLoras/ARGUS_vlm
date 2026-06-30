@@ -82,6 +82,8 @@ export type IntelResource = {
   first_seen_at: string;
   fetched_at: string;
   is_backfill: boolean;
+  variant_count?: number | null;
+  has_variants?: boolean;
   artifact_summary: IntelArtifactSummary;
   artifacts: IntelResourceArtifact[];
   metadata: Record<string, unknown>;

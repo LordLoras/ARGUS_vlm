@@ -746,6 +746,18 @@
   background: rgba(251, 191, 36, 0.1);
 }
 
+.watcher-state-pill.versions {
+  color: #a5b4fc;
+  border-color: rgba(129, 140, 248, 0.4);
+  background: rgba(129, 140, 248, 0.12);
+}
+
+.watcher-resource-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .watcher-target-card {
   display: grid;
   gap: 4px;

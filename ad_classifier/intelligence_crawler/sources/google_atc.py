@@ -72,9 +72,14 @@ class GoogleAtcAdapter:
             return SourcePollResult(source_id=source.id, errors=["no ATC rpc client available"])
 
         page_size = _int_config(source.config.get("page_size"), default=40, minimum=1, maximum=100)
+        max_pages = _int_config(source.config.get("max_pages"), default=10, minimum=1, maximum=50)
         try:
             creatives = search_creatives(
-                advertiser_id, fetch=self._fetch, region=US_REGION_CODE, page_size=page_size
+                advertiser_id,
+                fetch=self._fetch,
+                region=US_REGION_CODE,
+                page_size=page_size,
+                max_pages=max_pages,
             )
         except Exception as exc:  # transport/parse failures are per-source, not fatal
             return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])

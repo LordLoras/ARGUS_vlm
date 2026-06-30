@@ -44,9 +44,8 @@ SEARCH_PAYLOAD = {
             "12": "Salesforce, Inc.",
         },
     ],
-    "2": "next_cursor",
     "5": 2,
-}
+}  # no field "2" -> single page (no continuation token)
 
 
 def _source(**overrides):
@@ -110,6 +109,43 @@ def test_creatives_map_to_items():
     assert "content.js" in first.raw["preview_url"]
     # watermark = latest first-shown across creatives
     assert result.new_watermark == datetime.fromtimestamp(1774647000, tz=UTC).isoformat()
+
+
+def test_pagination_follows_cursor_and_dedups():
+    # page 1 carries a continuation token (field "2"); page 2 has none -> stop.
+    page1 = {
+        "1": [{"1": ADV, "2": "CR_A", "6": {"1": "1770000000"}}],
+        "2": "TOKEN_ABC",
+    }
+    page2 = {"1": [{"1": ADV, "2": "CR_B", "6": {"1": "1771000000"}}]}
+    calls = []
+
+    def fetch(method, freq):
+        calls.append(freq)
+        return page1 if "4" not in freq else page2
+
+    adapter = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig())
+    result = adapter.poll(
+        _source(config={"max_pages": 5}), SourceState(source_id="salesforce_atc"), now=NOW
+    )
+
+    assert [i.external_id for i in result.items] == ["CR_A", "CR_B"]
+    assert len(calls) == 2  # stopped after page 2 (no token)
+    assert calls[1]["4"] == "TOKEN_ABC"  # page-2 request carried the cursor
+
+
+def test_pagination_respects_max_pages():
+    # every page returns a token AND new ids -> bounded by max_pages.
+    def fetch(method, freq):
+        n = freq.get("4", "0")
+        nxt = str(int(n) + 1) if n != "0" else "1"
+        return {"1": [{"1": ADV, "2": f"CR_{n}", "6": {"1": "1770000000"}}], "2": nxt}
+
+    adapter = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig())
+    result = adapter.poll(
+        _source(config={"max_pages": 3}), SourceState(source_id="salesforce_atc"), now=NOW
+    )
+    assert len(result.items) == 3  # exactly max_pages pages fetched
 
 
 def test_missing_advertiser_id_reports_error():

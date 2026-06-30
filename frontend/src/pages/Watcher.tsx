@@ -720,9 +720,14 @@ function ResourceCard({
             {formatDate(resource.published_at || resource.first_seen_at)}
           </span>
         </div>
-        <span className={`watcher-state-pill ${resource.is_backfill ? "disabled" : "enabled"}`}>
-          {resource.is_backfill ? "backfill" : "live"}
-        </span>
+        <div className="watcher-resource-pills">
+          {resourceHasVariants(resource) ? (
+            <span className="watcher-state-pill versions">{variantsLabel(resource)}</span>
+          ) : null}
+          <span className={`watcher-state-pill ${resource.is_backfill ? "disabled" : "enabled"}`}>
+            {resource.is_backfill ? "backfill" : "live"}
+          </span>
+        </div>
       </div>
       {facts.length > 0 ? (
         <div className="watcher-resource-meta">
@@ -871,6 +876,11 @@ function resourceTitle(resource: IntelResource) {
   if (resource.source_type === "meta_ad_library_ui") {
     return libraryId ? `${resource.brand_name} Meta ad ${libraryId}` : `${resource.brand_name} Meta ad`;
   }
+  if (resource.source_type === "google_atc") {
+    const advertiser = stringMetadata(resource, "advertiser_name") || resource.brand_name;
+    const format = stringMetadata(resource, "format");
+    return format ? `${advertiser} · ${format} ad` : `${advertiser} ATC ad`;
+  }
   return normalizeDisplayText(resource.title || resource.platform_id || resource.id);
 }
 
@@ -884,6 +894,19 @@ function resourceCopy(resource: IntelResource) {
 
 function resourceFacts(resource: IntelResource) {
   const facts: Array<{ label: string; value: string }> = [];
+
+  if (resource.source_type === "google_atc") {
+    const advertiser = stringMetadata(resource, "advertiser_name");
+    const format = stringMetadata(resource, "format");
+    const lastShown = epochMetadataDate(resource, "last_shown");
+    if (advertiser) facts.push({ label: "Advertiser", value: advertiser });
+    if (format) facts.push({ label: "Format", value: format });
+    if (resource.published_at)
+      facts.push({ label: "First shown", value: formatDate(resource.published_at) });
+    if (lastShown) facts.push({ label: "Last shown", value: lastShown });
+    return facts;
+  }
+
   const libraryId = stringMetadata(resource, "library_id") || resource.platform_id;
   const status = stringMetadata(resource, "status");
   const started = stringMetadata(resource, "started_running");
@@ -896,11 +919,22 @@ function resourceFacts(resource: IntelResource) {
   if (started) facts.push({ label: "Started", value: started });
   if (platforms.length > 0) facts.push({ label: "Platforms", value: platforms.join(", ") });
   if (variants > 0) facts.push({ label: "Versions", value: String(variants) });
+  else if (resource.has_variants) facts.push({ label: "Versions", value: "multiple" });
   if (videos > 0) facts.push({ label: "Videos", value: String(videos) });
   return facts;
 }
 
+function epochMetadataDate(resource: IntelResource, key: string) {
+  const value = resource.metadata[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  return new Date(value * 1000).toISOString().slice(0, 10);
+}
+
 function metaVariantCount(resource: IntelResource) {
+  // Prefer the projection column written by the backend; fall back to metadata / raw text.
+  if (typeof resource.variant_count === "number" && Number.isFinite(resource.variant_count)) {
+    return resource.variant_count;
+  }
   const value = resource.metadata.creative_variant_count;
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -910,6 +944,15 @@ function metaVariantCount(resource: IntelResource) {
   );
   const match = rawText.match(/\b([0-9]+)\s+ads?\s+use\s+this\s+creative\s+and\s+text\b/i);
   return match ? Number(match[1]) : 0;
+}
+
+function resourceHasVariants(resource: IntelResource) {
+  return Boolean(resource.has_variants) || metaVariantCount(resource) > 1;
+}
+
+function variantsLabel(resource: IntelResource) {
+  const count = metaVariantCount(resource);
+  return count > 1 ? `${count} versions` : "multi-version";
 }
 
 function videoTotal(resource: IntelResource) {
