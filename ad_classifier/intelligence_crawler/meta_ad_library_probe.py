@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 TOYOTA_META_AD_LIBRARY_URL = (
     "https://www.facebook.com/ads/library/"
@@ -369,12 +371,10 @@ def _mark_candidate_cards(page: Any, *, max_cards: int) -> list[dict[str, Any]]:
 
 
 def _visible_library_ids(page: Any) -> list[str]:
-    return page.evaluate(
-        """
+    return page.evaluate("""
         () => Array.from(document.body.innerText.matchAll(/Library\\s+ID[:\\s]*([0-9]+)/gi))
           .map((match) => match[1])
-        """
-    )
+        """)
 
 
 def _screenshot_card(page: Any, out_dir: Path, index: int, library_id: str | None) -> Path | None:
@@ -476,3 +476,79 @@ def _clean_rect(raw: Any) -> dict[str, float]:
         except (TypeError, ValueError):
             continue
     return rect
+
+
+# --- brand -> Meta page id resolution (best-effort) -------------------------------------
+# Meta has no clean suggest RPC, so resolution scrapes the public Ad Library page-search and
+# matches on the page NAME. Less reliable than ATC's resolver. The candidate fetch is injected
+# (``search``) so the match/refuse-to-guess logic is unit-tested offline.
+
+# brand -> [{"page_id": str, "name": str}]. Injected for tests.
+MetaPageSearch = Callable[[str], list[dict]]
+
+
+def resolve_meta_page(
+    brand: str, *, search: MetaPageSearch, accept_names: tuple[str, ...] = ()
+) -> dict | None:
+    """Brand → ``{page_id, name}`` via the page-search, or ``None``.
+
+    Refuses to guess: returns only a candidate whose page **name** exactly equals ``brand`` or
+    an ``accept_names`` entry. Never falls back to a dealer/look-alike (the Autotrader trap).
+    """
+    targets = {brand.strip().lower(), *(n.strip().lower() for n in accept_names if n)}
+    for candidate in search(brand):
+        if not candidate.get("page_id"):
+            continue
+        if (candidate.get("name") or "").strip().lower() in targets:
+            return {"page_id": candidate["page_id"], "name": candidate.get("name")}
+    return None
+
+
+def meta_page_search(  # pragma: no cover - Playwright/network, best-effort
+    brand: str, *, country: str = "US", headed: bool = False, wait_ms: int = 2500
+) -> list[dict]:
+    """Best-effort live page-search: ``[{page_id, name}]`` for matching advertiser pages.
+
+    Scrapes the public Ad Library page-search DOM (React, not the Flutter canvas ATC uses).
+    Selectors are best-effort and may need tuning when Meta reskins the page.
+    """
+    from playwright.sync_api import sync_playwright
+
+    params = {
+        "active_status": "all",
+        "ad_type": "all",
+        "country": country,
+        "search_type": "page",
+        "q": brand,
+    }
+    url = "https://www.facebook.com/ads/library/?" + urlencode(params)
+    out: list[dict] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=not headed)
+        context = browser.new_context(locale="en-US")
+        page = context.new_page()
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            _dismiss_common_dialogs(page)
+            page.wait_for_timeout(wait_ms)
+            raw = page.evaluate("""
+                () => Array.from(document.querySelectorAll('a[href*="view_all_page_id"]'))
+                  .map((a) => {
+                    const m = a.href.match(/view_all_page_id=(\\d+)/);
+                    return { page_id: m ? m[1] : null,
+                             name: (a.innerText || a.textContent || "").replace(/\\s+/g," ").trim() };
+                  })
+                  .filter((x) => x.page_id && x.name)
+                """)
+        except Exception:
+            raw = []
+        finally:
+            context.close()
+            browser.close()
+    seen: set[str] = set()
+    for entry in raw or []:
+        pid = str(entry.get("page_id") or "")
+        if pid and pid not in seen:
+            seen.add(pid)
+            out.append({"page_id": pid, "name": entry.get("name")})
+    return out

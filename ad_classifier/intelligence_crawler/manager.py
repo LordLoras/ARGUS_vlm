@@ -226,3 +226,46 @@ class IntelManager:
             deleted = self.repo.delete_source(conn, source_id)
             conn.commit()
             return deleted
+
+    def resolve_source(self, source_id: str) -> IntelSource | None:
+        """Resolve a source's brand → platform id and persist it. Returns the updated source.
+
+        Returns ``None`` if the source is unknown, its type has no resolver, or no confident
+        match was found (refuse-to-guess — never sets a dealer/look-alike id). Legal-name hints
+        come from ``source.config["resolve_names"]`` (e.g. Ford → "Ford Motor Company").
+        """
+        source = self.get_source(source_id)
+        if source is None:
+            return None
+        accept = tuple(str(n) for n in (source.config.get("resolve_names") or []))
+        resolved_id = self._resolve_platform_id(source.source_type, source.brand_name, accept)
+        if not resolved_id:
+            return None
+        return self.upsert_source(source.model_copy(update={"platform_id": resolved_id}))
+
+    @staticmethod
+    def _resolve_platform_id(
+        source_type: str, brand: str, accept_names: tuple[str, ...]
+    ) -> str | None:
+        if source_type == "google_atc":
+            from ad_classifier.intelligence_crawler.google_atc_rpc import (
+                default_rpc_fetch,
+                resolve_advertiser,
+            )
+
+            match = resolve_advertiser(
+                brand,
+                fetch=default_rpc_fetch,
+                accept_names=accept_names,
+                extra_queries=accept_names,
+            )
+            return match["advertiser_id"] if match else None
+        if source_type == "meta_ad_library_ui":
+            from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
+                meta_page_search,
+                resolve_meta_page,
+            )
+
+            match = resolve_meta_page(brand, search=meta_page_search, accept_names=accept_names)
+            return match["page_id"] if match else None
+        return None

@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
-from ad_classifier.intelligence_crawler.meta_ad_library_probe import MetaProbeCard, MetaProbeResult
+from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
+    MetaProbeCard,
+    MetaProbeResult,
+    resolve_meta_page,
+)
 from ad_classifier.intelligence_crawler.models import IntelSource, SourceState
 from ad_classifier.intelligence_crawler.sources.base import available_source_types
 from ad_classifier.intelligence_crawler.sources.meta_ad_library_ui import (
@@ -102,6 +106,24 @@ def test_meta_adapter_converts_probe_cards_to_raw_source_items(tmp_path) -> None
     assert item.raw["has_multiple_versions"] is True
     assert item.raw["video_sources"] == ["blob:https://www.facebook.com/video"]
     assert item.raw["video_posters"] == ["https://example.test/poster.jpg"]
+
+
+def test_resolve_meta_page_exact_match() -> None:
+    def search(brand):
+        return [
+            {"page_id": "111", "name": "Autotrader"},  # look-alike (mentions Jeep)
+            {"page_id": "222", "name": "Jeep"},
+        ]
+
+    chosen = resolve_meta_page("Jeep", search=search)
+    assert chosen == {"page_id": "222", "name": "Jeep"}
+
+
+def test_resolve_meta_page_refuses_to_guess() -> None:
+    def search(brand):
+        return [{"page_id": "111", "name": "Autotrader"}, {"page_id": "333", "name": "CarGurus"}]
+
+    assert resolve_meta_page("Jeep", search=search) is None
 
 
 def test_meta_adapter_requires_page_id(tmp_path) -> None:

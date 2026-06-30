@@ -100,6 +100,57 @@ def search_creatives(
     return parse_creatives(payload if isinstance(payload, dict) else {})
 
 
+def search_advertisers(
+    query: str, *, fetch: RpcFetch, region: int = US_REGION_CODE, limit: int = 40
+) -> list[dict]:
+    """Resolve a free-text query to advertiser suggestions via ``SearchSuggestions``.
+
+    Returns ``[{name, advertiser_id, region}]`` (ranked by ATC). Region-scoped to ``region``.
+    """
+    freq = {"1": query, "2": limit, "3": limit, "4": [region], "5": {"1": 1}}
+    payload = fetch("SearchService/SearchSuggestions", freq)
+    rows = payload.get("1", []) if isinstance(payload, dict) else []
+    out: list[dict] = []
+    for row in rows or []:
+        advertiser = row.get("1") if isinstance(row, dict) else None
+        advertiser = advertiser if isinstance(advertiser, dict) else {}
+        if advertiser.get("2"):
+            out.append(
+                {
+                    "name": advertiser.get("1"),
+                    "advertiser_id": advertiser.get("2"),
+                    "region": advertiser.get("3"),
+                }
+            )
+    return out
+
+
+def resolve_advertiser(
+    brand: str,
+    *,
+    fetch: RpcFetch,
+    accept_names: tuple[str, ...] = (),
+    extra_queries: tuple[str, ...] = (),
+    region: int = US_REGION_CODE,
+) -> dict | None:
+    """Brand name → advertiser ``{name, advertiser_id, region}``, or ``None``.
+
+    Refuses to guess: returns only a US advertiser whose name **exactly** equals ``brand`` or
+    one of ``accept_names`` (legal-name variants like "Ford Motor Company"). Never falls back
+    to a dealer/look-alike. ``extra_queries`` lets the caller also search those legal names.
+    """
+    targets = {brand.strip().lower(), *(n.strip().lower() for n in accept_names if n)}
+    candidates: dict[str, dict] = {}
+    for query in (brand, *extra_queries):
+        for row in search_advertisers(query, fetch=fetch, region=region):
+            if row["region"] == "US" and row["advertiser_id"]:
+                candidates.setdefault(row["advertiser_id"], row)
+    for row in candidates.values():
+        if (row["name"] or "").strip().lower() in targets:
+            return row
+    return None
+
+
 def lookup_advertiser(advertiser_id: str, *, fetch: RpcFetch) -> dict:
     """Return ``{advertiser_id, name, region}`` — the look-alike / identity guard."""
     payload = fetch("LookupService/GetAdvertiserById", {"1": advertiser_id, "3": {"1": 1}})

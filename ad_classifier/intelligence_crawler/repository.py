@@ -13,10 +13,10 @@ from ad_classifier.intelligence_crawler.ids import campaign_group_id, evidence_i
 from ad_classifier.intelligence_crawler.models import (
     IntelArtifactSummary,
     IntelBrandOverview,
-    IntelResourceArtifact,
-    IntelResourceView,
     IntelEvidence,
     IntelResource,
+    IntelResourceArtifact,
+    IntelResourceView,
     IntelSignal,
     IntelSource,
     RunStatus,
@@ -170,9 +170,7 @@ class IntelRepository:
                 brand["latest_resource_seen_at"], seen_at
             )
             summary = _artifact_summary_from_metadata(loads_dict(row["metadata_json"]))
-            brand["artifact_summary"] = _merge_artifact_summary(
-                brand["artifact_summary"], summary
-            )
+            brand["artifact_summary"] = _merge_artifact_summary(brand["artifact_summary"], summary)
 
         media_where = "WHERE LOWER(s.brand_name) LIKE LOWER(?)" if pattern else ""
         media_rows = conn.execute(
@@ -201,9 +199,7 @@ class IntelRepository:
             brand = get_brand(str(row["brand_name"]))
             brand["signal_count"] += 1
             seen_at = parse_iso(row["first_seen_at"])
-            brand["latest_signal_seen_at"] = _max_datetime(
-                brand["latest_signal_seen_at"], seen_at
-            )
+            brand["latest_signal_seen_at"] = _max_datetime(brand["latest_signal_seen_at"], seen_at)
 
         overviews = []
         for value in brands.values():
@@ -321,8 +317,8 @@ class IntelRepository:
             INSERT OR IGNORE INTO intel_resources
               (id, source_id, run_id, resource_type, url, canonical_url, platform, platform_id,
                content_hash, title, description, published_at, first_seen_at, fetched_at,
-               is_backfill, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               is_backfill, variant_count, has_variants, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 resource.id,
@@ -340,6 +336,8 @@ class IntelRepository:
                 iso(resource.first_seen_at),
                 iso(resource.fetched_at),
                 int(resource.is_backfill),
+                resource.variant_count,
+                int(resource.has_variants),
                 to_json(resource.metadata),
             ),
         )
@@ -647,6 +645,18 @@ def _signal(row: sqlite3.Row) -> IntelSignal:
     )
 
 
+def _row_get(row: sqlite3.Row, key: str, default: object = None) -> object:
+    """Safe column access — tolerant of rows from a schema missing the column."""
+    try:
+        return row[key]
+    except IndexError:
+        return default
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) else None
+
+
 def _resource_view(
     row: sqlite3.Row, media_artifacts: list[IntelResourceArtifact]
 ) -> IntelResourceView:
@@ -667,6 +677,8 @@ def _resource_view(
         first_seen_at=_req_dt(row["first_seen_at"]),
         fetched_at=_req_dt(row["fetched_at"]),
         is_backfill=bool(row["is_backfill"]),
+        variant_count=_int_or_none(_row_get(row, "variant_count")),
+        has_variants=bool(_row_get(row, "has_variants") or 0),
         artifact_summary=summary,
         artifacts=artifacts,
         metadata=metadata,

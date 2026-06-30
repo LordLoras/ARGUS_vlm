@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS intel_resources (
   first_seen_at TEXT NOT NULL,
   fetched_at TEXT NOT NULL,
   is_backfill INTEGER NOT NULL DEFAULT 0,
+  variant_count INTEGER,
+  has_variants INTEGER NOT NULL DEFAULT 0,
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -181,10 +183,28 @@ def initialize_intelligence_crawler_db(path: Path) -> list[str]:
         if "001_initial" not in applied:
             conn.execute("INSERT OR IGNORE INTO intel_migrations (version) VALUES ('001_initial')")
             migrations.append("001_initial")
+        # 002: creative-version projection columns on intel_resources. The CREATE TABLE above
+        # already includes them for fresh DBs; ALTER backfills DBs created before 001 had them.
+        if "002_resource_variants" not in applied:
+            for column, ddl in (
+                ("variant_count", "INTEGER"),
+                ("has_variants", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if not _column_exists(conn, "intel_resources", column):
+                    conn.execute(f"ALTER TABLE intel_resources ADD COLUMN {column} {ddl}")
+            conn.execute(
+                "INSERT OR IGNORE INTO intel_migrations (version) VALUES ('002_resource_variants')"
+            )
+            migrations.append("002_resource_variants")
         conn.commit()
         return migrations
     finally:
         conn.close()
+
+
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(str(row["name"]) == column for row in rows)
 
 
 def _applied_migrations(conn: sqlite3.Connection) -> set[str]:

@@ -8,6 +8,8 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     advertiser_creatives_freq,
     lookup_advertiser,
     parse_creatives,
+    resolve_advertiser,
+    search_advertisers,
 )
 from ad_classifier.intelligence_crawler.models import IntelSource, SourceState
 from ad_classifier.intelligence_crawler.sources.base import available_source_types
@@ -153,3 +155,54 @@ def test_lookup_advertiser_parse():
     payload = {"1": {"1": "ARx", "2": "Expedia Inc", "11": "US"}}
     info = lookup_advertiser("ARx", fetch=lambda m, q: payload)
     assert info == {"advertiser_id": "ARx", "name": "Expedia Inc", "region": "US"}
+
+
+# --- resolver -------------------------------------------------------------------------
+
+# SearchSuggestions shape: official brand first, then dealers/namesakes/foreign.
+SUGGEST_TOYOTA = {
+    "1": [
+        {"1": {"1": "Toyota", "2": "AR_TOYOTA", "3": "US"}},
+        {"1": {"1": "Toyota GB", "2": "AR_TOYOTA_GB", "3": "GB"}},
+        {"1": {"1": "Cox Toyota", "2": "AR_COX", "3": "US"}},
+    ]
+}
+# A bare "Ford" query returns only dealers/namesakes (no exact "Ford").
+SUGGEST_FORD_DEALERS = {
+    "1": [
+        {"1": {"1": "G Ford", "2": "AR_GFORD", "3": "US"}},
+        {"1": {"1": "Ian Ford", "2": "AR_IAN", "3": "US"}},
+    ]
+}
+# The legal-name query surfaces the real entity.
+SUGGEST_FORD_LEGAL = {"1": [{"1": {"1": "Ford Motor Company", "2": "AR_FMC", "3": "US"}}]}
+
+
+def test_search_advertisers_parses_suggestions():
+    rows = search_advertisers("Toyota", fetch=lambda m, q: SUGGEST_TOYOTA)
+    assert {"name": "Toyota", "advertiser_id": "AR_TOYOTA", "region": "US"} in rows
+    assert len(rows) == 3
+
+
+def test_resolve_advertiser_exact_us_match():
+    chosen = resolve_advertiser("Toyota", fetch=lambda m, q: SUGGEST_TOYOTA)
+    assert chosen is not None
+    assert chosen["advertiser_id"] == "AR_TOYOTA"  # not the GB or dealer entries
+
+
+def test_resolve_advertiser_refuses_to_guess():
+    # Bare "Ford" returns only dealers/namesakes -> no exact match -> None (never a dealer).
+    assert resolve_advertiser("Ford", fetch=lambda m, q: SUGGEST_FORD_DEALERS) is None
+
+
+def test_resolve_advertiser_uses_legal_name_hints():
+    def fetch(method, freq):
+        return SUGGEST_FORD_LEGAL if freq["1"] == "Ford Motor Company" else SUGGEST_FORD_DEALERS
+
+    chosen = resolve_advertiser(
+        "Ford",
+        fetch=fetch,
+        accept_names=("Ford Motor Company",),
+        extra_queries=("Ford Motor Company",),
+    )
+    assert chosen is not None and chosen["advertiser_id"] == "AR_FMC"

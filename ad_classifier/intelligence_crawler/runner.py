@@ -208,6 +208,14 @@ class IntelRunner:
         self, decision, source: IntelSource, run_id: str, now: datetime
     ) -> IntelResource:
         item = decision.item
+        # Creative-version projection: adapters that know about variants put them in item.raw
+        # (Meta: creative_variant_count / has_multiple_versions). Generic so any future adapter
+        # can populate the columns the same way.
+        raw_variant = item.raw.get("creative_variant_count")
+        variant_count = raw_variant if isinstance(raw_variant, int) else None
+        has_variants = bool(item.raw.get("has_multiple_versions")) or bool(
+            variant_count and variant_count > 1
+        )
         return IntelResource(
             id=decision.resource_id,
             source_id=source.id,
@@ -223,6 +231,8 @@ class IntelRunner:
             first_seen_at=now,
             fetched_at=now,
             is_backfill=(decision.kind == "backfill"),
+            variant_count=variant_count,
+            has_variants=has_variants,
             metadata=item.raw,
         )
 

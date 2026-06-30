@@ -119,6 +119,10 @@ class IntelResource(StrictModel):
     first_seen_at: datetime
     fetched_at: datetime
     is_backfill: bool = False
+    # Creative-version projection (Meta "N ads use this creative" / "multiple versions").
+    # variant_count None = unknown; populated from item.raw by the runner.
+    variant_count: int | None = None
+    has_variants: bool = False
     metadata: dict = Field(default_factory=dict)
 
 
@@ -154,6 +158,8 @@ class IntelResourceView(StrictModel):
     first_seen_at: datetime
     fetched_at: datetime
     is_backfill: bool = False
+    variant_count: int | None = None
+    has_variants: bool = False
     artifact_summary: IntelArtifactSummary = Field(default_factory=IntelArtifactSummary)
     artifacts: list[IntelResourceArtifact] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)

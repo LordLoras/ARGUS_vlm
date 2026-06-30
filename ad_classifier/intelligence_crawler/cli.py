@@ -118,6 +118,26 @@ def digest(
     typer.echo(json.dumps([e.model_dump() for e in entries], indent=2))
 
 
+@intel_app.command("resolve")
+def resolve(
+    source: Annotated[str, typer.Option("--source", help="Source id to resolve + persist.")],
+    config: _ConfigOpt = None,
+) -> None:
+    """Resolve a source's brand → advertiser/page id and persist it (refuse-to-guess)."""
+    from ad_classifier.intelligence_crawler.manager import IntelManager
+
+    cfg = _load(config)
+    updated = IntelManager(cfg).resolve_source(source)
+    if updated is None:
+        typer.echo(json.dumps({"source": source, "resolved": False}, indent=2))
+        raise typer.Exit(code=1)
+    typer.echo(
+        json.dumps(
+            {"source": source, "resolved": True, "platform_id": updated.platform_id}, indent=2
+        )
+    )
+
+
 @intel_app.command("meta-probe")
 def meta_probe(
     url: Annotated[
