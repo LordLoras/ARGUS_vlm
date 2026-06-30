@@ -902,7 +902,14 @@ function resourceFacts(resource: IntelResource) {
 
 function metaVariantCount(resource: IntelResource) {
   const value = resource.metadata.creative_variant_count;
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  const rawText = normalizeDisplayText(
+    resource.description || stringMetadata(resource, "raw_card_text")
+  );
+  const match = rawText.match(/\b([0-9]+)\s+ads?\s+use\s+this\s+creative\s+and\s+text\b/i);
+  return match ? Number(match[1]) : 0;
 }
 
 function videoTotal(resource: IntelResource) {
