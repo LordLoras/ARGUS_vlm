@@ -79,6 +79,28 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
         requires_url=True,
         provides=["article URLs", "titles", "descriptions", "publish dates"],
     ),
+    "google_atc": IntelAdapterDescriptor(
+        source_type="google_atc",
+        label="Google Ads Transparency",
+        target_label="ATC advertiser ID",
+        target_placeholder="ATC advertiser id, e.g. AR03692565387905335297",
+        helper_text=(
+            "Ads Transparency Center monitoring for a US advertiser id (the AR... id in the "
+            "adstransparency.google.com/advertiser/<id> URL, not a single creative). Lists the "
+            "advertiser's US creatives with creative ids, formats, first/last-shown dates, and "
+            "preview links."
+        ),
+        default_tier="B",
+        platform="google",
+        requires_platform_id=True,
+        provides=[
+            "ATC creative IDs",
+            "advertiser name",
+            "ad format",
+            "first/last-shown dates",
+            "preview URLs",
+        ],
+    ),
     "mock": IntelAdapterDescriptor(
         source_type="mock",
         label="Mock source",

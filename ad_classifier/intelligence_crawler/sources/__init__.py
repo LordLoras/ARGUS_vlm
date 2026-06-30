@@ -7,9 +7,10 @@ Importing this package registers the built-in adapters in the registry (see
 
 from ad_classifier.intelligence_crawler.sources import (  # noqa: F401
     base,
+    google_atc,
     meta_ad_library_ui,
     rss,
     youtube,
 )
 
-__all__ = ["base", "meta_ad_library_ui", "rss", "youtube"]
+__all__ = ["base", "google_atc", "meta_ad_library_ui", "rss", "youtube"]

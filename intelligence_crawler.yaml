@@ -98,6 +98,19 @@ sources:
   #     max_cards: 250
   #     wait_ms: 1800
   #     stop_after_no_new: 3
+  #
+  # - id: salesforce_atc
+  #   brand: Salesforce
+  #   source_type: google_atc
+  #   tier: B
+  #   enabled: false
+  #   platform: google
+  #   platform_id: "AR03692565387905335297"               # ATC advertiser id (AR... in the
+  #   poll_interval_hours: 24                              #   adstransparency.google.com/advertiser/<id> URL)
+  #   config:
+  #     page_size: 40                                      # US creatives per poll (1..100)
+  #   # No key needed — uses ATC's internal RPC (US region only). The advertiser id is the
+  #   # anchor; verify it is the real brand via LookupService (name/region) before enabling.
 
   # --- Offline demo source (no network). Flip enabled: true to try the pipeline. ---
   - id: demo_mock
