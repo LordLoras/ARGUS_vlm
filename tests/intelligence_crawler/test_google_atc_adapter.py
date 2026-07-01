@@ -59,6 +59,30 @@ fletchCallback({
 """
 
 
+# Image/display creatives inline the ad HTML at field 3.3.2 (live Apple/Ford/Toyota/Nike shape):
+# no 3.1.4 preview_url, format code 1, an <img> on the ad-image CDN.
+INLINE_IMAGE_PAYLOAD = {
+    "1": [
+        {
+            "1": ADV,
+            "2": "CR_IMG_1",
+            "3": {
+                "3": {
+                    "2": (
+                        '<img src="https://tpc.googlesyndication.com/archive/simgad/12345"'
+                        ' height="275" width="348">'
+                    )
+                },
+                "5": True,
+            },
+            "4": 1,
+            "6": {"1": "1774647000"},
+            "12": "Apple Inc",
+        }
+    ]
+}
+
+
 def _source(**overrides):
     base = dict(
         id="salesforce_atc",
@@ -138,6 +162,21 @@ def test_parse_preview_artifacts_extracts_video_and_image_assets():
     assert {"text": "Destination", "href": "https://www.jeep.com/wagoneer.html"} in artifacts[
         "links"
     ]
+
+
+def test_preview_artifacts_reject_framework_and_asset_urls():
+    # The bug: framework/CDN scripts (e.g. cdn.ampproject.org/amp4ads-host-v0.js) were stored
+    # as a "Destination". Only a real landing page should survive.
+    js = (
+        'a("https:\\/\\/cdn.ampproject.org\\/amp4ads-host-v0.js");'
+        'b("https:\\/\\/www.google-analytics.com\\/collect?v=1");'
+        'c("https:\\/\\/www.jeep.com\\/wagoneer.html");'
+    )
+    artifacts = parse_preview_artifacts(js)
+    hrefs = [link["href"] for link in artifacts.get("links", [])]
+    assert "https://www.jeep.com/wagoneer.html" in hrefs
+    assert all("ampproject.org" not in h and "amp4ads" not in h for h in hrefs)
+    assert all("google-analytics" not in h for h in hrefs)
 
 
 def test_adapter_enriches_preview_artifacts_when_fetcher_is_available():
@@ -250,6 +289,33 @@ def test_rpc_failure_is_isolated():
     result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
     assert result.items == []
     assert result.errors and "rpc 429" in result.errors[0]
+
+
+def test_parse_creatives_extracts_inline_image_from_field_3_3_2():
+    # The bug: parser only read 3.1.4 (preview_url) and missed the inline <img> at 3.3.2,
+    # so image/display creatives (the common case for big brands) had no image.
+    parsed = parse_creatives(INLINE_IMAGE_PAYLOAD)
+    assert len(parsed) == 1
+    creative = parsed[0]
+    assert creative["image_sources"] == ["https://tpc.googlesyndication.com/archive/simgad/12345"]
+    assert creative["image_url"] == "https://tpc.googlesyndication.com/archive/simgad/12345"
+    assert creative["preview_url"] is None  # image creatives have no 3.1.4 hosted preview
+    assert creative["format"] == "image"  # derived from content, not the numeric code (1 == "text")
+
+
+def test_adapter_maps_inline_image_without_preview_fetch():
+    # No preview_fetch injected, but the image is inline in the RPC -> still captured + rendered.
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: INLINE_IMAGE_PAYLOAD, intel_config=IntelConfig()
+    )
+    result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
+
+    item = result.items[0]
+    assert item.raw["image_sources"] == ["https://tpc.googlesyndication.com/archive/simgad/12345"]
+    assert item.thumbnail_url == "https://tpc.googlesyndication.com/archive/simgad/12345"
+    assert item.raw["format"] == "image"
+    assert item.raw["has_inline_image"] is True
+    assert item.raw["preview_enriched"] is False  # no preview fetch needed for image creatives
 
 
 def test_parse_creatives_helper_skips_invalid():

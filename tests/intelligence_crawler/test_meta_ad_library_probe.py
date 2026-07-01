@@ -85,5 +85,30 @@ def test_clean_helpers_dedupe_and_limit_values() -> None:
     assert images == ["https://img/1", "https://img/2"]
 
 
+def test_clean_links_unwraps_fb_redirect_and_drops_framework_junk() -> None:
+    links = _clean_links(
+        [
+            {
+                "text": "TOYOTA.COM/RAV4 Learn More",
+                "href": (
+                    "https://l.facebook.com/l.php?u="
+                    "https%3A%2F%2Fad.doubleclick.net%2Fddm%2Fclk%2F123"
+                ),
+            },
+            {"text": "amp runtime", "href": "https://cdn.ampproject.org/amp4ads-host-v0.js"},
+            {"text": "Direct", "href": "https://www.toyota.com/rav4"},
+        ]
+    )
+    # FB wrapper unwrapped to the real click URL
+    assert {
+        "text": "TOYOTA.COM/RAV4 Learn More",
+        "href": "https://ad.doubleclick.net/ddm/clk/123",
+    } in links
+    # framework script dropped to text-only (junk href removed)
+    assert {"text": "amp runtime", "href": ""} in links
+    # a plain landing page is untouched
+    assert {"text": "Direct", "href": "https://www.toyota.com/rav4"} in links
+
+
 def test_safe_filename_strips_problem_characters() -> None:
     assert _safe_filename(" 123/456:789 ") == "123_456_789"

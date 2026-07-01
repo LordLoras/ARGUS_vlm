@@ -52,6 +52,36 @@ _YOUTUBE_ID_RE = re.compile(
     re.IGNORECASE,
 )
 _IMAGE_EXT_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)", re.IGNORECASE)
+# Inline creative HTML (field 3.3.2): an ``<img src=...>`` on Google's ad-image CDN.
+_IMG_SRC_RE = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Ad-tech / framework / CDN / analytics hosts that are never a creative's landing page.
+_ADTECH_HOST_MARKERS = (
+    "ampproject.org",
+    "doubleclick.net",
+    "googlesyndication.com",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "googletagservices.com",
+    "googleadservices.com",
+    "googleapis.com",
+    "gstatic.com",
+    "googleusercontent.com",
+    "google.com",
+    "youtube.com",
+    "youtu.be",
+    "ytimg.com",
+    "2mdn.net",
+    "adnxs.com",
+    "scorecardresearch.com",
+    "app-measurement.com",
+    "gvt1.com",
+    "gvt2.com",
+)
+# Static assets (runtime scripts, styles, fonts…) — never a destination.
+_ASSET_EXT_RE = re.compile(
+    r"\.(?:js|mjs|css|json|map|wasm|woff2?|ttf|otf|eot|svg|ico|xml)(?:[?#]|$)", re.IGNORECASE
+)
 
 
 def advertiser_creatives_freq(
@@ -77,7 +107,18 @@ def advertiser_creatives_freq(
 
 
 def parse_creatives(payload: dict) -> list[dict]:
-    """Normalize a ``SearchCreatives`` response into flat creative dicts."""
+    """Normalize a ``SearchCreatives`` response into flat creative dicts.
+
+    The creative content is **polymorphic** (two shapes seen live):
+    - hosted / video creatives expose a preview-script URL at field ``3.1.4``;
+    - image / display creatives inline the rendered ad as HTML at field ``3.3.2`` — an
+      ``<img src=...>`` on Google's ad-image CDN (``tpc.googlesyndication.com/archive/simgad/…``,
+      a directly-downloadable file).
+
+    We parse **both**, so the common image case is captured straight from the RPC with no
+    extra preview fetch. ``format`` is derived from the actual content because the numeric
+    ``format`` code (field 4) is unreliable — image/display creatives report code ``1``.
+    """
     out: list[dict] = []
     for rec in payload.get("1", []) or []:
         if not isinstance(rec, dict):
@@ -87,8 +128,10 @@ def parse_creatives(payload: dict) -> list[dict]:
             continue
         content = rec.get("3")
         content = content if isinstance(content, dict) else {}
-        inner = content.get("1")
-        inner = inner if isinstance(inner, dict) else {}
+        hosted = content.get("1")
+        hosted = hosted if isinstance(hosted, dict) else {}
+        inline = _inline_creative(content)
+        image_sources = inline.get("image_sources", [])
         format_code = rec.get("4")
         out.append(
             {
@@ -96,13 +139,46 @@ def parse_creatives(payload: dict) -> list[dict]:
                 "advertiser_id": rec.get("1"),
                 "advertiser_name": rec.get("12"),
                 "format_code": format_code,
-                "format": _FORMAT_LABELS.get(format_code) if isinstance(format_code, int) else None,
+                "format": _creative_format(format_code, image_sources),
                 "first_shown": _epoch(rec.get("6")),
                 "last_shown": _epoch(rec.get("7")),
-                "preview_url": inner.get("4"),
+                "preview_url": hosted.get("4"),
+                "image_sources": image_sources,
+                "image_url": image_sources[0] if image_sources else None,
+                "text": inline.get("text"),
             }
         )
     return out
+
+
+def _inline_creative(content: dict) -> dict:
+    """Parse the inline rendered-HTML creative at field ``3.3.2`` (image/display ads).
+
+    Returns ``{image_sources: [...], text: str}`` — empty when the creative has no inline
+    HTML (hosted/video creatives carry a ``preview_url`` at ``3.1.4`` instead).
+    """
+    node = content.get("3")
+    node = node if isinstance(node, dict) else {}
+    raw_html = node.get("2")
+    if not isinstance(raw_html, str) or not raw_html.strip():
+        return {}
+    images = _dedupe(_normalize_js_url(src) for src in _IMG_SRC_RE.findall(raw_html))
+    text = re.sub(r"\s+", " ", html.unescape(_HTML_TAG_RE.sub(" ", raw_html))).strip()
+    result: dict = {}
+    if images:
+        result["image_sources"] = images
+    if text:
+        result["text"] = text
+    return result
+
+
+def _creative_format(format_code: object, image_sources: list[str]) -> str | None:
+    """Human creative type. Prefers observed content over the unreliable numeric code map."""
+    if image_sources:
+        return "image"
+    if isinstance(format_code, int):
+        return _FORMAT_LABELS.get(format_code)
+    return None
 
 
 def search_creatives(
@@ -339,26 +415,25 @@ def _is_image_url(lower_url: str) -> bool:
 
 
 def _destination_from_url(url: str) -> str | None:
+    """Return ``url`` only if it plausibly is the creative's landing page.
+
+    Rejects ad-tech/framework/CDN/analytics hosts and static assets (``.js``/``.css``/fonts/…)
+    so a creative's runtime scripts — e.g. ``cdn.ampproject.org/amp4ads-host-v0.js`` — are never
+    stored as a "Destination".
+    """
     try:
         parsed = urllib.parse.urlparse(url)
     except ValueError:
         return None
+    if parsed.scheme not in ("http", "https"):
+        return None
     host = parsed.netloc.lower()
     if not host:
         return None
-    if any(
-        blocked in host
-        for blocked in (
-            "google.com",
-            "googleusercontent.com",
-            "gstatic.com",
-            "ytimg.com",
-            "youtube.com",
-            "youtu.be",
-        )
-    ):
+    if any(marker in host for marker in _ADTECH_HOST_MARKERS):
         return None
-    if _is_image_url(url.lower()) or _is_video_url(url.lower()):
+    lower = url.lower()
+    if _ASSET_EXT_RE.search(lower) or _is_image_url(lower) or _is_video_url(lower):
         return None
     return url
 

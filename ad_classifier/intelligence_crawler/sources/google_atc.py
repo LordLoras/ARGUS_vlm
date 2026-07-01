@@ -19,8 +19,8 @@ import structlog
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.google_atc_rpc import (
-    PreviewFetch,
     US_REGION_CODE,
+    PreviewFetch,
     RpcFetch,
     default_preview_fetch,
     default_rpc_fetch,
@@ -116,7 +116,10 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     advertiser_name = creative.get("advertiser_name") or source.brand_name
     preview_artifacts = creative.get("preview_artifacts")
     preview_artifacts = preview_artifacts if isinstance(preview_artifacts, dict) else {}
-    image_sources = _list_artifact(preview_artifacts, "image_sources")
+    # Inline image comes straight from the RPC (field 3.3.2) — no fetch needed. Merge it with
+    # anything the (best-effort) preview fetch found for hosted/video creatives.
+    inline_images = _list_artifact(creative, "image_sources")
+    image_sources = _dedupe_str([*inline_images, *_list_artifact(preview_artifacts, "image_sources")])
     video_sources = _list_artifact(preview_artifacts, "video_sources")
     video_posters = _list_artifact(preview_artifacts, "video_posters")
     thumbnail_url = _first_present(video_posters, image_sources)
@@ -126,7 +129,7 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
         canonical_url=url,
         resource_type="atc_ad",
         title=f"{advertiser_name} ATC creative {cid}",
-        description=None,
+        description=_creative_description(creative.get("text")),
         published_at=_epoch_to_dt(creative.get("first_shown")),
         thumbnail_url=thumbnail_url,
         raw={
@@ -140,6 +143,7 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
             "last_shown": creative.get("last_shown"),
             "preview_url": creative.get("preview_url"),
             "region": "US",
+            "has_inline_image": bool(inline_images),
             "preview_enriched": bool(preview_artifacts),
             "youtube_video_ids": _list_artifact(preview_artifacts, "youtube_video_ids"),
             "image_sources": image_sources,
@@ -245,3 +249,21 @@ def _first_present(*groups: list[str]) -> str | None:
         if group:
             return group[0]
     return None
+
+
+def _dedupe_str(values: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def _creative_description(text: object) -> str | None:
+    """Ad copy recovered from the inline creative HTML (empty for image-only creatives)."""
+    if not isinstance(text, str):
+        return None
+    clean = " ".join(text.split()).strip()
+    return clean[:600] or None

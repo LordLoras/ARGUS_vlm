@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 TOYOTA_META_AD_LIBRARY_URL = (
     "https://www.facebook.com/ads/library/"
@@ -428,6 +428,54 @@ def _safe_filename(value: str) -> str:
     return clean[:80] or "unknown"
 
 
+# Facebook/Instagram click-wrapper hosts (``l.php?u=<encoded real url>``).
+_FB_REDIRECT_HOSTS = ("l.facebook.com", "lm.facebook.com", "l.instagram.com")
+# Framework / analytics / CDN hosts that are never a real ad destination.
+_HREF_JUNK_HOST_MARKERS = (
+    "ampproject.org",
+    "gstatic.com",
+    "googlesyndication.com",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "googletagservices.com",
+    "scorecardresearch.com",
+    "app-measurement.com",
+    "googleapis.com",
+    "fbcdn.net",
+)
+_HREF_ASSET_RE = re.compile(
+    r"\.(?:js|mjs|css|json|map|wasm|woff2?|ttf|otf|eot|svg|ico)(?:[?#]|$)", re.IGNORECASE
+)
+
+
+def _unwrap_redirect(href: str) -> str:
+    """Unwrap Facebook/Instagram ``l.php?u=<encoded>`` click-wrappers to the real target."""
+    try:
+        parsed = urlparse(href)
+    except ValueError:
+        return href
+    host = parsed.netloc.lower()
+    is_fb_redirect = any(
+        host == h or host.endswith("." + h) for h in _FB_REDIRECT_HOSTS
+    ) or parsed.path.endswith("/l.php")
+    if is_fb_redirect:
+        target = parse_qs(parsed.query).get("u", [None])[0]
+        if target:
+            return unquote(target)
+    return href
+
+
+def _is_junk_href(href: str) -> bool:
+    """True for framework/analytics/asset URLs that should never be shown as a destination."""
+    try:
+        host = urlparse(href).netloc.lower()
+    except ValueError:
+        return False
+    if any(marker in host for marker in _HREF_JUNK_HOST_MARKERS):
+        return True
+    return bool(_HREF_ASSET_RE.search(href.lower()))
+
+
 def _clean_links(raw: Any) -> list[dict[str, str]]:
     if not isinstance(raw, list):
         return []
@@ -437,7 +485,9 @@ def _clean_links(raw: Any) -> list[dict[str, str]]:
         if not isinstance(item, dict):
             continue
         text = _collapse_whitespace(str(item.get("text") or ""))
-        href = str(item.get("href") or "")
+        href = _unwrap_redirect(str(item.get("href") or ""))
+        if href and _is_junk_href(href):
+            href = ""  # keep the CTA text; drop the framework/asset link
         if not text and not href:
             continue
         key = (text, href)
