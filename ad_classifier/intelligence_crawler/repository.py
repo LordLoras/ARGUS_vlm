@@ -93,6 +93,41 @@ class IntelRepository:
                 ),
             )
 
+    def seed_sources(self, conn: sqlite3.Connection, sources: list[IntelSource]) -> None:
+        """Refresh config seed sources without overwriting DB-curated enabled state."""
+        for source in sources:
+            conn.execute(
+                """
+                INSERT INTO intel_sources
+                  (id, brand_name, market, source_type, tier, url, platform, platform_id,
+                   enabled, poll_interval_hours, allowed_domains_json, config_json, notes, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(id) DO UPDATE SET
+                  brand_name=excluded.brand_name, market=excluded.market,
+                  source_type=excluded.source_type, tier=excluded.tier, url=excluded.url,
+                  platform=excluded.platform, platform_id=excluded.platform_id,
+                  poll_interval_hours=excluded.poll_interval_hours,
+                  allowed_domains_json=excluded.allowed_domains_json,
+                  config_json=excluded.config_json, notes=excluded.notes,
+                  updated_at=datetime('now')
+                """,
+                (
+                    source.id,
+                    source.brand_name,
+                    source.market,
+                    source.source_type,
+                    source.tier,
+                    source.url,
+                    source.platform,
+                    source.platform_id,
+                    int(source.enabled),
+                    source.poll_interval_hours,
+                    to_json(source.allowed_domains),
+                    to_json(source.config),
+                    source.notes,
+                ),
+            )
+
     def get_source(self, conn: sqlite3.Connection, source_id: str) -> IntelSource | None:
         row = conn.execute("SELECT * FROM intel_sources WHERE id = ?", (source_id,)).fetchone()
         return _source(row) if row else None

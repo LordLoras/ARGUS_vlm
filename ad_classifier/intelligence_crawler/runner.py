@@ -66,10 +66,9 @@ class IntelRunner:
 
         with self.repo.connect() as conn:
             self.repo.create_run(conn, run_id)
-            # YAML sources are a seed: upsert them, then select from the DB — the source of
-            # truth, which also holds sources added via the API/UI. (`due` is accepted for
-            # API/CLI compatibility; today it means "all enabled".)
-            self.repo.sync_sources(conn, [s.to_source() for s in self.config.sources])
+            # YAML sources are a seed refresh; the DB registry is the source of truth
+            # for enabled state and sources added through the API/UI.
+            self.repo.seed_sources(conn, [s.to_source() for s in self.config.sources])
             conn.commit()
             selected = self._select_sources(conn, source_id=source_id, brand=brand)
 

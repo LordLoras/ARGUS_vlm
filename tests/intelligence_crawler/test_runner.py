@@ -90,6 +90,28 @@ def test_repoll_is_idempotent(tmp_path):
     assert second.signal_count == 0  # nothing new on re-poll
 
 
+def test_runner_seed_does_not_disable_curated_db_source(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [], enabled=False)
+    repo = IntelRepository(db)
+    runner = IntelRunner(cfg, repo=repo, now_fn=lambda: T0)
+
+    # First run seeds the disabled YAML source into the DB.
+    assert runner.run(due=True).source_count == 0
+    with repo.connect() as conn:
+        repo.set_source_enabled(conn, "s1", True)
+        conn.commit()
+
+    # Second run sees the DB toggle and does not overwrite it with enabled=False from YAML.
+    summary = runner.run(due=True)
+
+    assert summary.source_count == 1
+    with repo.connect(readonly=True) as conn:
+        source = repo.get_source(conn, "s1")
+    assert source is not None
+    assert source.enabled is True
+
+
 def test_non_ad_video_is_filtered_not_signaled(tmp_path):
     db = tmp_path / "intel.db"
     IntelRunner(_config(db, [OLD_ITEM]), now_fn=lambda: T0).run(due=True)  # baseline activates

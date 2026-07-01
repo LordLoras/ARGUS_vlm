@@ -126,6 +126,15 @@ class IntelManager:
     def __init__(self, config: IntelConfig, *, repo: IntelRepository | None = None) -> None:
         self.config = config
         self.repo = repo or IntelRepository(config.db_path)
+        self.seed_config_sources()
+
+    def seed_config_sources(self) -> None:
+        """Persist YAML seed sources so read endpoints see them before the first crawl."""
+        if not self.config.sources:
+            return
+        with self.repo.connect() as conn:
+            self.repo.seed_sources(conn, [source.to_source() for source in self.config.sources])
+            conn.commit()
 
     def list_signals(
         self,
