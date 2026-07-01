@@ -38,79 +38,269 @@ watchlist:
     - Toyota
     - Ford
     - Jeep
-    - T-Mobile
     - Apple
     - McDonald's
-    - Progressive
-    - Geico
+    - GEICO
+    - DoorDash
+    - Duolingo
+    - Samsung
+    - Starbucks
 
 sources:
-  # --- Real adapters (Phase 3/4 — currently skeletons, keep disabled) -------------
-  # - id: toyota_youtube
-  #   brand: Toyota
-  #   source_type: youtube_channel
-  #   tier: A
-  #   enabled: false
-  #   platform: youtube
-  #   platform_id: "UC-OFFICIAL-TOYOTA-USA-CHANNEL-ID"   # pin the US channel
-  #   poll_interval_hours: 12
-  #   config:
-  #     api_key_env: YOUTUBE_API_KEY   # only needed for enrich-on-new; detection is feed-only
-  #
-  # - id: toyota_newsroom
-  #   brand: Toyota
-  #   source_type: rss
-  #   tier: A
-  #   enabled: false
-  #   url: "https://pressroom.toyota.com/feed/"          # pin the US newsroom
-  #   poll_interval_hours: 12
-  #
-  # - id: toyota_meta_ads
-  #   brand: Toyota
-  #   source_type: meta_ad_library_ui
-  #   tier: B
-  #   enabled: false
-  #   platform: meta
-  #   platform_id: "197052454200"                        # verified Toyota USA page id
-  #   poll_interval_hours: 24
-  #   config:
-  #     active_status: active                            # active US ads only
-  #     sort_mode: relevancy_monthly_grouped             # UI param; override when testing
-  #     sort_direction: desc
-  #     scrolls: 20                                      # max scrolls; stops early if stable
-  #     max_cards: 250
-  #     wait_ms: 1800
-  #     stop_after_no_new: 3
-  #
-  # - id: jeep_meta_ads
-  #   brand: Jeep
-  #   source_type: meta_ad_library_ui
-  #   tier: B
-  #   enabled: false
-  #   platform: meta
-  #   platform_id: "7037526514"                          # verified Jeep page id
-  #   poll_interval_hours: 24
-  #   config:
-  #     active_status: active
-  #     sort_mode: relevancy_monthly_grouped
-  #     sort_direction: desc
-  #     scrolls: 20
-  #     max_cards: 250
-  #     wait_ms: 1800
-  #     stop_after_no_new: 3
-  #
-  # - id: salesforce_atc
-  #   brand: Salesforce
-  #   source_type: google_atc
-  #   tier: B
-  #   enabled: false
-  #   platform: google
-  #   platform_id: "AR03692565387905335297"               # ATC advertiser id (AR... in the
-  #   poll_interval_hours: 24                              #   adstransparency.google.com/advertiser/<id> URL)
-  #   config:
-  #     page_size: 40                                      # US creatives per poll (1..100)
-  #   # No key needed — uses ATC's internal RPC (US region only). The advertiser id is the
-  #   # anchor; verify it is the real brand via LookupService (name/region) before enabling.
+  # --- Real adapters ------------------------------------------------------------
+  # Ten diversified US-market brands with the same two disabled adapters each:
+  # Meta Ad Library (public page id) + Google Ads Transparency Center (US advertiser id).
+  # Keep disabled by default; enable/run from the Watcher UI when you want to poll.
+  # Meta page ids were smoke-tested against active US Ad Library cards on 2026-07-01.
+  # ATC ids were verified with LookupService/GetAdvertiserById as region=US on 2026-07-01.
+  - id: toyota_meta_ads
+    brand: Toyota
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "197052454200"
+    poll_interval_hours: 24
+    notes: "Toyota USA Meta page id; active US cards smoke-tested."
+    config: &meta_active_config
+      active_status: active
+      sort_mode: relevancy_monthly_grouped
+      sort_direction: desc
+      scrolls: 20
+      max_cards: 250
+      wait_ms: 1800
+      stop_after_no_new: 3
+
+  - id: toyota_atc
+    brand: Toyota
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR11569656475307474945"
+    poll_interval_hours: 24
+    notes: "ATC lookup: TOYOTA MOTOR NORTH AMERICA INC, US; selected for video creatives."
+    config: &atc_us_config
+      page_size: 40
+      max_pages: 10
+      preview_enrichment: true
+      preview_enrichment_limit: 40
+
+  - id: jeep_meta_ads
+    brand: Jeep
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "7037526514"
+    poll_interval_hours: 24
+    notes: "Jeep Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: jeep_atc
+    brand: Jeep
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR18054808035703914497"
+    poll_interval_hours: 24
+    notes: "ATC lookup: FCA US LLC, US; brand owner/advertiser for Jeep."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["FCA US LLC", "Stellantis North America"]
+
+  - id: ford_meta_ads
+    brand: Ford
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "22166130048"
+    poll_interval_hours: 24
+    notes: "Ford Motor Company Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: ford_atc
+    brand: Ford
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR15898411213873217537"
+    poll_interval_hours: 24
+    notes: "ATC lookup: Ford Motor Company, US; selected for image creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["Ford Motor Company"]
+
+  - id: apple_meta_ads
+    brand: Apple
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "434174436675167"
+    poll_interval_hours: 24
+    notes: "Apple Meta page id; active cards smoke-tested with US filter."
+    config: *meta_active_config
+
+  - id: apple_atc
+    brand: Apple
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR03186575737440174081"
+    poll_interval_hours: 24
+    notes: "ATC lookup: Apple Inc., US; selected for image/video creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["Apple Inc", "Apple Inc."]
+
+  - id: mcdonalds_meta_ads
+    brand: McDonald's
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "50245567013"
+    poll_interval_hours: 24
+    notes: "McDonald's Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: mcdonalds_atc
+    brand: McDonald's
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR03719453326287306753"
+    poll_interval_hours: 24
+    notes: "ATC lookup: McDonald's Corporation, US; selected for video creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["McDonald's Corporation"]
+
+  - id: geico_meta_ads
+    brand: GEICO
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "7753384227"
+    poll_interval_hours: 24
+    notes: "GEICO Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: geico_atc
+    brand: GEICO
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR14408770578271961089"
+    poll_interval_hours: 24
+    notes: "ATC lookup: GEICO Corporation, US."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["GEICO Corporation", "GEICO MEDIA SERVICES LLC"]
+
+  - id: doordash_meta_ads
+    brand: DoorDash
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "534754226586678"
+    poll_interval_hours: 24
+    notes: "DoorDash Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: doordash_atc
+    brand: DoorDash
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR00596762134998679553"
+    poll_interval_hours: 24
+    notes: "ATC lookup: DoorDash, Inc, US; selected for image/video creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["DoorDash, Inc", "DoorDash, inc."]
+
+  - id: duolingo_meta_ads
+    brand: Duolingo
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "141935472517297"
+    poll_interval_hours: 24
+    notes: "Duolingo Meta page id; active cards smoke-tested with US filter."
+    config: *meta_active_config
+
+  - id: duolingo_atc
+    brand: Duolingo
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR01320432650854334465"
+    poll_interval_hours: 24
+    notes: "ATC lookup: Duolingo Inc, US; includes video creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["Duolingo Inc", "Duolingo, Inc."]
+
+  - id: samsung_meta_ads
+    brand: Samsung
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "7224956785"
+    poll_interval_hours: 24
+    notes: "Samsung Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: samsung_atc
+    brand: Samsung
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR16887228941587185665"
+    poll_interval_hours: 24
+    notes: "ATC lookup: Samsung Electronics America, US."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["Samsung Electronics America", "Samsung Electronics America, Inc."]
+
+  - id: starbucks_meta_ads
+    brand: Starbucks
+    source_type: meta_ad_library_ui
+    tier: B
+    enabled: false
+    platform: meta
+    platform_id: "22092443056"
+    poll_interval_hours: 24
+    notes: "Starbucks Meta page id; active US cards smoke-tested."
+    config: *meta_active_config
+
+  - id: starbucks_atc
+    brand: Starbucks
+    source_type: google_atc
+    tier: B
+    enabled: false
+    platform: google
+    platform_id: "AR08539624513325760513"
+    poll_interval_hours: 24
+    notes: "ATC lookup: Starbucks Corporation, US; selected for image/video creatives."
+    config:
+      <<: *atc_us_config
+      resolve_names: ["Starbucks Corporation"]
 
   # --- Offline demo source (no network). Flip enabled: true to try the pipeline. ---
   - id: demo_mock
