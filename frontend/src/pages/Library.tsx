@@ -17,9 +17,7 @@ import type { AdDetail, AdRecord } from "../lib/types";
 const emptyFilters: LibraryFilters = {
   q: "",
   category: "",
-  brand: "",
-  hasRiskTags: false,
-  risk: ""
+  brand: ""
 };
 
 export function Library() {
@@ -88,17 +86,9 @@ export function Library() {
     return Object.fromEntries(pairs);
   }, [detailQueries]);
 
-  const activeRisks = filters.risk ? filters.risk.split(",").filter(Boolean) : [];
-
   const filteredAds = useMemo(() => {
-    return ads.filter((ad) => {
-      const detail = detailMap[ad.id];
-      const riskLabels = detail?.classification?.risk_labels ?? [];
-      if (filters.hasRiskTags && riskLabels.length === 0) return false;
-      if (activeRisks.length && !activeRisks.every((r) => riskLabels.includes(r))) return false;
-      return true;
-    });
-  }, [ads, detailMap, filters, activeRisks]);
+    return ads;
+  }, [ads]);
 
   const framePreviews = useMemo(() => {
     const map: Record<string, string | undefined> = {};
@@ -112,17 +102,12 @@ export function Library() {
 
   const counts = useMemo(() => {
     const byCategory: Record<string, number> = {};
-    const byRisk: Record<string, number> = {};
-    let hasRisk = 0;
     ads.forEach((ad) => {
       const detail = detailMap[ad.id];
       const category = ad.primary_category ?? detail?.classification?.primary_category ?? "";
-      const risks = detail?.classification?.risk_labels ?? [];
       if (category) byCategory[category] = (byCategory[category] ?? 0) + 1;
-      risks.forEach((r) => (byRisk[r] = (byRisk[r] ?? 0) + 1));
-      if (risks.length > 0) hasRisk += 1;
     });
-    return { total: ads.length, sensitive: 0, hasRisk, byCategory, byRisk };
+    return { total: ads.length, sensitive: 0, byCategory };
   }, [ads, detailMap]);
 
   const selectedDetail = selectedAdId ? detailMap[selectedAdId] : undefined;

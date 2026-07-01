@@ -188,6 +188,9 @@ vlm_parse:
 
 submitted_db_repairs:
   enabled: true
+  # Skip crawler-proposed submitted DB edits below this score. Review-only
+  # product/trim narrowing is capped at 0.45, so it stays out of approval tasks.
+  min_suggestion_confidence: 0.5
   allowed_fields:
     - ads.brand_name
     - ads.products_text

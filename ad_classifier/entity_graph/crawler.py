@@ -1485,6 +1485,16 @@ def _write_vlm_discovery(
             apply_safety=suggestion.apply_safety,
             config=config,
         )
+        confidence = _ad_suggestion_store_confidence(
+            confidence=suggestion.confidence,
+            apply_safety=apply_safety,
+        )
+        if not _should_store_ad_suggestion_for_review(
+            confidence=confidence,
+            apply_safety=apply_safety,
+            config=config,
+        ):
+            continue
         reason = suggestion.reason.strip()[:1000]
         if apply_safety == "review_only" and suggestion.apply_safety == "safe_projection_update":
             reason = (
@@ -1498,7 +1508,7 @@ def _write_vlm_discovery(
             field_path=suggestion.field_path,
             current_value=current_value,
             suggested_value=suggestion.suggested_value.strip(),
-            confidence=min(suggestion.confidence, 0.75 if apply_safety != "review_only" else 0.45),
+            confidence=confidence,
             reason=reason,
             evidence_text=_evidence_text(
                 suggestion.evidence_spans,
@@ -1716,6 +1726,21 @@ def _ad_suggestion_apply_safety(
     if current_key in suggested_key or suggested_key in current_key:
         return "review_only"
     return apply_safety
+
+
+def _ad_suggestion_store_confidence(*, confidence: float, apply_safety: str) -> float:
+    return min(confidence, 0.75 if apply_safety != "review_only" else 0.45)
+
+
+def _should_store_ad_suggestion_for_review(
+    *,
+    confidence: float,
+    apply_safety: str,
+    config: EntityCrawlerConfig,
+) -> bool:
+    if apply_safety == "do_not_apply":
+        return False
+    return confidence >= config.submitted_db_repairs.min_suggestion_confidence
 
 
 def _submitted_ad_summary(

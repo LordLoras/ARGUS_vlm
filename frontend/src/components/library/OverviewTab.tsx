@@ -7,7 +7,6 @@ import type {
   BrandProfileCandidate,
   IABContentCategory
 } from "../../lib/types";
-import { ObservationTagPill } from "../shared/ObservationTagPill";
 import { TimestampChip } from "../shared/TimestampChip";
 
 export function OverviewTab({
@@ -34,8 +33,6 @@ export function OverviewTab({
   const cls = detail.classification;
   const ent = detail.marketing_entities;
   const category = detail.ad.primary_category ?? cls?.primary_category ?? "uncategorized";
-  const confidence = cls?.confidence ?? null;
-  const risks = cls?.risk_labels ?? [];
   const prices = ent?.prices ?? [];
   const offers = ent?.offers ?? [];
   const ctas = ent?.ctas ?? [];
@@ -75,7 +72,6 @@ export function OverviewTab({
       <Card title="Category">
         <div className="cat-row">
           <span className="cat-primary">{category}</span>
-          <span className="cat-conf">{confidence != null ? `confidence ${confidence.toFixed(2)}` : "no confidence"}</span>
         </div>
         {subcategory ? (
           <div style={{ marginTop: 8 }}>
@@ -199,18 +195,6 @@ export function OverviewTab({
           onSearchProfile={onSearchProfile}
           onResetProfile={onResetProfile}
         />
-      </Card>
-
-      <Card title="Observation tags" count={risks.length}>
-        {risks.length === 0 ? (
-          <div className="obs-empty">No risk tags detected.</div>
-        ) : (
-          <div className="pill-row" style={{ gap: 6 }}>
-            {risks.map((r) => (
-              <ObservationTagPill key={r} label={r} />
-            ))}
-          </div>
-        )}
       </Card>
 
       <Card title="Prices, offers & CTAs" count={prices.length + offers.length + ctas.length}>

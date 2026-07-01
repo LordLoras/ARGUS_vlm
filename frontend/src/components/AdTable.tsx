@@ -3,9 +3,7 @@ import { formatDuration, relativeTime } from "../lib/format";
 import { aspectFromDims, deriveSeed } from "../lib/style-helpers";
 import type { AdDetail, AdRecord } from "../lib/types";
 import { CategoryBadge } from "./shared/CategoryBadge";
-import { ConfidenceBar } from "./shared/ConfidenceBar";
 import { FrameThumbnail } from "./shared/FrameThumbnail";
-import { ObservationTagOverflow, ObservationTagPill } from "./shared/ObservationTagPill";
 
 const MAX_PRODUCTS = 3;
 
@@ -45,8 +43,6 @@ export function AdTable({
             <th style={{ width: 120 }}>Frame</th>
             <th>Brand</th>
             <th>Category</th>
-            <th>Confidence</th>
-            <th>Risk tags</th>
             <th className="num">Duration</th>
             <th>Ingested</th>
             <th style={{ width: 32 }} />
@@ -57,8 +53,6 @@ export function AdTable({
             const detail = details[ad.id];
             const cls = detail?.classification;
             const category = ad.primary_category ?? cls?.primary_category ?? null;
-            const risks = cls?.risk_labels ?? [];
-            const confidence = cls?.confidence ?? ad.brand_confidence ?? null;
             const ar = aspectFromDims(ad.width, ad.height);
             const seed = deriveSeed(ad.id);
             return (
@@ -85,25 +79,6 @@ export function AdTable({
                 </td>
                 <td>
                   <CategoryBadge category={category} />
-                </td>
-                <td>
-                  <ConfidenceBar value={confidence} />
-                </td>
-                <td>
-                  <div className="risk-cell">
-                    {risks.length === 0 ? (
-                      <span className="obs-empty">—</span>
-                    ) : (
-                      <>
-                        {risks.slice(0, 2).map((label) => (
-                          <ObservationTagPill key={label} label={label} />
-                        ))}
-                        {risks.length > 2 ? (
-                          <ObservationTagOverflow count={risks.length - 2} />
-                        ) : null}
-                      </>
-                    )}
-                  </div>
                 </td>
                 <td className="num mono">{formatDuration(ad.duration_ms)}</td>
                 <td className="mono" title={ad.ingested_at ?? undefined}>

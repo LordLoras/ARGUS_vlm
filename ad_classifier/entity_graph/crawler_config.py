@@ -249,6 +249,7 @@ class SubmittedDbRepairConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     enabled: bool = True
+    min_suggestion_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     allowed_fields: list[str] = Field(
         default_factory=lambda: [
             "ads.brand_name",

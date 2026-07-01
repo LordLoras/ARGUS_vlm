@@ -18,6 +18,7 @@ from ad_classifier.entity_graph.crawler import (
     FetchedPage,
     PageLink,
     _ad_suggestion_apply_safety,
+    _ad_suggestion_store_confidence,
     _clean_search_url,
     _dedupe_targets,
     _failure_reason_is_blocked,
@@ -26,6 +27,7 @@ from ad_classifier.entity_graph.crawler import (
     _manufacturer_reference_followup_targets,
     _owner_supported_by_evidence,
     _product_followup_targets,
+    _should_store_ad_suggestion_for_review,
 )
 from ad_classifier.entity_graph.crawler_config import EntityCrawlerConfig
 from ad_classifier.entity_graph.discovery_vlm import DiscoveryProductFact, DiscoveryVLMResult
@@ -1008,6 +1010,36 @@ def test_product_variant_suggestions_are_review_only() -> None:
     )
 
     assert safety == "review_only"
+
+
+def test_low_confidence_ad_change_suggestions_are_skipped() -> None:
+    config = EntityCrawlerConfig()
+    review_confidence = _ad_suggestion_store_confidence(
+        confidence=0.85,
+        apply_safety="review_only",
+    )
+
+    assert review_confidence == 0.45
+    assert not _should_store_ad_suggestion_for_review(
+        confidence=review_confidence,
+        apply_safety="review_only",
+        config=config,
+    )
+    assert not _should_store_ad_suggestion_for_review(
+        confidence=0.0,
+        apply_safety="safe_projection_update",
+        config=config,
+    )
+    assert not _should_store_ad_suggestion_for_review(
+        confidence=0.95,
+        apply_safety="do_not_apply",
+        config=config,
+    )
+    assert _should_store_ad_suggestion_for_review(
+        confidence=0.75,
+        apply_safety="safe_projection_update",
+        config=config,
+    )
 
 
 def test_product_blurb_prefers_product_page_source(tmp_path: Path) -> None:
