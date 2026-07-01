@@ -93,12 +93,21 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
         default_tier="B",
         platform="google",
         requires_platform_id=True,
+        config={
+            "page_size": 40,
+            "max_pages": 10,
+            "preview_enrichment": True,
+            "preview_enrichment_limit": 40,
+        },
         provides=[
             "ATC creative IDs",
             "advertiser name",
             "ad format",
             "first/last-shown dates",
             "preview URLs",
+            "image URLs",
+            "YouTube video IDs",
+            "video thumbnails",
         ],
     ),
     "mock": IntelAdapterDescriptor(

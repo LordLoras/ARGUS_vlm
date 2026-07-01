@@ -19,9 +19,12 @@ import structlog
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.google_atc_rpc import (
+    PreviewFetch,
     US_REGION_CODE,
     RpcFetch,
+    default_preview_fetch,
     default_rpc_fetch,
+    parse_preview_artifacts,
     search_creatives,
 )
 from ad_classifier.intelligence_crawler.models import (
@@ -52,14 +55,18 @@ class GoogleAtcAdapter:
         http=None,
         intel_config: IntelConfig | None = None,
         rpc_fetch: RpcFetch | None = None,
+        preview_fetch: PreviewFetch | None = None,
     ) -> None:
         self._config = intel_config or IntelConfig()
         if rpc_fetch is not None:
             self._fetch: RpcFetch | None = rpc_fetch
+            self._preview_fetch = preview_fetch
         elif http is None:
             self._fetch = default_rpc_fetch  # production default
+            self._preview_fetch = preview_fetch or default_preview_fetch
         else:
             self._fetch = None  # injected feed client → no implicit network
+            self._preview_fetch = preview_fetch
 
     def poll(self, source: IntelSource, state: SourceState, *, now: datetime) -> SourcePollResult:
         advertiser_id = (source.platform_id or "").strip()
@@ -73,6 +80,7 @@ class GoogleAtcAdapter:
 
         page_size = _int_config(source.config.get("page_size"), default=40, minimum=1, maximum=100)
         max_pages = _int_config(source.config.get("max_pages"), default=10, minimum=1, maximum=50)
+        preview_limit = _preview_limit(source)
         try:
             creatives = search_creatives(
                 advertiser_id,
@@ -84,11 +92,20 @@ class GoogleAtcAdapter:
         except Exception as exc:  # transport/parse failures are per-source, not fatal
             return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
 
+        preview_errors: list[str] = []
+        if self._preview_fetch is not None and preview_limit > 0:
+            creatives, preview_errors = _enrich_preview_artifacts(
+                creatives,
+                preview_fetch=self._preview_fetch,
+                limit=preview_limit,
+            )
+
         items = [_creative_to_item(source, advertiser_id, c) for c in creatives]
         return SourcePollResult(
             source_id=source.id,
             items=items,
             new_watermark=_latest_published(items) or state.watermark,
+            errors=preview_errors[:5],
         )
 
 
@@ -97,6 +114,12 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     adv = creative.get("advertiser_id") or advertiser_id
     url = _CREATIVE_URL.format(adv=adv, cid=cid)
     advertiser_name = creative.get("advertiser_name") or source.brand_name
+    preview_artifacts = creative.get("preview_artifacts")
+    preview_artifacts = preview_artifacts if isinstance(preview_artifacts, dict) else {}
+    image_sources = _list_artifact(preview_artifacts, "image_sources")
+    video_sources = _list_artifact(preview_artifacts, "video_sources")
+    video_posters = _list_artifact(preview_artifacts, "video_posters")
+    thumbnail_url = _first_present(video_posters, image_sources)
     return RawSourceItem(
         external_id=cid,
         url=url,
@@ -105,7 +128,7 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
         title=f"{advertiser_name} ATC creative {cid}",
         description=None,
         published_at=_epoch_to_dt(creative.get("first_shown")),
-        thumbnail_url=None,
+        thumbnail_url=thumbnail_url,
         raw={
             "source": GOOGLE_ATC_SOURCE_TYPE,
             "advertiser_id": adv,
@@ -117,8 +140,39 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
             "last_shown": creative.get("last_shown"),
             "preview_url": creative.get("preview_url"),
             "region": "US",
+            "preview_enriched": bool(preview_artifacts),
+            "youtube_video_ids": _list_artifact(preview_artifacts, "youtube_video_ids"),
+            "image_sources": image_sources,
+            "video_sources": video_sources,
+            "video_posters": video_posters,
+            "links": _links_artifact(preview_artifacts),
         },
     )
+
+
+def _enrich_preview_artifacts(
+    creatives: list[dict], *, preview_fetch: PreviewFetch, limit: int
+) -> tuple[list[dict], list[str]]:
+    enriched: list[dict] = []
+    errors: list[str] = []
+    fetched = 0
+    for creative in creatives:
+        next_creative = dict(creative)
+        preview_url = str(next_creative.get("preview_url") or "").strip()
+        if preview_url and fetched < limit:
+            fetched += 1
+            try:
+                script = preview_fetch(preview_url)
+                next_creative["preview_artifacts"] = parse_preview_artifacts(
+                    script, preview_url=preview_url
+                )
+            except Exception as exc:
+                errors.append(
+                    f"ATC preview enrichment failed for {creative.get('creative_id')}: "
+                    f"{str(exc)[:160]}"
+                )
+        enriched.append(next_creative)
+    return enriched, errors
 
 
 def _epoch_to_dt(value: int | None) -> datetime | None:
@@ -135,9 +189,59 @@ def _latest_published(items: list[RawSourceItem]) -> str | None:
     return max(dates).isoformat() if dates else None
 
 
+def _preview_limit(source: IntelSource) -> int:
+    if not _bool_config(source.config.get("preview_enrichment"), default=True):
+        return 0
+    return _int_config(
+        source.config.get("preview_enrichment_limit"), default=40, minimum=0, maximum=200
+    )
+
+
+def _bool_config(value, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    parsed = str(value).strip().lower()
+    if parsed in {"1", "true", "yes", "on"}:
+        return True
+    if parsed in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _int_config(value, *, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _list_artifact(artifacts: dict, key: str) -> list[str]:
+    values = artifacts.get(key)
+    if not isinstance(values, list):
+        return []
+    return [str(value).strip() for value in values if str(value or "").strip()]
+
+
+def _links_artifact(artifacts: dict) -> list[dict[str, str]]:
+    values = artifacts.get("links")
+    if not isinstance(values, list):
+        return []
+    links: list[dict[str, str]] = []
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        href = str(value.get("href") or "").strip()
+        text = str(value.get("text") or "Link").strip()
+        if href:
+            links.append({"text": text, "href": href})
+    return links
+
+
+def _first_present(*groups: list[str]) -> str | None:
+    for group in groups:
+        if group:
+            return group[0]
+    return None

@@ -7,6 +7,7 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     US_REGION_CODE,
     advertiser_creatives_freq,
     lookup_advertiser,
+    parse_preview_artifacts,
     parse_creatives,
     resolve_advertiser,
     search_advertisers,
@@ -46,6 +47,16 @@ SEARCH_PAYLOAD = {
     ],
     "5": 2,
 }  # no field "2" -> single page (no continuation token)
+
+PREVIEW_JS = r"""
+fletchCallback({
+  "html": "<a href=\"https:\/\/www.jeep.com\/wagoneer.html\">Jeep Wagoneer<\/a>
+  <img src=\"https:\/\/cdn.example.com\/creative.webp\">
+  <iframe src=\"https:\/\/www.youtube.com\/embed\/x5vcvScUoIM\"><\/iframe>
+  <img src=\"https:\/\/i.ytimg.com\/vi\/x5vcvScUoIM\/hqdefault.jpg\">",
+  "media": "https:\/\/rr1---sn.example.googlevideo.com\/videoplayback?id=o-A123&mime=video\/mp4"
+})
+"""
 
 
 def _source(**overrides):
@@ -107,8 +118,74 @@ def test_creatives_map_to_items():
     assert first.raw["region"] == "US"
     assert first.raw["advertiser_name"] == "Salesforce, Inc."
     assert "content.js" in first.raw["preview_url"]
+    assert first.raw["preview_enriched"] is False
+    assert first.raw["video_sources"] == []
     # watermark = latest first-shown across creatives
     assert result.new_watermark == datetime.fromtimestamp(1774647000, tz=UTC).isoformat()
+
+
+def test_parse_preview_artifacts_extracts_video_and_image_assets():
+    artifacts = parse_preview_artifacts(
+        PREVIEW_JS,
+        preview_url="https://displayads-formats.googleusercontent.com/ads/preview/content.js?x=1",
+    )
+
+    assert artifacts["youtube_video_ids"] == ["x5vcvScUoIM"]
+    assert "https://www.youtube.com/watch?v=x5vcvScUoIM" in artifacts["video_sources"]
+    assert any("googlevideo.com/videoplayback" in url for url in artifacts["video_sources"])
+    assert "https://i.ytimg.com/vi/x5vcvScUoIM/hqdefault.jpg" in artifacts["video_posters"]
+    assert "https://cdn.example.com/creative.webp" in artifacts["image_sources"]
+    assert {"text": "Destination", "href": "https://www.jeep.com/wagoneer.html"} in artifacts[
+        "links"
+    ]
+
+
+def test_adapter_enriches_preview_artifacts_when_fetcher_is_available():
+    preview_calls = []
+
+    def preview_fetch(url):
+        preview_calls.append(url)
+        return PREVIEW_JS
+
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: SEARCH_PAYLOAD,
+        preview_fetch=preview_fetch,
+        intel_config=IntelConfig(),
+    )
+    result = adapter.poll(
+        _source(config={"preview_enrichment_limit": 1}),
+        SourceState(source_id="salesforce_atc"),
+        now=NOW,
+    )
+
+    assert result.errors == []
+    assert preview_calls == ["https://displayads-formats.googleusercontent.com/ads/preview/content.js?x=1"]
+    first = result.items[0]
+    assert first.thumbnail_url == "https://i.ytimg.com/vi/x5vcvScUoIM/hqdefault.jpg"
+    assert first.raw["preview_enriched"] is True
+    assert first.raw["youtube_video_ids"] == ["x5vcvScUoIM"]
+    assert "https://www.youtube.com/watch?v=x5vcvScUoIM" in first.raw["video_sources"]
+    assert first.raw["image_sources"] == ["https://cdn.example.com/creative.webp"]
+    assert result.items[1].raw["preview_enriched"] is False
+
+
+def test_adapter_preview_enrichment_failure_keeps_items():
+    def preview_fetch(url):
+        raise RuntimeError("preview 403")
+
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: SEARCH_PAYLOAD,
+        preview_fetch=preview_fetch,
+        intel_config=IntelConfig(),
+    )
+    result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
+
+    assert [item.external_id for item in result.items] == [
+        "CR17113391207746109441",
+        "CR99988877766655544433",
+    ]
+    assert result.errors and "preview 403" in result.errors[0]
+    assert result.items[0].raw["preview_enriched"] is False
 
 
 def test_pagination_follows_cursor_and_dedups():

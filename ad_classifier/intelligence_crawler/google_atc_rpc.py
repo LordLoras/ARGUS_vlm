@@ -17,7 +17,9 @@ The RPC transport is injected (``RpcFetch``) so the client is fully testable off
 
 from __future__ import annotations
 
+import html
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -41,6 +43,15 @@ _FORMAT_LABELS = {1: "text", 2: "image", 3: "video"}
 
 # (service_method, f_req_dict) -> parsed JSON dict. Injected so tests need no network.
 RpcFetch = Callable[[str, dict], dict]
+PreviewFetch = Callable[[str], str]
+
+_URL_RE = re.compile(r"https?:(?:(?:\\?/\\?/)|(?://))[^\"'<>\s]+", re.IGNORECASE)
+_YOUTUBE_ID_RE = re.compile(
+    r"(?:youtube\.com/(?:embed|shorts)/|youtu\.be/|[?&]v=|ytimg\.com/(?:vi|vi_webp)/)"
+    r"([A-Za-z0-9_-]{6,})",
+    re.IGNORECASE,
+)
+_IMAGE_EXT_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)", re.IGNORECASE)
 
 
 def advertiser_creatives_freq(
@@ -129,6 +140,58 @@ def search_creatives(
         if not token or not page or not fresh:
             break
     return creatives
+
+
+def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> dict:
+    """Extract useful creative assets from an ATC preview ``content.js`` response.
+
+    Google renders many ATC previews through a JavaScript bundle instead of static HTML.
+    We avoid evaluating the script and only pull stable URL-shaped artifacts: YouTube ids,
+    thumbnails, direct video-ish URLs, direct image-ish URLs, and a link back to the ATC
+    preview script. The returned keys intentionally match the generic artifact metadata
+    already understood by the repository/Watcher.
+    """
+    urls = _extract_urls(script)
+    youtube_ids = _youtube_ids_from(urls)
+    video_sources = [
+        f"https://www.youtube.com/watch?v={video_id}" for video_id in youtube_ids
+    ]
+    video_posters = [
+        f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" for video_id in youtube_ids
+    ]
+    image_sources: list[str] = []
+    links: list[dict[str, str]] = []
+
+    for url in urls:
+        lower = url.lower()
+        if _is_video_url(lower):
+            video_sources.append(url)
+            continue
+        if _is_video_poster_url(lower):
+            video_posters.append(url)
+            continue
+        if _is_image_url(lower):
+            image_sources.append(url)
+            continue
+        destination = _destination_from_url(url)
+        if destination:
+            links.append({"text": "Destination", "href": destination})
+
+    if preview_url:
+        links.insert(0, {"text": "ATC preview", "href": preview_url})
+
+    out: dict[str, object] = {}
+    if youtube_ids:
+        out["youtube_video_ids"] = youtube_ids
+    if video_sources:
+        out["video_sources"] = _dedupe(video_sources)
+    if video_posters:
+        out["video_posters"] = _dedupe(video_posters)
+    if image_sources:
+        out["image_sources"] = _dedupe(image_sources)
+    if links:
+        out["links"] = _dedupe_links(links)
+    return out
 
 
 def search_advertisers(
@@ -223,3 +286,106 @@ def default_rpc_fetch(service_method: str, f_req: dict) -> dict:  # pragma: no c
     )
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8", errors="replace") or "{}")
+
+
+def default_preview_fetch(preview_url: str) -> str:  # pragma: no cover - network
+    """Fetch an ATC preview script using browser-like headers."""
+    request = urllib.request.Request(
+        preview_url,
+        headers={
+            "User-Agent": _UA,
+            "Referer": "https://adstransparency.google.com/",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def _extract_urls(value: str) -> list[str]:
+    return _dedupe(_normalize_js_url(match.group(0)) for match in _URL_RE.finditer(value or ""))
+
+
+def _normalize_js_url(value: str) -> str:
+    clean = value.replace("\\/", "/")
+    clean = re.sub(r"\\u([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), clean)
+    clean = re.sub(r"\\x([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), clean)
+    return html.unescape(clean).rstrip("\\.,);]")
+
+
+def _youtube_ids_from(urls: list[str]) -> list[str]:
+    ids: list[str] = []
+    for url in urls:
+        for match in _YOUTUBE_ID_RE.finditer(url):
+            ids.append(match.group(1))
+    return _dedupe(ids)
+
+
+def _is_video_url(lower_url: str) -> bool:
+    return (
+        "googlevideo.com/" in lower_url
+        or "videoplayback" in lower_url
+        or ".mp4" in lower_url
+        or ".webm" in lower_url
+        or ".m3u8" in lower_url
+    )
+
+
+def _is_video_poster_url(lower_url: str) -> bool:
+    return "ytimg.com/" in lower_url and _is_image_url(lower_url)
+
+
+def _is_image_url(lower_url: str) -> bool:
+    return bool(_IMAGE_EXT_RE.search(lower_url))
+
+
+def _destination_from_url(url: str) -> str | None:
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return None
+    host = parsed.netloc.lower()
+    if not host:
+        return None
+    if any(
+        blocked in host
+        for blocked in (
+            "google.com",
+            "googleusercontent.com",
+            "gstatic.com",
+            "ytimg.com",
+            "youtube.com",
+            "youtu.be",
+        )
+    ):
+        return None
+    if _is_image_url(url.lower()) or _is_video_url(url.lower()):
+        return None
+    return url
+
+
+def _dedupe(values) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _dedupe_links(values: list[dict[str, str]]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for value in values:
+        text = str(value.get("text") or "Link").strip()
+        href = str(value.get("href") or "").strip()
+        if not href:
+            continue
+        key = (text, href)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"text": text, "href": href})
+    return out[:12]
