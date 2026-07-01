@@ -194,10 +194,14 @@ def _latest_published(items: list[RawSourceItem]) -> str | None:
 
 
 def _preview_limit(source: IntelSource) -> int:
+    # Video is the primary target: enrich every video/hosted creative fetched in a poll (a
+    # default crawl caps at max_pages*page_size = 400 creatives). Image creatives carry no
+    # preview_url, so they never consume this budget. Raise per-source for deeper (max_pages>10)
+    # crawls. Set preview_enrichment=false to disable.
     if not _bool_config(source.config.get("preview_enrichment"), default=True):
         return 0
     return _int_config(
-        source.config.get("preview_enrichment_limit"), default=40, minimum=0, maximum=200
+        source.config.get("preview_enrichment_limit"), default=400, minimum=0, maximum=1000
     )
 
 
