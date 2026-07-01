@@ -159,24 +159,21 @@ def test_parse_preview_artifacts_extracts_video_and_image_assets():
     assert any("googlevideo.com/videoplayback" in url for url in artifacts["video_sources"])
     assert "https://i.ytimg.com/vi/x5vcvScUoIM/hqdefault.jpg" in artifacts["video_posters"]
     assert "https://cdn.example.com/creative.webp" in artifacts["image_sources"]
-    assert {"text": "Destination", "href": "https://www.jeep.com/wagoneer.html"} in artifacts[
-        "links"
-    ]
+    # We no longer scrape arbitrary URLs as "destinations" — a minified bundle is too noisy.
+    assert "links" not in artifacts
 
 
-def test_preview_artifacts_reject_framework_and_asset_urls():
-    # The bug: framework/CDN scripts (e.g. cdn.ampproject.org/amp4ads-host-v0.js) were stored
-    # as a "Destination". Only a real landing page should survive.
+def test_preview_artifacts_do_not_scrape_destination_links():
+    # A minified preview bundle contains library/namespace URLs (amp runtime, safevalues issues,
+    # w3.org/svg, …) that are NOT the ad's landing page. None of them may surface as artifacts.
     js = (
         'a("https:\\/\\/cdn.ampproject.org\\/amp4ads-host-v0.js");'
-        'b("https:\\/\\/www.google-analytics.com\\/collect?v=1");'
-        'c("https:\\/\\/www.jeep.com\\/wagoneer.html");'
+        'b("https:\\/\\/github.com\\/google\\/safevalues\\/issues");'
+        'c("http:\\/\\/www.w3.org\\/2000\\/svg");'
+        'd("https:\\/\\/www.jeep.com\\/wagoneer.html");'
     )
-    artifacts = parse_preview_artifacts(js)
-    hrefs = [link["href"] for link in artifacts.get("links", [])]
-    assert "https://www.jeep.com/wagoneer.html" in hrefs
-    assert all("ampproject.org" not in h and "amp4ads" not in h for h in hrefs)
-    assert all("google-analytics" not in h for h in hrefs)
+    # None are a YouTube id / video / image extension, so nothing is captured at all.
+    assert parse_preview_artifacts(js) == {}
 
 
 def test_adapter_enriches_preview_artifacts_when_fetcher_is_available():

@@ -55,33 +55,6 @@ _IMAGE_EXT_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)", re.IGNORE
 # Inline creative HTML (field 3.3.2): an ``<img src=...>`` on Google's ad-image CDN.
 _IMG_SRC_RE = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
-# Ad-tech / framework / CDN / analytics hosts that are never a creative's landing page.
-_ADTECH_HOST_MARKERS = (
-    "ampproject.org",
-    "doubleclick.net",
-    "googlesyndication.com",
-    "google-analytics.com",
-    "googletagmanager.com",
-    "googletagservices.com",
-    "googleadservices.com",
-    "googleapis.com",
-    "gstatic.com",
-    "googleusercontent.com",
-    "google.com",
-    "youtube.com",
-    "youtu.be",
-    "ytimg.com",
-    "2mdn.net",
-    "adnxs.com",
-    "scorecardresearch.com",
-    "app-measurement.com",
-    "gvt1.com",
-    "gvt2.com",
-)
-# Static assets (runtime scripts, styles, fonts…) — never a destination.
-_ASSET_EXT_RE = re.compile(
-    r"\.(?:js|mjs|css|json|map|wasm|woff2?|ttf|otf|eot|svg|ico|xml)(?:[?#]|$)", re.IGNORECASE
-)
 
 
 def advertiser_creatives_freq(
@@ -229,32 +202,22 @@ def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> d
     """
     urls = _extract_urls(script)
     youtube_ids = _youtube_ids_from(urls)
-    video_sources = [
-        f"https://www.youtube.com/watch?v={video_id}" for video_id in youtube_ids
-    ]
-    video_posters = [
-        f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" for video_id in youtube_ids
-    ]
+    video_sources = [f"https://www.youtube.com/watch?v={video_id}" for video_id in youtube_ids]
+    video_posters = [f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" for video_id in youtube_ids]
     image_sources: list[str] = []
-    links: list[dict[str, str]] = []
 
     for url in urls:
         lower = url.lower()
         if _is_video_url(lower):
             video_sources.append(url)
-            continue
-        if _is_video_poster_url(lower):
+        elif _is_video_poster_url(lower):
             video_posters.append(url)
-            continue
-        if _is_image_url(lower):
+        elif _is_image_url(lower):
             image_sources.append(url)
-            continue
-        destination = _destination_from_url(url)
-        if destination:
-            links.append({"text": "Destination", "href": destination})
-
-    if preview_url:
-        links.insert(0, {"text": "ATC preview", "href": preview_url})
+        # NOTE: we deliberately do NOT scrape other URLs as "destinations". A minified preview
+        # bundle is full of library/namespace URLs (safevalues, w3.org/svg, amp runtime, …) that
+        # are not the ad's landing page — scraping them produced junk. The resource already links
+        # to the ATC creative page; a real click-through would need anchor-level parsing (TODO).
 
     out: dict[str, object] = {}
     if youtube_ids:
@@ -265,8 +228,6 @@ def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> d
         out["video_posters"] = _dedupe(video_posters)
     if image_sources:
         out["image_sources"] = _dedupe(image_sources)
-    if links:
-        out["links"] = _dedupe_links(links)
     return out
 
 
@@ -414,30 +375,6 @@ def _is_image_url(lower_url: str) -> bool:
     return bool(_IMAGE_EXT_RE.search(lower_url))
 
 
-def _destination_from_url(url: str) -> str | None:
-    """Return ``url`` only if it plausibly is the creative's landing page.
-
-    Rejects ad-tech/framework/CDN/analytics hosts and static assets (``.js``/``.css``/fonts/…)
-    so a creative's runtime scripts — e.g. ``cdn.ampproject.org/amp4ads-host-v0.js`` — are never
-    stored as a "Destination".
-    """
-    try:
-        parsed = urllib.parse.urlparse(url)
-    except ValueError:
-        return None
-    if parsed.scheme not in ("http", "https"):
-        return None
-    host = parsed.netloc.lower()
-    if not host:
-        return None
-    if any(marker in host for marker in _ADTECH_HOST_MARKERS):
-        return None
-    lower = url.lower()
-    if _ASSET_EXT_RE.search(lower) or _is_image_url(lower) or _is_video_url(lower):
-        return None
-    return url
-
-
 def _dedupe(values) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
@@ -450,17 +387,3 @@ def _dedupe(values) -> list[str]:
     return out
 
 
-def _dedupe_links(values: list[dict[str, str]]) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for value in values:
-        text = str(value.get("text") or "Link").strip()
-        href = str(value.get("href") or "").strip()
-        if not href:
-            continue
-        key = (text, href)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"text": text, "href": href})
-    return out[:12]
