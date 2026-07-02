@@ -30,6 +30,41 @@ def test_resource_insert_is_idempotent(tmp_path):
         assert repo.existing_resource_ids(conn, "s1") == {"res1"}
 
 
+def test_resource_repoll_refreshes_metadata_without_counting_as_new(tmp_path):
+    repo = _repo_with_source(tmp_path)
+    first = IntelResource(
+        id="res1",
+        source_id="s1",
+        resource_type="atc_ad",
+        title="Old title",
+        first_seen_at=NOW,
+        fetched_at=NOW,
+        metadata={"format": "image", "image_sources": []},
+    )
+    refreshed = first.model_copy(
+        update={
+            "title": "New title",
+            "fetched_at": datetime(2026, 6, 10, 13, 0, tzinfo=UTC),
+            "metadata": {
+                "format": "image",
+                "image_sources": ["https://tpc.googlesyndication.com/archive/simgad/123"],
+            },
+        }
+    )
+
+    with repo.connect() as conn:
+        assert repo.insert_resource(conn, first) is True
+        assert repo.insert_resource(conn, refreshed) is False
+        conn.commit()
+        got = repo.list_resources(conn, source_id="s1")[0]
+
+    assert got.title == "New title"
+    assert got.first_seen_at == NOW
+    assert got.metadata["image_sources"] == [
+        "https://tpc.googlesyndication.com/archive/simgad/123"
+    ]
+
+
 def test_signal_round_trip(tmp_path):
     repo = _repo_with_source(tmp_path)
     sig = IntelSignal(

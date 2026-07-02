@@ -347,13 +347,33 @@ class IntelRepository:
         return {str(row["id"]) for row in rows}
 
     def insert_resource(self, conn: sqlite3.Connection, resource: IntelResource) -> bool:
+        existed = (
+            conn.execute("SELECT 1 FROM intel_resources WHERE id = ?", (resource.id,)).fetchone()
+            is not None
+        )
         cur = conn.execute(
             """
-            INSERT OR IGNORE INTO intel_resources
+            INSERT INTO intel_resources
               (id, source_id, run_id, resource_type, url, canonical_url, platform, platform_id,
                content_hash, title, description, published_at, first_seen_at, fetched_at,
                is_backfill, variant_count, has_variants, metadata_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              run_id=excluded.run_id,
+              resource_type=excluded.resource_type,
+              url=excluded.url,
+              canonical_url=excluded.canonical_url,
+              platform=excluded.platform,
+              platform_id=excluded.platform_id,
+              content_hash=excluded.content_hash,
+              title=excluded.title,
+              description=excluded.description,
+              published_at=excluded.published_at,
+              fetched_at=excluded.fetched_at,
+              is_backfill=excluded.is_backfill,
+              variant_count=excluded.variant_count,
+              has_variants=excluded.has_variants,
+              metadata_json=excluded.metadata_json
             """,
             (
                 resource.id,
@@ -376,7 +396,7 @@ class IntelRepository:
                 to_json(resource.metadata),
             ),
         )
-        return cur.rowcount > 0
+        return cur.rowcount > 0 and not existed
 
     def list_resources(
         self,
