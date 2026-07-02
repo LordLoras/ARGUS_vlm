@@ -315,6 +315,39 @@ def test_adapter_maps_inline_image_without_preview_fetch():
     assert item.raw["preview_enriched"] is False  # no preview fetch needed for image creatives
 
 
+def test_hosted_creative_with_no_static_assets_is_marked_dynamic():
+    # A format-2 hosted banner whose preview is pure JS (no youtube/image) is a server-rendered
+    # rich-media creative — flag it and relabel it so the UI doesn't call it a missing "image".
+    payload = {
+        "1": [
+            {
+                "1": ADV,
+                "2": "CR_DYN",
+                "3": {
+                    "1": {
+                        "4": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?d=1"
+                    }
+                },
+                "4": 2,  # numeric map calls this "image"
+                "6": {"1": "1774647000"},
+                "12": "Apple Inc",
+            }
+        ]
+    }
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: payload,
+        preview_fetch=lambda url: "fletchCallback({var x=Object.create(null);})",  # no assets
+        intel_config=IntelConfig(),
+    )
+    result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
+
+    item = result.items[0]
+    assert item.raw["dynamic_creative"] is True
+    assert item.raw["format"] == "rich_media"  # not the misleading "image"
+    assert item.raw["image_sources"] == []
+    assert item.raw["video_sources"] == []
+
+
 def test_parse_creatives_helper_skips_invalid():
     parsed = parse_creatives({"1": [{"2": "CRok", "1": "ARx"}, {"no_id": True}, "garbage"]})
     assert [c["creative_id"] for c in parsed] == ["CRok"]

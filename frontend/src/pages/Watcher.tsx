@@ -154,7 +154,7 @@ export function Watcher() {
   const [tier, setTier] = useState<IntelTier>("B");
   const [enabled, setEnabled] = useState(true);
   const [metaSortMode, setMetaSortMode] = useState("relevancy_monthly_grouped");
-  const [resourceSort, setResourceSort] = useState<ResourceSort>("newest");
+  const [resourceSort, setResourceSort] = useState<ResourceSort>("videos");
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IntelCrawlSummary | null>(null);
 
@@ -708,6 +708,7 @@ function ResourceCard({
   const title = resourceTitle(resource);
   const copy = resourceCopy(resource);
   const facts = resourceFacts(resource);
+  const dynamic = isDynamicCreative(resource);
   const hiddenArtifacts = Math.max(0, resource.artifacts.length - 8);
 
   return (
@@ -721,6 +722,9 @@ function ResourceCard({
           </span>
         </div>
         <div className="watcher-resource-pills">
+          {dynamic ? (
+            <span className="watcher-state-pill dynamic">server-rendered</span>
+          ) : null}
           {resourceHasVariants(resource) ? (
             <span className="watcher-state-pill versions">{variantsLabel(resource)}</span>
           ) : null}
@@ -739,7 +743,14 @@ function ResourceCard({
         </div>
       ) : null}
       {copy ? <p className="watcher-resource-copy">{copy}</p> : null}
-      <ArtifactSummary summary={resource.artifact_summary} />
+      <ArtifactSummary
+        summary={resource.artifact_summary}
+        emptyLabel={
+          dynamic
+            ? "No static elements captured — this ad is built and served by the ad server at run time (dynamic HTML5 creative)."
+            : "No artifacts extracted"
+        }
+      />
       <div className="watcher-artifact-strip">
         {resource.artifacts.slice(0, 8).map((artifact, index) => (
           <ArtifactLink artifact={artifact} key={`${artifact.artifact_type}-${index}`} />
@@ -752,7 +763,13 @@ function ResourceCard({
   );
 }
 
-function ArtifactSummary({ summary }: { summary: IntelArtifactSummary }) {
+function ArtifactSummary({
+  summary,
+  emptyLabel = "No artifacts extracted"
+}: {
+  summary: IntelArtifactSummary;
+  emptyLabel?: string;
+}) {
   const chips = [
     { icon: <FileImage size={12} />, label: "screens", value: summary.screenshot_count },
     { icon: <Image size={12} />, label: "images", value: summary.image_source_count },
@@ -761,7 +778,7 @@ function ArtifactSummary({ summary }: { summary: IntelArtifactSummary }) {
     { icon: <Boxes size={12} />, label: "assets", value: summary.media_asset_count }
   ].filter((item) => item.value > 0);
   if (chips.length === 0) {
-    return <span className="watcher-muted-line">No artifacts extracted</span>;
+    return <span className="watcher-muted-line">{emptyLabel}</span>;
   }
   return (
     <div className="watcher-artifact-summary">
@@ -878,7 +895,7 @@ function resourceTitle(resource: IntelResource) {
   }
   if (resource.source_type === "google_atc") {
     const advertiser = stringMetadata(resource, "advertiser_name") || resource.brand_name;
-    const format = stringMetadata(resource, "format");
+    const format = isDynamicCreative(resource) ? "rich media" : stringMetadata(resource, "format");
     return format ? `${advertiser} · ${format} ad` : `${advertiser} ATC ad`;
   }
   return normalizeDisplayText(resource.title || resource.platform_id || resource.id);
@@ -897,7 +914,7 @@ function resourceFacts(resource: IntelResource) {
 
   if (resource.source_type === "google_atc") {
     const advertiser = stringMetadata(resource, "advertiser_name");
-    const format = stringMetadata(resource, "format");
+    const format = isDynamicCreative(resource) ? "rich media" : stringMetadata(resource, "format");
     const lastShown = epochMetadataDate(resource, "last_shown");
     if (advertiser) facts.push({ label: "Advertiser", value: advertiser });
     if (format) facts.push({ label: "Format", value: format });
@@ -953,6 +970,16 @@ function resourceHasVariants(resource: IntelResource) {
 function variantsLabel(resource: IntelResource) {
   const count = metaVariantCount(resource);
   return count > 1 ? `${count} versions` : "multi-version";
+}
+
+function isDynamicCreative(resource: IntelResource) {
+  // Server-rendered rich-media / HTML5 banner: nothing static to capture without a browser.
+  // Prefer the backend flag; fall back to deriving it (ATC creative with a preview but no
+  // captured artifacts) for rows crawled before the flag existed.
+  if (resource.metadata.dynamic_creative === true) return true;
+  if (resource.source_type !== "google_atc") return false;
+  const hasPreview = Boolean(stringMetadata(resource, "preview_url"));
+  return hasPreview && artifactTotal(resource.artifact_summary) === 0;
 }
 
 function videoTotal(resource: IntelResource) {

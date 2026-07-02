@@ -114,6 +114,9 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     adv = creative.get("advertiser_id") or advertiser_id
     url = _CREATIVE_URL.format(adv=adv, cid=cid)
     advertiser_name = creative.get("advertiser_name") or source.brand_name
+    # `preview_artifacts` is a dict only when the preview was actually fetched (possibly empty);
+    # absent when enrichment was skipped (budget/disabled) — the two must be distinguished.
+    preview_fetched = isinstance(creative.get("preview_artifacts"), dict)
     preview_artifacts = creative.get("preview_artifacts")
     preview_artifacts = preview_artifacts if isinstance(preview_artifacts, dict) else {}
     # Inline image comes straight from the RPC (field 3.3.2) — no fetch needed. Merge it with
@@ -123,6 +126,16 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     video_sources = _list_artifact(preview_artifacts, "video_sources")
     video_posters = _list_artifact(preview_artifacts, "video_posters")
     thumbnail_url = _first_present(video_posters, image_sources)
+    # Dynamic = we fetched the preview and it yielded no static image or video → a rich-media /
+    # HTML5 banner the ad server renders at run time. A video we simply didn't enrich is NOT
+    # dynamic, so require preview_fetched (not just the presence of a preview_url).
+    dynamic_creative = (
+        preview_fetched
+        and bool(creative.get("preview_url"))
+        and not image_sources
+        and not video_sources
+    )
+    display_format = "rich_media" if dynamic_creative else creative.get("format")
     return RawSourceItem(
         external_id=cid,
         url=url,
@@ -138,12 +151,13 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
             "advertiser_name": advertiser_name,
             "advertiser_url": _ADVERTISER_URL.format(adv=adv),
             "format_code": creative.get("format_code"),
-            "format": creative.get("format"),
+            "format": display_format,
             "first_shown": creative.get("first_shown"),
             "last_shown": creative.get("last_shown"),
             "preview_url": creative.get("preview_url"),
             "region": "US",
             "has_inline_image": bool(inline_images),
+            "dynamic_creative": dynamic_creative,
             "preview_enriched": bool(preview_artifacts),
             "youtube_video_ids": _list_artifact(preview_artifacts, "youtube_video_ids"),
             "image_sources": image_sources,

@@ -752,6 +752,12 @@
   background: rgba(129, 140, 248, 0.12);
 }
 
+.watcher-state-pill.dynamic {
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.38);
+  background: rgba(56, 189, 248, 0.1);
+}
+
 .watcher-resource-pills {
   display: inline-flex;
   align-items: center;
