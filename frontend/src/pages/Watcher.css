@@ -425,14 +425,17 @@
   border-radius: 8px;
   overflow: hidden;
   line-height: 0;
+  background: rgba(8, 10, 15, 0.6);
 }
 
+/* Show the creative whole: shrink to fit, never crop, never upscale. */
 .watcher-resource-media img {
   display: block;
-  width: 100%;
-  max-height: 280px;
-  object-fit: cover;
-  object-position: top;
+  margin: 0 auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 340px;
 }
 
 .watcher-resource-meta,

@@ -784,11 +784,23 @@ function ResourceCard({
           title={media.hint}
         >
           <img
-            src={media.imageUrl}
+            src={media.candidates[0]}
+            data-fallbacks={JSON.stringify(media.candidates.slice(1))}
             alt={title}
             loading="lazy"
+            onLoad={(event) => {
+              // A tiny image is the advertiser avatar, not the creative — skip past it.
+              const img = event.currentTarget;
+              if (img.naturalWidth < 120 && img.naturalHeight < 120) {
+                advanceMediaFallback(img);
+              }
+            }}
             onError={(event) => {
-              const wrapper = event.currentTarget.closest(".watcher-resource-media");
+              // Expired/broken source: advance to the next candidate (e.g. an expired
+              // fbcdn URL falls back to the durable card screenshot); hide when none left.
+              const img = event.currentTarget;
+              if (advanceMediaFallback(img)) return;
+              const wrapper = img.closest(".watcher-resource-media");
               if (wrapper instanceof HTMLElement) wrapper.style.display = "none";
             }}
           />
@@ -1075,26 +1087,38 @@ function sourceEntryLabel(sourceType: string) {
   return "Open source";
 }
 
-type ResourceMedia = { imageUrl: string; href: string; hint: string };
+type ResourceMedia = { candidates: string[]; href: string; hint: string };
 
 function resourceMedia(resource: IntelResource): ResourceMedia | null {
-  // The visual for the card: the Meta card screenshot (served through the API), else the
-  // first creative image, else the video poster. Clicking opens the richest target we
-  // have — the video itself when one was captured, otherwise the source listing page.
-  const firstUrlOf = (type: string) =>
-    resource.artifacts.find((artifact) => artifact.artifact_type === type && artifact.url)?.url ??
-    null;
+  // The visual for the card. Prefer the clean creative image; keep the card screenshot as
+  // a durable fallback (fbcdn image URLs are signed and expire, the screenshot is local),
+  // then the video poster. Clicking opens the richest target we have — the video itself
+  // when one was captured, otherwise the original listing entry.
+  const urlsOf = (type: string) =>
+    resource.artifacts
+      .filter((artifact) => artifact.artifact_type === type && artifact.url)
+      .map((artifact) => artifact.url as string);
   const hasScreenshot = resource.artifacts.some(
     (artifact) => artifact.artifact_type === "card_screenshot"
   );
   const screenshotUrl = hasScreenshot
     ? `${API_BASE_URL}/api/intelligence/resources/${resource.id}/screenshot`
     : null;
-  const imageUrl = screenshotUrl ?? firstUrlOf("image_url") ?? firstUrlOf("video_poster");
-  if (!imageUrl) return null;
-  const video = firstUrlOf("video_url");
-  const href = video ?? resource.url ?? imageUrl;
-  return { imageUrl, href, hint: video ? "Open video" : "Open source page" };
+  const candidates = [...urlsOf("image_url").slice(0, 3), screenshotUrl, ...urlsOf("video_poster").slice(0, 1)].filter(
+    (value): value is string => Boolean(value)
+  );
+  if (candidates.length === 0) return null;
+  const video = urlsOf("video_url")[0] ?? null;
+  const href = video ?? resource.url ?? candidates[0];
+  return { candidates, href, hint: video ? "Open video" : "Open source page" };
+}
+
+function advanceMediaFallback(img: HTMLImageElement): boolean {
+  const rest: string[] = JSON.parse(img.dataset.fallbacks || "[]");
+  if (rest.length === 0) return false;
+  img.dataset.fallbacks = JSON.stringify(rest.slice(1));
+  img.src = rest[0];
+  return true;
 }
 
 function videoTotal(resource: IntelResource) {
