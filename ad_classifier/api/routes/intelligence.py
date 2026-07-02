@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ad_classifier.entity_graph.utils import digest, normalize_name
@@ -167,6 +168,15 @@ def list_resources(
         )
     )
     return {"items": [resource.model_dump(mode="json") for resource in resources], "limit": limit}
+
+
+@router.get("/intelligence/resources/{resource_id}/screenshot")
+def resource_screenshot(resource_id: str, request: Request) -> FileResponse:
+    """Serve a resource's card screenshot (Meta cards) from the crawler cache."""
+    path = _call_manager(lambda: _manager(request).resource_screenshot_path(resource_id))
+    if path is None:
+        raise HTTPException(status_code=404, detail="resource has no screenshot")
+    return FileResponse(path)
 
 
 @router.post("/intelligence/crawl")

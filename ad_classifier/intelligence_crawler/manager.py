@@ -7,6 +7,7 @@ plus a crawl trigger. Keeps routers thin and the DB wiring in one place.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.digest import build_digest
@@ -210,6 +211,26 @@ class IntelManager:
         return IntelRunner(self.config, repo=self.repo).run(
             due=due, source_id=source_id, brand=brand
         )
+
+    def resource_screenshot_path(self, resource_id: str) -> Path | None:
+        """Locate a resource's card-screenshot file for serving over the API.
+
+        Returns ``None`` unless the stored path resolves to an existing file inside the
+        crawler's own cache directory — screenshots are the only local files a resource
+        may reference, and the cache root confines what the endpoint can expose.
+        """
+        with self.repo.connect(readonly=True) as conn:
+            metadata = self.repo.get_resource_metadata(conn, resource_id)
+        if metadata is None:
+            return None
+        raw = str(metadata.get("screenshot_path") or "").strip()
+        if not raw:
+            return None
+        path = Path(raw).expanduser().resolve()
+        cache_root = self.config.cache_dir.expanduser().resolve()
+        if not path.is_file() or not path.is_relative_to(cache_root):
+            return None
+        return path
 
     # ---- source registry (DB is the source of truth; the UI/CLI curate it) -------
 

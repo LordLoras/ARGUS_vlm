@@ -14,9 +14,10 @@ from ad_classifier.intelligence_crawler.models import IntelEvidence, IntelResour
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=UTC)
 
 
-def _client(tmp_path) -> TestClient:
+def _client(tmp_path, *, screenshot_path: str | None = None) -> TestClient:
     config = IntelConfig(
         db_path=tmp_path / "intel.db",
+        cache_dir=tmp_path / "cache",
         watchlist=WatchlistConfig(
             include_graph_brands=False, entity_graph_db_path=None, seed_brands=["Toyota"]
         ),
@@ -40,7 +41,7 @@ def _client(tmp_path) -> TestClient:
         fetched_at=NOW,
         is_backfill=True,
         metadata={
-            "screenshot_path": "C:/tmp/card_123.png",
+            "screenshot_path": screenshot_path or "C:/tmp/card_123.png",
             "image_sources": ["https://cdn.example/image.jpg"],
             "video_sources": ["https://cdn.example/video.mp4"],
             "links": [{"text": "Toyota", "href": "https://toyota.com"}],
@@ -136,6 +137,29 @@ def test_brand_and_resource_artifact_endpoints(tmp_path):
     assert [resource["id"] for resource in resources] == ["res_demo"]
     artifact_types = {artifact["artifact_type"] for artifact in resources[0]["artifacts"]}
     assert {"card_screenshot", "image_url", "video_url", "link"} <= artifact_types
+
+
+def test_resource_screenshot_endpoint(tmp_path):
+    shot = tmp_path / "cache" / "meta_ad_library_ui" / "s1" / "card_123.png"
+    shot.parent.mkdir(parents=True)
+    shot.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    client = _client(tmp_path, screenshot_path=str(shot))
+
+    ok = client.get("/api/intelligence/resources/res_demo/screenshot")
+    assert ok.status_code == 200
+    assert ok.content.startswith(b"\x89PNG")
+
+    assert client.get("/api/intelligence/resources/missing/screenshot").status_code == 404
+
+
+def test_resource_screenshot_rejects_paths_outside_cache(tmp_path):
+    # A stored path outside the crawler cache (or a traversal attempt) must never be served.
+    outside = tmp_path / "elsewhere" / "card.png"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    client = _client(tmp_path, screenshot_path=str(outside))
+
+    assert client.get("/api/intelligence/resources/res_demo/screenshot").status_code == 404
 
 
 def test_crawl_endpoint_runs(tmp_path):
