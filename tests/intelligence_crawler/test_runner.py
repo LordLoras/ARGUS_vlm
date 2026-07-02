@@ -90,6 +90,35 @@ def test_repoll_is_idempotent(tmp_path):
     assert second.signal_count == 0  # nothing new on re-poll
 
 
+def test_repoll_refreshes_stored_metadata(tmp_path):
+    db = tmp_path / "intel.db"
+    IntelRunner(_config(db, [OLD_ITEM]), now_fn=lambda: T0).run(due=True)  # baseline records old1
+
+    # Same external id re-observed with richer data (e.g. preview enrichment now succeeded).
+    enriched = {
+        **OLD_ITEM,
+        "title": "Camry Reborn official commercial (extended cut)",
+        "raw": {"image_sources": ["https://tpc.googlesyndication.com/archive/simgad/1"]},
+    }
+    summary = IntelRunner(_config(db, [enriched]), now_fn=lambda: T1).run(due=True)
+
+    item = summary.items[0]
+    assert item.new_resources == 0
+    assert item.refreshed == 1
+    assert summary.signal_count == 0  # a refresh never emits a signal
+
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        views = repo.list_resources(conn, source_id="s1")
+    assert len(views) == 1
+    got = views[0]
+    assert got.title == "Camry Reborn official commercial (extended cut)"
+    assert got.metadata["image_sources"] == ["https://tpc.googlesyndication.com/archive/simgad/1"]
+    # First-seen properties survive the refresh.
+    assert got.is_backfill is True
+    assert got.first_seen_at == T0
+
+
 def test_runner_seed_does_not_disable_curated_db_source(tmp_path):
     db = tmp_path / "intel.db"
     cfg = _config(db, [], enabled=False)

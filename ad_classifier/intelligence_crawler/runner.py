@@ -168,6 +168,13 @@ class IntelRunner:
                 if self._emit_signal(conn, source, decision, now):
                     new_signals += 1
 
+            # Already-seen items: upsert so a repoll refreshes metadata/artifacts (the row's
+            # first_seen_at/is_backfill are preserved by the repository). Never signals.
+            refreshed = 0
+            for refresh in detection.refreshes:
+                self.repo.insert_resource(conn, self._build_resource(refresh, source, run_id, now))
+                refreshed += 1
+
             if detection.baseline_mode:
                 self.repo.set_source_activated(conn, source.id, detection.activated_at)
             # A poll that returned errors (e.g. HTTP 4xx, bad config) but didn't raise is
@@ -197,6 +204,7 @@ class IntelRunner:
                 new_signals=new_signals,
                 backfilled=backfilled,
                 filtered=filtered,
+                refreshed=refreshed,
                 baseline=detection.baseline_mode,
                 reason=reason,
             )

@@ -12,7 +12,7 @@ if it was published after activation and within the recency lookback window.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -20,7 +20,7 @@ from ad_classifier.intelligence_crawler.ids import resource_id
 from ad_classifier.intelligence_crawler.models import IntelSource, RawSourceItem
 from ad_classifier.intelligence_crawler.timeutils import as_utc
 
-ItemKind = Literal["live", "backfill"]
+ItemKind = Literal["live", "backfill", "refresh"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,9 @@ class DetectionResult:
     activated_at: datetime  # the activation time to persist on the source
     decisions: list[ItemDecision]  # NEW items only (already-seen are skipped)
     skipped_seen: int
+    # Already-seen items re-observed this poll. Never signal-eligible; the runner upserts
+    # them so a repoll refreshes metadata/artifacts (first_seen_at/is_backfill preserved).
+    refreshes: list[ItemDecision] = field(default_factory=list)
 
 
 def classify(
@@ -54,11 +57,13 @@ def classify(
     assert activation is not None
 
     decisions: list[ItemDecision] = []
+    refreshes: list[ItemDecision] = []
     skipped = 0
     for item in items:
         rid = resource_id(source.id, item.external_id)
         if rid in seen_ids:
             skipped += 1
+            refreshes.append(ItemDecision(item=item, resource_id=rid, kind="refresh"))
             continue
         if baseline:
             kind: ItemKind = "backfill"
@@ -71,6 +76,7 @@ def classify(
         activated_at=activation,
         decisions=decisions,
         skipped_seen=skipped,
+        refreshes=refreshes,
     )
 
 

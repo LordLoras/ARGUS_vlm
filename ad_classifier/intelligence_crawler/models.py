@@ -248,6 +248,7 @@ class SourceRunItem(StrictModel):
     new_signals: int = 0
     backfilled: int = 0
     filtered: int = 0  # live items recorded but not emitted (failed the ad-likelihood gate)
+    refreshed: int = 0  # already-seen items whose stored metadata was refreshed this poll
     baseline: bool = False
     reason: str | None = None
 

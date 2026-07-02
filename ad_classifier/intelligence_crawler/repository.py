@@ -204,7 +204,7 @@ class IntelRepository:
             brand["latest_resource_seen_at"] = _max_datetime(
                 brand["latest_resource_seen_at"], seen_at
             )
-            summary = _artifact_summary_from_metadata(loads_dict(row["metadata_json"]))
+            summary = _artifact_summary_from_metadata(loads_dict(row["metadata_json"]) or {})
             brand["artifact_summary"] = _merge_artifact_summary(brand["artifact_summary"], summary)
 
         media_where = "WHERE LOWER(s.brand_name) LIKE LOWER(?)" if pattern else ""
@@ -370,7 +370,6 @@ class IntelRepository:
               description=excluded.description,
               published_at=excluded.published_at,
               fetched_at=excluded.fetched_at,
-              is_backfill=excluded.is_backfill,
               variant_count=excluded.variant_count,
               has_variants=excluded.has_variants,
               metadata_json=excluded.metadata_json
@@ -397,6 +396,14 @@ class IntelRepository:
             ),
         )
         return cur.rowcount > 0 and not existed
+
+    def get_resource_metadata(self, conn: sqlite3.Connection, resource_id: str) -> dict | None:
+        row = conn.execute(
+            "SELECT metadata_json FROM intel_resources WHERE id = ?", (resource_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return loads_dict(row["metadata_json"]) or {}
 
     def list_resources(
         self,

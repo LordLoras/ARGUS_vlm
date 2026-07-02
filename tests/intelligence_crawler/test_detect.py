@@ -67,6 +67,9 @@ def test_already_seen_items_are_skipped():
     )
     assert result.skipped_seen == 1
     assert [d.item.external_id for d in result.decisions] == ["recent"]
+    # Seen items come back as refreshes so the runner can update their stored metadata.
+    assert [d.item.external_id for d in result.refreshes] == ["old"]
+    assert result.refreshes[0].kind == "refresh"
 
 
 def test_recent_outside_lookback_is_backfill():
