@@ -7,8 +7,8 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     US_REGION_CODE,
     advertiser_creatives_freq,
     lookup_advertiser,
-    parse_preview_artifacts,
     parse_creatives,
+    parse_preview_artifacts,
     resolve_advertiser,
     search_advertisers,
 )
@@ -176,6 +176,30 @@ def test_preview_artifacts_do_not_scrape_destination_links():
     assert parse_preview_artifacts(js) == {}
 
 
+# A DV360/Studio rich-media bundle (live Ford shape): hex-escaped quotes, a BACKUP_IMAGE
+# simgad URL with no file extension, a tracking pixel, and a double-escaped VAST
+# <MediaFile> section whose URL previously came out corrupted (XML tail + "\=" residue).
+STUDIO_PREVIEW_JS = (
+    r"var p = {type: \x27IMAGE\x27,renderAs: \x27BACKUP_IMAGE\x27,width: \x27300\x27,"
+    r"url: \x27https://s0.2mdn.net/simgad/1013946659373396495\x27};"
+    r"i(\x22https://s0.2mdn.net/dot.gif]]\\x3e\\x3c/Impression\\x3e\x22);"
+    r"v(\x22https://gcdn.2mdn.net/videoplayback?id\\x3d816cae\\x26mime\\x3dvideo/mp4]]"
+    r"\\x3e\\x3c/MediaFile\\x3e\x22);"
+)
+
+
+def test_preview_artifacts_decode_escapes_capture_backup_image_and_clean_vast():
+    artifacts = parse_preview_artifacts(STUDIO_PREVIEW_JS)
+    # The extension-less BACKUP_IMAGE on the ad CDN is the rich-media creative's static form.
+    assert artifacts["image_sources"] == ["https://s0.2mdn.net/simgad/1013946659373396495"]
+    # The VAST video URL comes out clean: no XML tail, no escape residue.
+    assert artifacts["video_sources"] == [
+        "https://gcdn.2mdn.net/videoplayback?id=816cae&mime=video/mp4"
+    ]
+    # The impression pixel never surfaces as a creative artifact.
+    assert not any("dot.gif" in url for url in artifacts["image_sources"])
+
+
 def test_adapter_enriches_preview_artifacts_when_fetcher_is_available():
     preview_calls = []
 
@@ -195,7 +219,9 @@ def test_adapter_enriches_preview_artifacts_when_fetcher_is_available():
     )
 
     assert result.errors == []
-    assert preview_calls == ["https://displayads-formats.googleusercontent.com/ads/preview/content.js?x=1"]
+    assert preview_calls == [
+        "https://displayads-formats.googleusercontent.com/ads/preview/content.js?x=1"
+    ]
     first = result.items[0]
     assert first.thumbnail_url == "https://i.ytimg.com/vi/x5vcvScUoIM/hqdefault.jpg"
     assert first.raw["preview_enriched"] is True
@@ -261,6 +287,28 @@ def test_pagination_respects_max_pages():
     assert len(result.items) == 3  # exactly max_pages pages fetched
 
 
+def test_live_fetches_are_throttled_between_requests():
+    # A poll may burst ~10 RPC pages + hundreds of preview GETs; Google answers bursts with
+    # HTTP 429 (seen live). The adapter pauses between consecutive calls of each kind.
+    slept: list[float] = []
+    page1 = {
+        "1": [{"1": ADV, "2": "CR_A", "3": {"1": {"4": "https://p/content.js?1"}}}],
+        "2": "TOKEN",
+    }
+    page2 = {"1": [{"1": ADV, "2": "CR_B", "3": {"1": {"4": "https://p/content.js?2"}}}]}
+
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: page2 if "4" in q else page1,
+        preview_fetch=lambda url: "no assets here",
+        sleep=slept.append,
+        intel_config=IntelConfig(),
+    )
+    adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
+
+    # One pause between the two RPC pages, one between the two preview fetches.
+    assert slept == [0.75, 0.4]
+
+
 def test_missing_advertiser_id_reports_error():
     adapter = GoogleAtcAdapter(rpc_fetch=lambda m, q: {}, intel_config=IntelConfig())
     result = adapter.poll(
@@ -322,9 +370,7 @@ def test_adapter_falls_back_to_brand_name_for_mojibake_advertiser_name():
                 "1": ADV,
                 "2": "CR_MOJIBAKE",
                 "3": {
-                    "3": {
-                        "2": '<img src="https://tpc.googlesyndication.com/archive/simgad/12345">'
-                    }
+                    "3": {"2": '<img src="https://tpc.googlesyndication.com/archive/simgad/12345">'}
                 },
                 "4": 1,
                 "6": {"1": "1774647000"},

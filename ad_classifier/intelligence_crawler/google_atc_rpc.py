@@ -52,6 +52,12 @@ _YOUTUBE_ID_RE = re.compile(
     re.IGNORECASE,
 )
 _IMAGE_EXT_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)", re.IGNORECASE)
+# Extension-less creative images on Google's ad CDNs (e.g. a rich-media banner's
+# ``renderAs: BACKUP_IMAGE`` — the static representation of an HTML5 creative).
+_AD_IMAGE_URL_RE = re.compile(
+    r"^https?://(?:tpc\.googlesyndication\.com|s0\.2mdn\.net)/(?:archive/)?simgad/\d+",
+    re.IGNORECASE,
+)
 # Inline creative HTML (field 3.3.2): an ``<img src=...>`` on Google's ad-image CDN.
 _IMG_SRC_RE = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -200,7 +206,11 @@ def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> d
     preview script. The returned keys intentionally match the generic artifact metadata
     already understood by the repository/Watcher.
     """
-    urls = _extract_urls(script)
+    # Decode JS escape sequences over the whole bundle FIRST. The URL regex excludes
+    # quotes/angle brackets, but their escaped forms (``\x22``, ``<``, …) sail right
+    # through the character class — extracting before decoding produced "URLs" with XML
+    # fragments and stray backslashes baked in (seen live on VAST/2mdn video creatives).
+    urls = _extract_urls(_decode_js_escapes(script))
     youtube_ids = _youtube_ids_from(urls)
     video_sources = [f"https://www.youtube.com/watch?v={video_id}" for video_id in youtube_ids]
     video_posters = [f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" for video_id in youtube_ids]
@@ -208,11 +218,13 @@ def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> d
 
     for url in urls:
         lower = url.lower()
+        if _is_junk_asset_url(lower):
+            continue
         if _is_video_url(lower):
             video_sources.append(url)
         elif _is_video_poster_url(lower):
             video_posters.append(url)
-        elif _is_image_url(lower):
+        elif _is_image_url(lower) or _AD_IMAGE_URL_RE.match(url):
             image_sources.append(url)
         # NOTE: we deliberately do NOT scrape other URLs as "destinations". A minified preview
         # bundle is full of library/namespace URLs (safevalues, w3.org/svg, amp runtime, …) that
@@ -342,11 +354,17 @@ def _extract_urls(value: str) -> list[str]:
     return _dedupe(_normalize_js_url(match.group(0)) for match in _URL_RE.finditer(value or ""))
 
 
-def _normalize_js_url(value: str) -> str:
+def _decode_js_escapes(value: str) -> str:
     clean = value.replace("\\/", "/")
     clean = re.sub(r"\\u([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), clean)
-    clean = re.sub(r"\\x([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), clean)
-    return html.unescape(clean).rstrip("\\.,);]")
+    return re.sub(r"\\x([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), clean)
+
+
+def _normalize_js_url(value: str) -> str:
+    # Raw backslashes are never valid in a URL; leftovers are double-escaping residue
+    # (``\\x3d`` decodes to ``\=``), so dropping them restores the real URL.
+    clean = _decode_js_escapes(value).replace("\\", "")
+    return html.unescape(clean).rstrip(".,);]")
 
 
 def _youtube_ids_from(urls: list[str]) -> list[str]:
@@ -375,6 +393,11 @@ def _is_image_url(lower_url: str) -> bool:
     return bool(_IMAGE_EXT_RE.search(lower_url))
 
 
+def _is_junk_asset_url(lower_url: str) -> bool:
+    """Tracking pixels / ad-infra assets that must never surface as creative artifacts."""
+    return lower_url.endswith("/dot.gif") or "/pagead/" in lower_url or "/activeview" in lower_url
+
+
 def _dedupe(values) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
@@ -385,5 +408,3 @@ def _dedupe(values) -> list[str]:
         seen.add(text)
         out.append(text)
     return out
-
-

@@ -13,6 +13,8 @@ makes a live call.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import structlog
@@ -41,6 +43,12 @@ logger = structlog.get_logger(__name__)
 GOOGLE_ATC_SOURCE_TYPE = "google_atc"
 _ADVERTISER_URL = "https://adstransparency.google.com/advertiser/{adv}?region=US"
 _CREATIVE_URL = "https://adstransparency.google.com/advertiser/{adv}/creative/{cid}?region=US"
+# Politeness pauses between consecutive live requests. A poll can make ~10 RPC pages and
+# hundreds of preview fetches back-to-back; an unthrottled burst earns an HTTP 429.
+_RPC_PAGE_DELAY_S = 0.75
+_PREVIEW_FETCH_DELAY_S = 0.4
+
+Sleep = Callable[[float], None]
 
 
 @register_source(GOOGLE_ATC_SOURCE_TYPE)
@@ -56,17 +64,21 @@ class GoogleAtcAdapter:
         intel_config: IntelConfig | None = None,
         rpc_fetch: RpcFetch | None = None,
         preview_fetch: PreviewFetch | None = None,
+        sleep: Sleep | None = None,
     ) -> None:
         self._config = intel_config or IntelConfig()
         if rpc_fetch is not None:
             self._fetch: RpcFetch | None = rpc_fetch
             self._preview_fetch = preview_fetch
+            self._sleep: Sleep = sleep or (lambda _s: None)  # injected transport: no waiting
         elif http is None:
             self._fetch = default_rpc_fetch  # production default
             self._preview_fetch = preview_fetch or default_preview_fetch
+            self._sleep = sleep or time.sleep
         else:
             self._fetch = None  # injected feed client → no implicit network
             self._preview_fetch = preview_fetch
+            self._sleep = sleep or (lambda _s: None)
 
     def poll(self, source: IntelSource, state: SourceState, *, now: datetime) -> SourcePollResult:
         advertiser_id = (source.platform_id or "").strip()
@@ -84,7 +96,7 @@ class GoogleAtcAdapter:
         try:
             creatives = search_creatives(
                 advertiser_id,
-                fetch=self._fetch,
+                fetch=_throttled(self._fetch, _RPC_PAGE_DELAY_S, self._sleep),
                 region=US_REGION_CODE,
                 page_size=page_size,
                 max_pages=max_pages,
@@ -96,7 +108,7 @@ class GoogleAtcAdapter:
         if self._preview_fetch is not None and preview_limit > 0:
             creatives, preview_errors = _enrich_preview_artifacts(
                 creatives,
-                preview_fetch=self._preview_fetch,
+                preview_fetch=_throttled(self._preview_fetch, _PREVIEW_FETCH_DELAY_S, self._sleep),
                 limit=preview_limit,
             )
 
@@ -107,6 +119,20 @@ class GoogleAtcAdapter:
             new_watermark=_latest_published(items) or state.watermark,
             errors=preview_errors[:5],
         )
+
+
+def _throttled(fn, delay_s: float, sleep: Sleep):
+    """Pause ``delay_s`` before every call after the first (per-poll burst limiter)."""
+    first = True
+
+    def wrapper(*args, **kwargs):
+        nonlocal first
+        if not first:
+            sleep(delay_s)
+        first = False
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -> RawSourceItem:
@@ -123,7 +149,9 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     # Inline image comes straight from the RPC (field 3.3.2) — no fetch needed. Merge it with
     # anything the (best-effort) preview fetch found for hosted/video creatives.
     inline_images = _list_artifact(creative, "image_sources")
-    image_sources = _dedupe_str([*inline_images, *_list_artifact(preview_artifacts, "image_sources")])
+    image_sources = _dedupe_str(
+        [*inline_images, *_list_artifact(preview_artifacts, "image_sources")]
+    )
     video_sources = _list_artifact(preview_artifacts, "video_sources")
     video_posters = _list_artifact(preview_artifacts, "video_posters")
     thumbnail_url = _first_present(video_posters, image_sources)
