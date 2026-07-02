@@ -405,6 +405,22 @@
   color: var(--watcher-text-soft);
 }
 
+.watcher-resource-media {
+  display: block;
+  border: 1px solid var(--watcher-line);
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.watcher-resource-media img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  object-position: top;
+}
+
 .watcher-resource-meta,
 .watcher-resource-controls {
   display: flex;

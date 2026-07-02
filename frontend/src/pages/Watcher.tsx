@@ -26,7 +26,7 @@ import { ApiOfflineBanner } from "../components/shared/ApiOfflineBanner";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Topbar } from "../components/Topbar";
 import { useApiHealth } from "../hooks/useApiHealth";
-import { api } from "../lib/api-client";
+import { API_BASE_URL, api } from "../lib/api-client";
 import type {
   IntelAdapterDescriptor,
   IntelArtifactSummary,
@@ -155,6 +155,7 @@ export function Watcher() {
   const [enabled, setEnabled] = useState(true);
   const [metaSortMode, setMetaSortMode] = useState("relevancy_monthly_grouped");
   const [resourceSort, setResourceSort] = useState<ResourceSort>("videos");
+  const [resourceAdapterFilter, setResourceAdapterFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IntelCrawlSummary | null>(null);
 
@@ -176,7 +177,7 @@ export function Watcher() {
   });
   const resourcesQuery = useQuery({
     queryKey: ["intel-resources", selectedBrand],
-    queryFn: () => api.listIntelResources({ brand: selectedBrand ?? undefined, limit: 40 }),
+    queryFn: () => api.listIntelResources({ brand: selectedBrand ?? undefined, limit: 200 }),
     enabled: Boolean(selectedBrand)
   });
 
@@ -187,9 +188,20 @@ export function Watcher() {
   const sources = sourcesQuery.data?.items ?? [];
   const signals = signalsQuery.data?.items ?? [];
   const resources = resourcesQuery.data?.items ?? [];
+  const resourceAdapterOptions = useMemo(
+    () => Array.from(new Set(resources.map((resource) => resource.source_type))).sort(),
+    [resources]
+  );
+  const filteredResources = useMemo(
+    () =>
+      resourceAdapterFilter === "all"
+        ? resources
+        : resources.filter((resource) => resource.source_type === resourceAdapterFilter),
+    [resources, resourceAdapterFilter]
+  );
   const sortedResources = useMemo(
-    () => sortResources(resources, resourceSort),
-    [resources, resourceSort]
+    () => sortResources(filteredResources, resourceSort),
+    [filteredResources, resourceSort]
   );
   const selectedBrandOverview = brands.find((item) => item.brand_name === selectedBrand) ?? null;
   const selectedSources = sources.filter((source) => source.brand_name === selectedBrand);
@@ -294,6 +306,7 @@ export function Watcher() {
   const onSelectBrand = (nextBrand: string) => {
     setSelectedBrand(nextBrand);
     setBrand(nextBrand);
+    setResourceAdapterFilter("all");
   };
 
   const targetMissing =
@@ -542,8 +555,24 @@ export function Watcher() {
                 </div>
                 <div className="watcher-resource-controls">
                   <span className="watcher-muted-line">
-                    {resources.length ? `${resources.length} captured` : ""}
+                    {resources.length
+                      ? `${sortedResources.length} of ${
+                          selectedBrandOverview?.resource_count ?? resources.length
+                        } shown`
+                      : ""}
                   </span>
+                  <select
+                    className="input watcher-compact-select"
+                    value={resourceAdapterFilter}
+                    onChange={(event) => setResourceAdapterFilter(event.target.value)}
+                  >
+                    <option value="all">All adapters</option>
+                    {resourceAdapterOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {adapterLabel(type, adapters)}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     className="input watcher-compact-select"
                     value={resourceSort}
@@ -565,6 +594,10 @@ export function Watcher() {
                   title="No resources yet"
                   hint="Run an adapter to backfill observed ads and source artifacts."
                 />
+              ) : sortedResources.length === 0 ? (
+                <div className="watcher-muted-line">
+                  No resources from this adapter yet — switch back to All adapters.
+                </div>
               ) : (
                 <div className="watcher-resource-list">
                   {sortedResources.map((resource) => (
@@ -709,6 +742,7 @@ function ResourceCard({
   const copy = resourceCopy(resource);
   const facts = resourceFacts(resource);
   const dynamic = isDynamicCreative(resource);
+  const media = resourceMedia(resource);
   const hiddenArtifacts = Math.max(0, resource.artifacts.length - 8);
 
   return (
@@ -733,6 +767,25 @@ function ResourceCard({
           </span>
         </div>
       </div>
+      {media ? (
+        <a
+          className="watcher-resource-media"
+          href={media.href}
+          target="_blank"
+          rel="noreferrer"
+          title={media.hint}
+        >
+          <img
+            src={media.imageUrl}
+            alt={title}
+            loading="lazy"
+            onError={(event) => {
+              const wrapper = event.currentTarget.closest(".watcher-resource-media");
+              if (wrapper instanceof HTMLElement) wrapper.style.display = "none";
+            }}
+          />
+        </a>
+      ) : null}
       {facts.length > 0 ? (
         <div className="watcher-resource-meta">
           {facts.map((fact) => (
@@ -753,7 +806,17 @@ function ResourceCard({
       />
       <div className="watcher-artifact-strip">
         {resource.artifacts.slice(0, 8).map((artifact, index) => (
-          <ArtifactLink artifact={artifact} key={`${artifact.artifact_type}-${index}`} />
+          <ArtifactLink
+            artifact={
+              artifact.artifact_type === "card_screenshot"
+                ? {
+                    ...artifact,
+                    url: `${API_BASE_URL}/api/intelligence/resources/${resource.id}/screenshot`
+                  }
+                : artifact
+            }
+            key={`${artifact.artifact_type}-${index}`}
+          />
         ))}
         {hiddenArtifacts > 0 ? (
           <span className="watcher-artifact-link">+{hiddenArtifacts} more</span>
@@ -875,7 +938,10 @@ function sortResources(resources: IntelResource[], sort: ResourceSort) {
       return metaVariantCount(right) - metaVariantCount(left) || byNewest(right) - byNewest(left);
     }
     if (sort === "videos") {
-      return videoTotal(right) - videoTotal(left) || byNewest(right) - byNewest(left);
+      // Video first is a partition, not a count race: any video card outranks any
+      // non-video card, and within each group the most recent wins.
+      const hasVideo = (resource: IntelResource) => (videoTotal(resource) > 0 ? 1 : 0);
+      return hasVideo(right) - hasVideo(left) || byNewest(right) - byNewest(left);
     }
     if (sort === "artifacts") {
       return (
@@ -974,18 +1040,47 @@ function variantsLabel(resource: IntelResource) {
 
 function isDynamicCreative(resource: IntelResource) {
   // Server-rendered rich-media / HTML5 banner: nothing static to capture without a browser.
-  // Prefer the backend flag; fall back to deriving it (ATC creative with a preview but no
-  // captured artifacts) for rows crawled before the flag existed.
-  if (resource.metadata.dynamic_creative === true) return true;
+  // The backend flag is authoritative when present (true OR false); the heuristic exists
+  // only for rows crawled before the flag existed.
+  const flag = resource.metadata.dynamic_creative;
+  if (typeof flag === "boolean") return flag;
   if (resource.source_type !== "google_atc") return false;
   const hasPreview = Boolean(stringMetadata(resource, "preview_url"));
   return hasPreview && artifactTotal(resource.artifact_summary) === 0;
 }
 
+type ResourceMedia = { imageUrl: string; href: string; hint: string };
+
+function resourceMedia(resource: IntelResource): ResourceMedia | null {
+  // The visual for the card: the Meta card screenshot (served through the API), else the
+  // first creative image, else the video poster. Clicking opens the richest target we
+  // have — the video itself when one was captured, otherwise the source listing page.
+  const firstUrlOf = (type: string) =>
+    resource.artifacts.find((artifact) => artifact.artifact_type === type && artifact.url)?.url ??
+    null;
+  const hasScreenshot = resource.artifacts.some(
+    (artifact) => artifact.artifact_type === "card_screenshot"
+  );
+  const screenshotUrl = hasScreenshot
+    ? `${API_BASE_URL}/api/intelligence/resources/${resource.id}/screenshot`
+    : null;
+  const imageUrl = screenshotUrl ?? firstUrlOf("image_url") ?? firstUrlOf("video_poster");
+  if (!imageUrl) return null;
+  const video = firstUrlOf("video_url");
+  const href = video ?? resource.url ?? imageUrl;
+  return { imageUrl, href, hint: video ? "Open video" : "Open source page" };
+}
+
 function videoTotal(resource: IntelResource) {
+  // The declared count, extracted URLs, and posters all describe the same videos —
+  // take the strongest evidence instead of summing (which double-counted).
   const value = resource.metadata.video_count;
   const declared = typeof value === "number" && Number.isFinite(value) ? value : 0;
-  return declared + resource.artifact_summary.video_source_count + resource.artifact_summary.video_poster_count;
+  return Math.max(
+    declared,
+    resource.artifact_summary.video_source_count,
+    resource.artifact_summary.video_poster_count
+  );
 }
 
 function stringMetadata(resource: IntelResource, key: string) {
