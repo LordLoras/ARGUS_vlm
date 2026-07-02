@@ -113,7 +113,8 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
     cid = creative["creative_id"]
     adv = creative.get("advertiser_id") or advertiser_id
     url = _CREATIVE_URL.format(adv=adv, cid=cid)
-    advertiser_name = creative.get("advertiser_name") or source.brand_name
+    raw_advertiser_name = creative.get("advertiser_name")
+    advertiser_name = _display_advertiser_name(raw_advertiser_name, source.brand_name)
     # `preview_artifacts` is a dict only when the preview was actually fetched (possibly empty);
     # absent when enrichment was skipped (budget/disabled) — the two must be distinguished.
     preview_fetched = isinstance(creative.get("preview_artifacts"), dict)
@@ -149,6 +150,9 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
             "source": GOOGLE_ATC_SOURCE_TYPE,
             "advertiser_id": adv,
             "advertiser_name": advertiser_name,
+            "advertiser_name_raw": (
+                raw_advertiser_name if raw_advertiser_name != advertiser_name else None
+            ),
             "advertiser_url": _ADVERTISER_URL.format(adv=adv),
             "format_code": creative.get("format_code"),
             "format": display_format,
@@ -285,3 +289,10 @@ def _creative_description(text: object) -> str | None:
         return None
     clean = " ".join(text.split()).strip()
     return clean[:600] or None
+
+
+def _display_advertiser_name(value: object, fallback: str) -> str:
+    text = str(value or "").strip()
+    if not text or "\ufffd" in text:
+        return fallback
+    return text

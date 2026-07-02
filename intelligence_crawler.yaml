@@ -178,9 +178,9 @@ sources:
     tier: B
     enabled: false
     platform: google
-    platform_id: "AR03719453326287306753"
+    platform_id: "AR16079427970682322945"
     poll_interval_hours: 24
-    notes: "ATC lookup: McDonald's Corporation, US; selected for video creatives."
+    notes: "ATC lookup: McDonald's Corporation, US; selected for consumer/brand video creatives over the franchisee-recruitment bucket."
     config:
       <<: *atc_us_config
       resolve_names: ["McDonald's Corporation"]

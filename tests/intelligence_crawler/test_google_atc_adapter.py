@@ -315,6 +315,33 @@ def test_adapter_maps_inline_image_without_preview_fetch():
     assert item.raw["preview_enriched"] is False  # no preview fetch needed for image creatives
 
 
+def test_adapter_falls_back_to_brand_name_for_mojibake_advertiser_name():
+    payload = {
+        "1": [
+            {
+                "1": ADV,
+                "2": "CR_MOJIBAKE",
+                "3": {
+                    "3": {
+                        "2": '<img src="https://tpc.googlesyndication.com/archive/simgad/12345">'
+                    }
+                },
+                "4": 1,
+                "6": {"1": "1774647000"},
+                "12": "McDONALD\ufffdS CORPORATION",
+            }
+        ]
+    }
+    adapter = GoogleAtcAdapter(rpc_fetch=lambda m, q: payload, intel_config=IntelConfig())
+    source = _source(brand_name="McDonald's")
+
+    item = adapter.poll(source, SourceState(source_id=source.id), now=NOW).items[0]
+
+    assert item.title == "McDonald's ATC creative CR_MOJIBAKE"
+    assert item.raw["advertiser_name"] == "McDonald's"
+    assert item.raw["advertiser_name_raw"] == "McDONALD\ufffdS CORPORATION"
+
+
 def test_hosted_creative_with_no_static_assets_is_marked_dynamic():
     # A format-2 hosted banner whose preview is pure JS (no youtube/image) is a server-rendered
     # rich-media creative — flag it and relabel it so the UI doesn't call it a missing "image".
