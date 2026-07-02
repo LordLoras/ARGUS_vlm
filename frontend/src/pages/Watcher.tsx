@@ -749,7 +749,15 @@ function ResourceCard({
     <article className="watcher-resource-card">
       <div className="watcher-resource-head">
         <div>
-          <strong>{title}</strong>
+          <strong>
+            {resource.url ? (
+              <a href={resource.url} target="_blank" rel="noreferrer">
+                {title}
+              </a>
+            ) : (
+              title
+            )}
+          </strong>
           <span>
             {adapterLabel(resource.source_type, adapters)} · {resource.resource_type} ·{" "}
             {formatDate(resource.published_at || resource.first_seen_at)}
@@ -805,6 +813,17 @@ function ResourceCard({
         }
       />
       <div className="watcher-artifact-strip">
+        {resource.url ? (
+          <a
+            className="watcher-artifact-link watcher-source-entry-link"
+            href={resource.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink size={11} />
+            <span>{sourceEntryLabel(resource.source_type)}</span>
+          </a>
+        ) : null}
         {resource.artifacts.slice(0, 8).map((artifact, index) => (
           <ArtifactLink
             artifact={
@@ -1047,6 +1066,13 @@ function isDynamicCreative(resource: IntelResource) {
   if (resource.source_type !== "google_atc") return false;
   const hasPreview = Boolean(stringMetadata(resource, "preview_url"));
   return hasPreview && artifactTotal(resource.artifact_summary) === 0;
+}
+
+function sourceEntryLabel(sourceType: string) {
+  if (sourceType === "google_atc") return "View on ATC";
+  if (sourceType === "meta_ad_library_ui") return "View in Ad Library";
+  if (sourceType === "youtube_channel") return "Watch on YouTube";
+  return "Open source";
 }
 
 type ResourceMedia = { imageUrl: string; href: string; hint: string };

@@ -405,6 +405,20 @@
   color: var(--watcher-text-soft);
 }
 
+.watcher-resource-head strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.watcher-resource-head strong a:hover {
+  text-decoration: underline;
+}
+
+.watcher-source-entry-link {
+  border-color: rgba(124, 58, 237, 0.45);
+  color: #c4b5fd;
+}
+
 .watcher-resource-media {
   display: block;
   border: 1px solid var(--watcher-line);
