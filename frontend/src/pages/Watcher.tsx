@@ -113,6 +113,10 @@ const RESOURCE_SORT_OPTIONS = [
 
 type ResourceSort = (typeof RESOURCE_SORT_OPTIONS)[number]["value"];
 
+// Signals (campaign-launch detection) are hidden until the grouping/corroboration story
+// is worth showing; artifacts are the demo. Flip to true to bring the panel back.
+const SHOW_SIGNALS = false;
+
 function adapterLabel(sourceType: string, adapters: IntelAdapterDescriptor[]) {
   return adapters.find((adapter) => adapter.source_type === sourceType)?.label ?? sourceType.replace(/_/g, " ");
 }
@@ -173,7 +177,8 @@ export function Watcher() {
   });
   const signalsQuery = useQuery({
     queryKey: ["intel-signals"],
-    queryFn: () => api.listIntelSignals({ limit: 100 })
+    queryFn: () => api.listIntelSignals({ limit: 100 }),
+    enabled: SHOW_SIGNALS
   });
   const resourcesQuery = useQuery({
     queryKey: ["intel-resources", selectedBrand],
@@ -325,15 +330,15 @@ export function Watcher() {
             <span className="watcher-kicker">Brand intelligence</span>
             <h1 className="page-title">Watcher</h1>
             <p className="page-sub">
-              Monitor brands through adapter-backed sources, inspect what each adapter captured,
-              and separate baseline backfill from live campaign signals.
+              Monitor brands through adapter-backed sources and inspect every ad creative each
+              adapter captured — images, videos, screenshots, and links to the original entries.
             </p>
           </div>
           <div className="watcher-metrics">
             <Metric label="Brands" value={brands.length} />
             <Metric label="Sources" value={`${enabledCount}/${sources.length}`} />
             <Metric label="Resources" value={totalResources} />
-            <Metric label="Signals" value={signals.length} />
+            {SHOW_SIGNALS ? <Metric label="Signals" value={signals.length} /> : null}
           </div>
         </section>
 
@@ -397,7 +402,9 @@ export function Watcher() {
                 <div className="watcher-detail-stats">
                   <Metric label="Resources" value={selectedBrandOverview.resource_count} />
                   <Metric label="Artifacts" value={artifactTotal(selectedBrandOverview.artifact_summary)} />
-                  <Metric label="Signals" value={selectedBrandOverview.signal_count} />
+                  {SHOW_SIGNALS ? (
+                    <Metric label="Signals" value={selectedBrandOverview.signal_count} />
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -511,7 +518,7 @@ export function Watcher() {
                   <Metric label="Status" value={lastRun.status} />
                   <Metric label="Sources" value={lastRun.source_count} />
                   <Metric label="New resources" value={lastRun.resource_count} />
-                  <Metric label="New signals" value={lastRun.signal_count} />
+                  {SHOW_SIGNALS ? <Metric label="New signals" value={lastRun.signal_count} /> : null}
                 </div>
               ) : null}
             </section>
@@ -611,27 +618,29 @@ export function Watcher() {
               )}
             </section>
 
-            <section className="watcher-split-panel">
-              <div className="watcher-panel-header">
-                <div>
-                  <span className="watcher-section-kicker">Signals</span>
-                  <h3>Live campaign activity</h3>
+            {SHOW_SIGNALS ? (
+              <section className="watcher-split-panel">
+                <div className="watcher-panel-header">
+                  <div>
+                    <span className="watcher-section-kicker">Signals</span>
+                    <h3>Live campaign activity</h3>
+                  </div>
                 </div>
-              </div>
-              {selectedSignals.length === 0 ? (
-                <EmptyState
-                  icon={<AlertTriangle size={18} />}
-                  title="No live signals for this brand"
-                  hint="Baseline resources are stored first; new post-activation items become signals."
-                />
-              ) : (
-                <div className="watcher-signal-list">
-                  {selectedSignals.map((signal) => (
-                    <SignalCard key={signal.id} signal={signal} />
-                  ))}
-                </div>
-              )}
-            </section>
+                {selectedSignals.length === 0 ? (
+                  <EmptyState
+                    icon={<AlertTriangle size={18} />}
+                    title="No live signals for this brand"
+                    hint="Baseline resources are stored first; new post-activation items become signals."
+                  />
+                ) : (
+                  <div className="watcher-signal-list">
+                    {selectedSignals.map((signal) => (
+                      <SignalCard key={signal.id} signal={signal} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </section>
         </div>
       </div>
@@ -663,7 +672,7 @@ function BrandCard({
         <span>{brand.enabled_source_count}/{brand.source_count} sources</span>
         <span>{brand.resource_count} resources</span>
         <span>{artifactTotal(brand.artifact_summary)} artifacts</span>
-        <span>{brand.signal_count} signals</span>
+        {SHOW_SIGNALS ? <span>{brand.signal_count} signals</span> : null}
       </div>
     </button>
   );

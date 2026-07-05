@@ -53,24 +53,6 @@ sources:
   # Keep disabled by default; enable/run from the Watcher UI when you want to poll.
   # Meta page ids were smoke-tested against active US Ad Library cards on 2026-07-01.
   # ATC ids were verified with LookupService/GetAdvertiserById as region=US on 2026-07-01.
-  - id: toyota_meta_ads
-    brand: Toyota
-    source_type: meta_ad_library_ui
-    tier: B
-    enabled: false
-    platform: meta
-    platform_id: "197052454200"
-    poll_interval_hours: 24
-    notes: "Toyota USA Meta page id; active US cards smoke-tested."
-    config: &meta_active_config
-      active_status: active
-      sort_mode: relevancy_monthly_grouped
-      sort_direction: desc
-      scrolls: 20
-      max_cards: 250
-      wait_ms: 1800
-      stop_after_no_new: 3
-
   - id: toyota_atc
     brand: Toyota
     source_type: google_atc
@@ -89,17 +71,6 @@ sources:
       # preview_url, so they don't consume this budget.
       preview_enrichment_limit: 400
 
-  - id: jeep_meta_ads
-    brand: Jeep
-    source_type: meta_ad_library_ui
-    tier: B
-    enabled: false
-    platform: meta
-    platform_id: "7037526514"
-    poll_interval_hours: 24
-    notes: "Jeep Meta page id; active US cards smoke-tested."
-    config: *meta_active_config
-
   - id: jeep_atc
     brand: Jeep
     source_type: google_atc
@@ -112,17 +83,6 @@ sources:
     config:
       <<: *atc_us_config
       resolve_names: ["FCA US LLC", "Stellantis North America"]
-
-  - id: ford_meta_ads
-    brand: Ford
-    source_type: meta_ad_library_ui
-    tier: B
-    enabled: false
-    platform: meta
-    platform_id: "22166130048"
-    poll_interval_hours: 24
-    notes: "Ford Motor Company Meta page id; active US cards smoke-tested."
-    config: *meta_active_config
 
   - id: ford_atc
     brand: Ford
@@ -146,7 +106,14 @@ sources:
     platform_id: "434174436675167"
     poll_interval_hours: 24
     notes: "Apple Meta page id; active cards smoke-tested with US filter."
-    config: *meta_active_config
+    config: &meta_active_config
+      active_status: active
+      sort_mode: relevancy_monthly_grouped
+      sort_direction: desc
+      scrolls: 20
+      max_cards: 250
+      wait_ms: 1800
+      stop_after_no_new: 3
 
   - id: apple_atc
     brand: Apple
@@ -305,17 +272,3 @@ sources:
       <<: *atc_us_config
       resolve_names: ["Starbucks Corporation"]
 
-  # --- Offline demo source (no network). Flip enabled: true to try the pipeline. ---
-  - id: demo_mock
-    brand: Toyota
-    source_type: mock
-    tier: A
-    enabled: false
-    config:
-      items:
-        - external_id: yt_demo_0001
-          url: https://www.youtube.com/watch?v=demo0001
-          resource_type: video
-          title: "Toyota Camry Reborn — Official Commercial"
-          description: "Introducing the all-new Camry campaign."
-          published_at: "2026-06-20T15:00:00+00:00"
