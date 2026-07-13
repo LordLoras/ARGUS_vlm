@@ -15,6 +15,10 @@
 - Queued crawl API for long-running provider work.
 - Provider-wide circuit breaking, `Retry-After` handling, freshness guards, and explicit operator `force` override.
 - Durable Google page checkpoints/resume, incremental overlap scans, periodic full reconciliation, and preview reuse.
+- Independent durable worker and due-source scheduler services with heartbeats,
+  abandoned-run recovery, and queue idempotency.
+- Versioned cursor API, semantic resource change feed, streaming JSON/JSONL export, and
+  atomic latest/status/health snapshots.
 - Lean US region handling: `collection.requested_region_code`, not synthetic `delivery.regions`.
 - Ten-brand exercise DB with 10,500 latest resources and complete per-source run diagnostics.
 
@@ -67,15 +71,12 @@ Follow-ups:
 - capture per-version creative text/assets if exposed;
 - keep screenshots as durable fallback when fbcdn media URLs expire.
 
-### 5. Scheduler Process
+### 5. Service Installation / Supervision
 
-Manual per-source runs are safest now. Later:
-
-- add a separate scheduled crawler process;
-- keep it separate from the GPU-heavy worker.
-
-The runner/API already honor `next_due_at` and cooldown. This item is only about the
-deployment process that invokes due crawls periodically.
+The worker and scheduler commands now exist and are deliberately opt-in. Later, choose
+the production supervisor (Windows Service wrapper, Task Scheduler, or another local
+process manager), log retention, restart policy, and external alert destination. ARGUS
+should remain only their API/UI shell.
 
 ### 6. Digital Campaign Layer
 

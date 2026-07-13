@@ -92,6 +92,18 @@ Meta is browser-driven and can take minutes. Run it before the demo if you need 
 Never use `--force` on stage. It intentionally bypasses freshness, cooldown, and provider
 circuit guards and exists only for controlled operator recovery/testing.
 
+Watcher run buttons now enqueue durable work and do not crawl inside FastAPI. Existing
+resources render without either service. If the demo must execute a queued crawl, start
+the worker in a separate terminal first:
+
+```powershell
+python -m ad_classifier intel worker
+```
+
+The scheduler is optional for the demo and should remain stopped unless demonstrating
+automatic due polling. Watcher exposes both heartbeats and clearly reports queued work
+when no worker is running.
+
 ## Back Up / Rebuild The Demo DB
 
 Back up the crawler DB before experimenting:

@@ -24,7 +24,9 @@ so consumers requesting resources still receive only current values.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/intelligence/resources` | Paginated latest resources. Supports `brand`, `source_id`, `include_backfill`, `limit`, and `offset`; returns `total` and `next_offset`. |
+| `GET /api/intelligence/resources` | Paginated latest resources. Supports `brand`, `source_id`, `include_backfill`, `limit`, legacy `offset`, and opaque `cursor`; returns `schema_version`, `total`, `next_offset`, and `next_cursor`. |
+| `GET /api/intelligence/resources/changes` | Semantic `created`/`updated` feed with `since` and opaque cursor. Every event embeds the current latest resource; routine freshness timestamps do not emit changes. |
+| `GET /api/intelligence/resources/export?format=json\|jsonl` | Stream every filtered latest resource as versioned JSON or JSON Lines. |
 | `GET /api/intelligence/resources/{resource_id}` | One latest resource. |
 | `GET /api/intelligence/resources/{resource_id}/history` | Append-only observations for diagnostics/replay. Not part of the normal latest-data feed. |
 | `GET /api/intelligence/resources/{resource_id}/screenshot` | A cache-confined local card screenshot, when present. |
@@ -34,23 +36,48 @@ successful observation of that resource. Media assets are projected into
 `intel_media_assets` while the adapter metadata snapshot remains available in
 `metadata`.
 
+The current contract version is `1.0`. Cursor pagination is preferred for middleware
+because rows added during a long export cannot shift later pages. Offset pagination is
+retained for the existing ARGUS shell. The change feed is intentionally not the raw
+observation ledger: it records a change only when stable provider content differs.
+
 ## Crawl API
 
 | Endpoint | Behavior |
 |---|---|
 | `POST /api/intelligence/crawl` | Synchronous bounded crawl; useful for CLI/demo actions. |
-| `POST /api/intelligence/crawl/queue` | Returns HTTP 202 with a `run_id`; executes after the response. Preferred for middleware and long Meta crawls. |
+| `POST /api/intelligence/crawl/queue` | Durably inserts a queued row and returns HTTP 202 with a `run_id`. It never calls a provider in the API process. |
 | `POST /api/intelligence/sources/{source_id}/crawl` | Synchronous explicit-source crawl, even when disabled; honors freshness/cooldown by default. |
 | `POST /api/intelligence/sources/{source_id}/crawl/queue` | Queued explicit-source crawl. |
 | `GET /api/intelligence/runs` | Recent crawl summaries. |
 | `GET /api/intelligence/runs/{run_id}` | Crawl plus every per-source outcome/diagnostic. |
+| `POST /api/intelligence/runs/{run_id}/retry` | Queue the same terminal run request again; source-level cooldown/circuit/cursor state still applies. |
+| `GET /api/intelligence/health` | Aggregate queue, worker, scheduler, source, circuit, and resume health for UI/monitoring. |
 | `GET /api/intelligence/source-statuses` | Latest health for all/non-filtered sources in one request. |
 | `GET /api/intelligence/sources/{source_id}/status` | Source state plus recent runs. |
 
-Queued execution through FastAPI background tasks avoids holding a client connection,
-but it is still in-process. For stronger crash recovery or multiple API replicas, run a
-separate local scheduler/worker that claims queued rows; the current ledger schema is
-already suitable for that evolution.
+Queued execution belongs to an independent worker. The API, worker, and scheduler may be
+three processes using the same WAL-mode database:
+
+```powershell
+# Terminal/process 1: API + ARGUS consumer surface
+python -m ad_classifier api
+
+# Terminal/process 2: claim durable queued runs and call providers
+python -m ad_classifier intel worker
+
+# Terminal/process 3: periodically enqueue one due-source run
+python -m ad_classifier intel scheduler
+```
+
+Use `--once` on either service for Task Scheduler, tests, or supervised one-shot runs.
+These commands are opt-in: this repository does not install them as Windows services or
+start them at login. The scheduler never contacts a provider; it only checks due state
+and inserts a deduplicated queue row. The worker is the only queued-run executor.
+
+Queue POSTs accept an optional `Idempotency-Key` header (maximum 200 characters). Reusing
+the key returns the original run, preventing double-clicks or client retries from
+creating duplicate provider work.
 
 All crawl payloads accept `force: false`. Keep the default for routine and UI-driven
 runs. `force: true` bypasses freshness, source cooldown, and provider-circuit guards and
@@ -106,6 +133,14 @@ go only to structured logs.
   request. Other provider families continue.
 - Archiving a source disables it and preserves current resources and history. If it is
   archived during a poll, the provider result is discarded.
+- A worker atomically claims one queued run with `BEGIN IMMEDIATE`, records its owner,
+  and renews a run lease plus service heartbeat while the provider is active.
+- If a worker disappears, the next worker marks the expired run failed and creates a
+  fresh replacement run with `recovered_from`. Provider/source state—including a Google
+  page cursor—survives, so the replacement resumes safely. Automatic abandoned-run
+  recovery stops after `service.max_run_attempts`.
+- Only one active scheduler-origin run may exist. Repeated scheduler ticks therefore do
+  not pile up duplicate due crawls while a worker is busy.
 
 ## Reliability Tiers
 
@@ -150,16 +185,38 @@ by `mutation_api_key_env` (default `INTELLIGENCE_CRAWLER_API_KEY`) is set, every
 POST/PATCH/DELETE route requires the same value in `X-Intelligence-Key`. Leave it unset
 for a loopback-only desktop demo; set it when exposing the service beyond localhost.
 
+## JSON Files For Non-HTTP Consumers
+
+The worker atomically refreshes these files after every terminal run when
+`service.write_snapshots_after_run` is true:
+
+- `latest_resources.json` — authoritative latest resource array, contract version `1.0`;
+- `source_statuses.json` — current provider/source diagnostic state;
+- `health.json` — the same aggregate state as `/api/intelligence/health`.
+
+Their directory is `service.snapshot_dir` (default
+`./output/intelligence_crawler`). Temporary files are replaced only after a complete
+write, so a consumer never reads a half-written JSON document. Generate an explicit
+filtered export without running a provider:
+
+```powershell
+python -m ad_classifier intel export --output .\output\latest.json --format json
+python -m ad_classifier intel export --output .\output\latest.jsonl --format jsonl --brand Samsung
+```
+
 ## Health Checklist
 
-1. Use `/source-statuses` for the dashboard and alert when `last_outcome` is `partial`
-   or `failed`.
-2. Alert on `last_success_at` age, not merely `last_attempt_at`.
-3. Inspect `failure_category`, `error_code`, and `phase` before retrying.
-4. Use `/runs/{run_id}` for request/page/provider-item counts and truncation details.
-5. If `resume_available` is true, let cooldown expire and use normal Retry; the crawler
+1. Start with `/health`. `critical` means queued work cannot run or a run lease was
+   abandoned; `degraded` means a source/provider/scheduler requires attention; `healthy`
+   means no active issue. A missing service is informational until work depends on it.
+2. Use `/source-statuses` for the exact provider cause and alert when `last_outcome` is
+   `partial` or `failed`.
+3. Alert on `last_success_at` age, not merely `last_attempt_at`.
+4. Inspect `failure_category`, `error_code`, and `phase` before retrying.
+5. Use `/runs/{run_id}` for request/page/provider-item counts and truncation details.
+6. If `resume_available` is true, let cooldown expire and use normal Retry; the crawler
    continues from the saved Google page. Old failures recorded before migration 004 have
    no recoverable token and must restart from page one.
-6. Inspect structured logs for the traceback; never expose them to API clients.
-7. Treat `explicit_empty` as healthy only because the adapter recognized a provider
+7. Inspect structured logs for the traceback; never expose them to API clients.
+8. Treat `explicit_empty` as healthy only because the adapter recognized a provider
    empty state—an unrecognized blank page is `provider_ui_changed`/failed.

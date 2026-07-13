@@ -209,8 +209,70 @@ def test_queued_crawl_returns_immediately_addressable_run(tmp_path):
     assert queued["status"] == "queued"
     run = client.get(f"/api/intelligence/runs/{queued['run_id']}")
     assert run.status_code == 200
-    # TestClient completes background tasks before returning; a real server returns first.
-    assert run.json()["status"] in {"completed", "degraded", "failed"}
+    # The API owns no execution thread; the independent worker claims this durable row.
+    assert run.json()["status"] == "queued"
+
+
+def test_queue_idempotency_health_cursor_and_exports(tmp_path):
+    client = _client(tmp_path)
+    headers = {"Idempotency-Key": "demo-click-1"}
+    first = client.post("/api/intelligence/crawl/queue", json={"due": True}, headers=headers)
+    second = client.post("/api/intelligence/crawl/queue", json={"due": True}, headers=headers)
+    assert first.json()["run_id"] == second.json()["run_id"]
+
+    health = client.get("/api/intelligence/health").json()
+    assert health["status"] == "critical"
+    assert health["queue"]["queued"] == 1
+    assert any(issue["code"] == "worker_unavailable" for issue in health["issues"])
+
+    manager = client.app.state.intel_manager
+    with manager.repo.connect() as conn:
+        manager.repo.insert_resource(
+            conn,
+            IntelResource(
+                id="res_older",
+                source_id="s1",
+                resource_type="meta_ad",
+                title="Older creative",
+                first_seen_at=datetime(2026, 6, 23, 12, 0, tzinfo=UTC),
+                fetched_at=datetime(2026, 6, 23, 12, 0, tzinfo=UTC),
+            ),
+        )
+        conn.commit()
+
+    page_one = client.get("/api/intelligence/resources", params={"limit": 1}).json()
+    assert page_one["schema_version"] == "1.0"
+    assert page_one["next_cursor"]
+    page_two = client.get(
+        "/api/intelligence/resources",
+        params={"limit": 1, "cursor": page_one["next_cursor"]},
+    ).json()
+    assert page_two["items"][0]["id"] != page_one["items"][0]["id"]
+
+    exported = client.get("/api/intelligence/resources/export", params={"format": "json"})
+    assert exported.status_code == 200
+    assert exported.json()["schema_version"] == "1.0"
+    assert len(exported.json()["items"]) == 2
+    jsonl = client.get("/api/intelligence/resources/export", params={"format": "jsonl"})
+    assert len([line for line in jsonl.text.splitlines() if line]) == 2
+
+    with manager.repo.connect() as conn:
+        manager.repo.create_run(conn, "intel_run_change")
+        manager.repo.insert_resource_change(
+            conn,
+            change_id="chg_demo",
+            resource_id="res_demo",
+            source_id="s1",
+            run_id="intel_run_change",
+            change_type="updated",
+            changed_at=NOW,
+            content_hash="new-hash",
+            previous_content_hash="old-hash",
+        )
+        conn.commit()
+    feed = client.get("/api/intelligence/resources/changes", params={"since": "365d"}).json()
+    assert feed["items"][0]["change_type"] == "updated"
+    assert feed["items"][0]["resource"]["id"] == "res_demo"
 
 
 def test_source_crud_api(tmp_path):

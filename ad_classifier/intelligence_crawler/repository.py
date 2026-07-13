@@ -43,6 +43,7 @@ from ad_classifier.intelligence_crawler.repository_rows import (
 from ad_classifier.intelligence_crawler.repository_rows import (
     state as _state,
 )
+from ad_classifier.intelligence_crawler.repository_runtime import RuntimeRepositoryMixin
 from ad_classifier.intelligence_crawler.repository_signals import SignalRepositoryMixin
 from ad_classifier.intelligence_crawler.schema import initialize_intelligence_crawler_db
 from ad_classifier.intelligence_crawler.timeutils import as_utc, iso, parse_iso
@@ -50,7 +51,12 @@ from ad_classifier.intelligence_crawler.timeutils import as_utc, iso, parse_iso
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 
-class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepositoryMixin):
+class IntelRepository(
+    RuntimeRepositoryMixin,
+    LedgerRepositoryMixin,
+    ResourceRepositoryMixin,
+    SignalRepositoryMixin,
+):
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path.expanduser().resolve()
         initialize_intelligence_crawler_db(self.db_path)

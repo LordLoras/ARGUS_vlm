@@ -52,6 +52,68 @@
   padding: 22px;
 }
 
+.watcher-service-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border: 1px solid var(--watcher-line);
+  border-left: 3px solid var(--watcher-green);
+  border-radius: 8px;
+  background: #090c11;
+}
+
+.watcher-service-strip.is-degraded {
+  border-left-color: var(--watcher-amber);
+}
+
+.watcher-service-strip.is-critical {
+  border-left-color: var(--watcher-red);
+}
+
+.watcher-service-strip > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.watcher-service-strip > div:first-child > span:last-child {
+  color: var(--watcher-text-soft);
+  font-size: 11px;
+}
+
+.watcher-service-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.watcher-service-badges span {
+  padding: 5px 8px;
+  border: 1px solid var(--watcher-line);
+  border-radius: 999px;
+  color: var(--watcher-text-soft);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.watcher-service-badges .is-online {
+  border-color: rgba(52, 211, 153, 0.35);
+  color: var(--watcher-green);
+}
+
+.watcher-service-badges .is-stale {
+  border-color: rgba(251, 113, 133, 0.35);
+  color: var(--watcher-red);
+}
+
+.watcher-service-badges .is-error,
+.watcher-service-badges .is-stopped {
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--watcher-amber);
+}
+
 .watcher-hero-copy {
   display: grid;
   align-content: center;

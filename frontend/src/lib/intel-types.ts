@@ -310,6 +310,57 @@ export type IntelCrawlSummary = {
   error?: string | null;
 };
 
+export type IntelCrawlRun = Omit<IntelCrawlSummary, "items"> & {
+  sources: IntelSourceRunItem[];
+  request?: Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  started_at?: string | null;
+  finished_at?: string | null;
+  attempt_count?: number;
+};
+
+export type IntelServiceHealth = {
+  service_name: "worker" | "scheduler";
+  status: "online" | "stale" | "not_started" | "stopped" | "error";
+  activity: string;
+  instance_id?: string | null;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type IntelHealth = {
+  schema_version: string;
+  status: "healthy" | "degraded" | "critical";
+  checked_at: string;
+  queue: {
+    queued: number;
+    running: number;
+    completed: number;
+    degraded: number;
+    failed: number;
+    oldest_queued_at?: string | null;
+    abandoned_running: number;
+  };
+  sources: {
+    total: number;
+    enabled: number;
+    due: number;
+    failed: number;
+    partial: number;
+    open_provider_circuits: number;
+    resume_available: number;
+  };
+  services: IntelServiceHealth[];
+  issues: Array<{
+    code: string;
+    severity: "warning" | "critical";
+    message: string;
+    source_id?: string;
+    provider?: string;
+  }>;
+};
+
 export type IntelSourceCreate = {
   id?: string;
   brand: string;

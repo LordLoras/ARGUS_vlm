@@ -132,6 +132,22 @@ def test_repoll_refreshes_stored_metadata(tmp_path):
     assert observation_count == 2
     assert media_count == 1
 
+    with repo.connect(readonly=True) as conn:
+        changes = repo.list_resource_changes(conn, limit=10)
+    assert [change["change_type"] for change in changes] == ["created", "updated"]
+
+
+def test_identical_repoll_does_not_emit_consumer_change(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [OLD_ITEM])
+    IntelRunner(cfg, now_fn=lambda: T0).run(due=True)
+    IntelRunner(cfg, now_fn=lambda: T1).run(due=False)
+
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        changes = repo.list_resource_changes(conn, limit=10)
+    assert [change["change_type"] for change in changes] == ["created"]
+
 
 def test_verified_unchanged_resource_advances_freshness_without_ledger_noise(tmp_path):
     db = tmp_path / "intel.db"

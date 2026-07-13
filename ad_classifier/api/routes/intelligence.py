@@ -12,13 +12,15 @@ import os
 import sqlite3
 from collections.abc import Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ad_classifier.entity_graph.utils import digest, normalize_name
+from ad_classifier.intelligence_crawler.contract import INTELLIGENCE_SCHEMA_VERSION
+from ad_classifier.intelligence_crawler.exports import iter_resource_export
 from ad_classifier.intelligence_crawler.manager import IntelManager
 from ad_classifier.intelligence_crawler.models import IntelSource, Tier
 from ad_classifier.intelligence_crawler.timeutils import parse_iso, utcnow
@@ -111,6 +113,15 @@ def _require_mutation_key(request: Request) -> None:
         raise HTTPException(status_code=401, detail="missing or invalid intelligence API key")
 
 
+def _idempotency_key(request: Request) -> str | None:
+    value = request.headers.get("Idempotency-Key", "").strip()
+    if len(value) > 200:
+        raise HTTPException(
+            status_code=400, detail="Idempotency-Key must be at most 200 characters"
+        )
+    return value or None
+
+
 @router.get("/intelligence/signals")
 def list_signals(
     request: Request,
@@ -179,29 +190,96 @@ def list_resources(
     include_backfill: bool = Query(default=True),
     limit: int = Query(default=50, ge=1, le=250),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = None,
 ) -> dict[str, Any]:
+    if cursor and offset:
+        raise HTTPException(status_code=400, detail="cursor and non-zero offset cannot be combined")
     manager = _manager(request)
-    resources = _call_manager(
-        lambda: manager.list_resources(
-            brand=brand,
-            source_id=source_id,
-            include_backfill=include_backfill,
-            limit=limit,
-            offset=offset,
+    try:
+        resources, next_cursor = _call_manager(
+            lambda: manager.list_resources_page(
+                brand=brand,
+                source_id=source_id,
+                include_backfill=include_backfill,
+                limit=limit,
+                offset=offset,
+                cursor=cursor,
+            )
         )
-    )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     total = _call_manager(
         lambda: manager.count_resources(
             brand=brand, source_id=source_id, include_backfill=include_backfill
         )
     )
     return {
+        "schema_version": INTELLIGENCE_SCHEMA_VERSION,
         "items": [resource.model_dump(mode="json") for resource in resources],
         "limit": limit,
         "offset": offset,
         "total": total,
-        "next_offset": offset + len(resources) if offset + len(resources) < total else None,
+        "next_offset": (
+            None if cursor else offset + len(resources) if offset + len(resources) < total else None
+        ),
+        "next_cursor": next_cursor,
     }
+
+
+@router.get("/intelligence/resources/changes")
+def list_resource_changes(
+    request: Request,
+    since: str | None = Query(default="1d"),
+    cursor: str | None = None,
+    brand: str | None = None,
+    source_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=250),
+) -> dict[str, Any]:
+    try:
+        items, next_cursor = _call_manager(
+            lambda: _manager(request).list_resource_changes(
+                since=_parse_since(since),
+                cursor=cursor,
+                brand=brand,
+                source_id=source_id,
+                limit=limit,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "schema_version": INTELLIGENCE_SCHEMA_VERSION,
+        "items": items,
+        "limit": limit,
+        "next_cursor": next_cursor,
+    }
+
+
+@router.get("/intelligence/resources/export")
+def export_resources(
+    request: Request,
+    format: Literal["json", "jsonl"] = "json",
+    brand: str | None = None,
+    source_id: str | None = None,
+    include_backfill: bool = Query(default=True),
+) -> StreamingResponse:
+    manager = _manager(request)
+    media_type = "application/x-ndjson" if format == "jsonl" else "application/json"
+    extension = "jsonl" if format == "jsonl" else "json"
+    return StreamingResponse(
+        iter_resource_export(
+            manager,
+            export_format=format,
+            brand=brand,
+            source_id=source_id,
+            include_backfill=include_backfill,
+        ),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="argus-latest-ads.{extension}"',
+            "X-ARGUS-Schema-Version": INTELLIGENCE_SCHEMA_VERSION,
+        },
+    )
 
 
 @router.get("/intelligence/resources/{resource_id}")
@@ -249,9 +327,7 @@ def run_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
 
 
 @router.post("/intelligence/crawl/queue", status_code=202)
-def queue_crawl(
-    payload: CrawlPayload, request: Request, background_tasks: BackgroundTasks
-) -> dict[str, Any]:
+def queue_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
     _require_mutation_key(request)
     manager = _manager(request)
     summary = _call_manager(
@@ -260,17 +336,15 @@ def queue_crawl(
             source_id=payload.source_id,
             brand=payload.brand,
             force=payload.force,
+            idempotency_key=_idempotency_key(request),
         )
     )
-    background_tasks.add_task(
-        manager.run_queued_crawl,
-        summary.run_id,
-        due=payload.due,
-        source_id=payload.source_id,
-        brand=payload.brand,
-        force=payload.force,
-    )
     return summary.model_dump(mode="json")
+
+
+@router.get("/intelligence/health")
+def intelligence_health(request: Request) -> dict[str, Any]:
+    return _call_manager(lambda: _manager(request).health())
 
 
 @router.get("/intelligence/runs")
@@ -284,6 +358,15 @@ def get_run(run_id: str, request: Request) -> dict[str, Any]:
     if run is None:
         raise HTTPException(status_code=404, detail="crawl run not found")
     return run
+
+
+@router.post("/intelligence/runs/{run_id}/retry", status_code=202)
+def retry_run(run_id: str, request: Request) -> dict[str, Any]:
+    _require_mutation_key(request)
+    summary = _call_manager(lambda: _manager(request).retry_run(run_id))
+    if summary is None:
+        raise HTTPException(status_code=404, detail="crawl run not found")
+    return summary.model_dump(mode="json")
 
 
 # ---- source registry (the "Watcher" curation surface) -------------------------
@@ -377,15 +460,17 @@ def crawl_source(
 def queue_source_crawl(
     source_id: str,
     request: Request,
-    background_tasks: BackgroundTasks,
     force: bool = Query(default=False),
 ) -> dict[str, Any]:
     _require_mutation_key(request)
     manager = _manager(request)
     if _call_manager(lambda: manager.get_source(source_id)) is None:
         raise HTTPException(status_code=404, detail="source not found")
-    summary = _call_manager(lambda: manager.queue_crawl(source_id=source_id, force=force))
-    background_tasks.add_task(
-        manager.run_queued_crawl, summary.run_id, source_id=source_id, force=force
+    summary = _call_manager(
+        lambda: manager.queue_crawl(
+            source_id=source_id,
+            force=force,
+            idempotency_key=_idempotency_key(request),
+        )
     )
     return summary.model_dump(mode="json")

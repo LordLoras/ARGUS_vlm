@@ -32,6 +32,10 @@ def observation_id(run_id: str, resource_id_: str) -> str:
     return "obs_" + digest(run_id, resource_id_)[:20]
 
 
+def change_id(run_id: str, resource_id_: str) -> str:
+    return "chg_" + digest(run_id, resource_id_)[:20]
+
+
 def media_asset_id(resource_id_: str, asset_type: str, identity: str) -> str:
     return "asset_" + digest(resource_id_, asset_type, identity)[:20]
 

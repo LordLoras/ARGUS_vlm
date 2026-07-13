@@ -47,6 +47,10 @@ Core:
 - `google_crawl_state.py` + `google_creatives.py` — durable Google cursors, incremental/full reconciliation planning, creative signatures, and preview reuse.
 - `diagnostics.py` — stable failure categories/codes for UI changes, response changes, 429s, blocking, transport, parse, request-limit, asset, and configuration failures.
 - `manager.py` — API-facing facade and source adapter factory.
+- `worker_service.py` + `scheduler_service.py` — independent queue executor and
+  due-source scheduler with durable leases and service heartbeats.
+- `exports.py` + `contract.py` — versioned JSON/JSONL exports, opaque cursors, semantic
+  change hashes, and atomic latest/status/health snapshots.
 - `watchlist.py`, `detect.py`, `dedup.py`, `scoring.py`, `digest.py` — watchlist, newness detection, grouping, confidence, digest.
 
 Adapters:
@@ -57,9 +61,12 @@ Adapters:
 - `mock` — offline tests and local smoke checks.
 
 Surfaces:
-- CLI: `python -m ad_classifier intel init-db|source-types|watchlist|crawl|signals|digest|resolve|meta-probe`.
-- API: latest resources, resource history, source status, run history, synchronous crawl, and queued crawl endpoints under `/api/intelligence`.
-- Frontend: Watcher at `/experimental/watcher`, with source curation, per-source health/cause details, run diagnostics, resource cards, screenshots, media URLs, and artifact summaries.
+- CLI: `python -m ad_classifier intel init-db|worker|scheduler|export|source-types|watchlist|crawl|signals|digest|resolve|meta-probe`.
+- API: versioned latest-resource cursor pages, semantic change feed, JSON/JSONL export,
+  aggregate health, resource history, source/run diagnostics, retry, and durable queue
+  endpoints under `/api/intelligence`.
+- Frontend: Watcher at `/experimental/watcher`, a shell over the API that queues work,
+  polls run state, and displays worker/scheduler/provider health.
 
 ## Data Shape
 
@@ -75,6 +82,9 @@ for every field.
 
 Important current behavior:
 - `GET /resources` and `GET /resources/{id}` return only the latest projection.
+- `GET /resources/changes` emits only semantic content changes and embeds the latest row.
+- `GET /resources/export` and worker snapshots provide contract-versioned JSON for
+  non-ARGUS consumers.
 - Historical observations are opt-in through `GET /resources/{id}/history`.
 - `first_seen_at` is immutable; `last_seen_at`/`fetched_at` advance when the item is observed again.
 - `normalized` is computed at read time, not duplicated as a DB column.
@@ -97,6 +107,9 @@ complete/partial/429 outcomes. See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) before any
 - Only a complete outcome advances `last_success_at` or activates a first baseline.
 - Partial results may update resources actually observed, but retain the previous complete-success timestamp and schedule an earlier retry.
 - Unique run owners plus atomic compare-and-set leases prevent overlapping source runs.
+- FastAPI only queues long work. A separate worker claims and renews run leases; a
+  separate scheduler inserts deduplicated due runs. Expired worker runs are failed and
+  safely replaced, retaining provider cursors.
 - `due=true` honors `next_due_at` and `cooldown_until`; 429 and provider failures use category-aware backoff.
 - Normal explicit retries also honor freshness/cooldown; `force=true` is an operator-only override.
 - HTTP `Retry-After` extends cooldown, and a rate-limit/block opens a provider-wide circuit so subsequent same-provider sources make zero requests.
@@ -111,8 +124,9 @@ complete/partial/429 outcomes. See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) before any
 - Mapping digital resources to TV ads/campaigns.
 - Expanded Meta variant capture behind "See summary details".
 
-Long crawls can be submitted through `POST /api/intelligence/crawl/queue`; a separate
-always-on scheduler process is still a deployment choice rather than part of the API process.
+Long crawls can be submitted through `POST /api/intelligence/crawl/queue`; they remain
+queued until `intel worker` claims them. `intel scheduler` is an optional independent
+process and is never started automatically by ARGUS.
 
 ## Verify
 
@@ -123,4 +137,4 @@ black --check ad_classifier/intelligence_crawler tests/intelligence_crawler
 npm --prefix frontend run build
 ```
 
-Current crawler test count as of this update: **125 passing tests**.
+Current focused verification: **133 intelligence-crawler tests passed**.

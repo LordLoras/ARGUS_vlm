@@ -258,6 +258,9 @@ def source_run_dict(row: sqlite3.Row) -> dict:
 
 
 def crawl_run_dict(row: sqlite3.Row) -> dict:
+    request = loads_dict(row_get(row, "request_json")) or {}
+    if not request:
+        request = (loads_dict(row["summary_json"]) or {}).get("request", {})
     return {
         "run_id": str(row["id"]),
         "status": str(row["status"]),
@@ -268,6 +271,12 @@ def crawl_run_dict(row: sqlite3.Row) -> dict:
         "signal_count": int(row["signal_count"] or 0),
         "error": row["error"],
         "summary": loads_dict(row["summary_json"]) or {},
+        "request": request,
+        "idempotency_key": row_get(row, "idempotency_key"),
+        "lease_owner": row_get(row, "lease_owner"),
+        "lease_until": parse_iso(row_get(row, "lease_until")),
+        "heartbeat_at": parse_iso(row_get(row, "heartbeat_at")),
+        "attempt_count": int(row_get(row, "attempt_count") or 0),
     }
 
 

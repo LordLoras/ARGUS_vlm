@@ -21,19 +21,6 @@ from ad_classifier.intelligence_crawler.timeutils import iso, parse_iso
 
 
 class LedgerRepositoryMixin:
-    def queue_run(self, conn: sqlite3.Connection, run_id: str, request: dict) -> None:
-        conn.execute(
-            "INSERT INTO intel_crawl_runs (id, status, summary_json) VALUES (?, 'queued', ?)",
-            (run_id, to_json({"request": request})),
-        )
-
-    def start_run(self, conn: sqlite3.Connection, run_id: str) -> None:
-        conn.execute(
-            "UPDATE intel_crawl_runs SET status='running', started_at=datetime('now') "
-            "WHERE id=? AND status='queued'",
-            (run_id,),
-        )
-
     def insert_observation(
         self, conn: sqlite3.Connection, observation: IntelResourceObservation
     ) -> None:
@@ -228,8 +215,9 @@ class LedgerRepositoryMixin:
         conn.execute(
             """
             UPDATE intel_crawl_runs SET status = ?, finished_at = datetime('now'),
-              source_count = ?, resource_count = ?, signal_count = ?, summary_json = ?, error = ?
-            WHERE id = ?
+              source_count = ?, resource_count = ?, signal_count = ?, summary_json = ?, error = ?,
+              lease_owner = NULL, lease_until = NULL
+            WHERE id = ? AND status = 'running'
             """,
             (status, source_count, resource_count, signal_count, to_json(summary), error, run_id),
         )

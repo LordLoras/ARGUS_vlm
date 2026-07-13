@@ -33,6 +33,7 @@ def test_paths_resolve_relative_to_yaml(tmp_path, monkeypatch):
     cfg = load_intel_config(path)
     assert cfg.db_path == (tmp_path / "intel.db").resolve()
     assert cfg.cache_dir == (tmp_path / "cache").resolve()
+    assert cfg.service.snapshot_dir == (tmp_path / "output/intelligence_crawler").resolve()
 
 
 def test_disabled_by_default_and_lookups(tmp_path):

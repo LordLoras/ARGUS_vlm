@@ -123,6 +123,21 @@ class WatchlistConfig(BaseModel):
     seed_brands: list[str] = Field(default_factory=list)
 
 
+class ServiceConfig(BaseModel):
+    """Runtime settings for the opt-in crawler worker and scheduler processes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worker_poll_seconds: float = Field(default=2.0, ge=0.1)
+    scheduler_poll_seconds: float = Field(default=60.0, ge=1.0)
+    run_lease_seconds: int = Field(default=300, ge=30)
+    heartbeat_seconds: float = Field(default=15.0, ge=1.0)
+    heartbeat_stale_seconds: int = Field(default=180, ge=5)
+    max_run_attempts: int = Field(default=5, ge=1)
+    snapshot_dir: Path = Path("./output/intelligence_crawler")
+    write_snapshots_after_run: bool = True
+
+
 class IntelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -135,6 +150,7 @@ class IntelConfig(BaseModel):
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     watchlist: WatchlistConfig = Field(default_factory=WatchlistConfig)
+    service: ServiceConfig = Field(default_factory=ServiceConfig)
     sources: list[SourceConfig] = Field(default_factory=list)
 
     def enabled_sources(self) -> list[SourceConfig]:
@@ -162,6 +178,10 @@ def _resolve_paths(config: IntelConfig, base: Path) -> IntelConfig:
         updates["db_path"] = (base / config.db_path).resolve()
     if not config.cache_dir.is_absolute():
         updates["cache_dir"] = (base / config.cache_dir).resolve()
+    if not config.service.snapshot_dir.is_absolute():
+        updates["service"] = config.service.model_copy(
+            update={"snapshot_dir": (base / config.service.snapshot_dir).resolve()}
+        )
     graph_path = config.watchlist.entity_graph_db_path
     if graph_path is not None and not graph_path.is_absolute():
         updates["watchlist"] = config.watchlist.model_copy(

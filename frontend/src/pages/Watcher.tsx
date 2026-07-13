@@ -147,7 +147,7 @@ function formatConfidence(value: number) {
 }
 
 export function Watcher() {
-  const health = useApiHealth();
+  const apiHealth = useApiHealth();
   const queryClient = useQueryClient();
 
   const [brandSearch, setBrandSearch] = useState("");
@@ -163,6 +163,7 @@ export function Watcher() {
   const [resourceAdapterFilter, setResourceAdapterFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<IntelCrawlSummary | null>(null);
+  const [queuedSourceId, setQueuedSourceId] = useState<string | null>(null);
 
   const adaptersQuery = useQuery({
     queryKey: ["intel-adapters"],
@@ -190,6 +191,18 @@ export function Watcher() {
     queryKey: ["intel-resources", selectedBrand],
     queryFn: () => api.listIntelResources({ brand: selectedBrand ?? undefined, limit: 200 }),
     enabled: Boolean(selectedBrand)
+  });
+  const crawlerHealthQuery = useQuery({
+    queryKey: ["intel-health"],
+    queryFn: () => api.getIntelHealth(),
+    refetchInterval: 10_000
+  });
+  const activeRun = Boolean(lastRun && ["queued", "running"].includes(lastRun.status));
+  const runQuery = useQuery({
+    queryKey: ["intel-run", lastRun?.run_id],
+    queryFn: () => api.getIntelRun(lastRun?.run_id ?? ""),
+    enabled: Boolean(lastRun?.run_id && activeRun),
+    refetchInterval: 2_000
   });
 
   const adapters = adaptersQuery.data?.items?.length ? adaptersQuery.data.items : FALLBACK_ADAPTERS;
@@ -258,6 +271,15 @@ export function Watcher() {
     void queryClient.invalidateQueries({ queryKey: ["intel-resources"] });
   };
 
+  useEffect(() => {
+    if (!runQuery.data) return;
+    setLastRun(runQuery.data);
+    if (!["queued", "running"].includes(runQuery.data.status)) {
+      setQueuedSourceId(null);
+      invalidate();
+    }
+  }, [runQuery.data]);
+
   const createMutation = useMutation({
     mutationFn: () =>
       api.createIntelSource({
@@ -292,26 +314,25 @@ export function Watcher() {
     onError: (err) => setError(errorMessage(err))
   });
   const crawlSourceMutation = useMutation({
-    mutationFn: (sourceId: string) => api.crawlIntelSource(sourceId),
-    onSuccess: (summary) => {
+    mutationFn: (sourceId: string) => api.queueIntelSourceCrawl(sourceId),
+    onSuccess: (summary, sourceId) => {
       setError(null);
       setLastRun(summary);
-      invalidate();
+      setQueuedSourceId(sourceId);
     },
     onError: (err) => setError(errorMessage(err))
   });
   const crawlBrandMutation = useMutation({
-    mutationFn: (brandName: string) => api.runIntelCrawl({ due: true, brand: brandName }),
+    mutationFn: (brandName: string) => api.queueIntelCrawl({ due: true, brand: brandName }),
     onSuccess: (summary) => {
       setError(null);
       setLastRun(summary);
-      invalidate();
     },
     onError: (err) => setError(errorMessage(err))
   });
 
-  const crawlBusy = crawlBrandMutation.isPending || crawlSourceMutation.isPending;
-  const runningSourceId = crawlSourceMutation.isPending ? crawlSourceMutation.variables : null;
+  const crawlBusy = crawlBrandMutation.isPending || crawlSourceMutation.isPending || activeRun;
+  const runningSourceId = queuedSourceId;
 
   const onSourceTypeChange = (nextSourceType: string) => {
     const nextAdapter = adapters.find((adapter) => adapter.source_type === nextSourceType);
@@ -336,7 +357,7 @@ export function Watcher() {
   return (
     <>
       <Topbar crumbs={["Experimental", "Watcher"]} />
-      <ApiOfflineBanner offline={health.isError} />
+      <ApiOfflineBanner offline={apiHealth.isError} />
 
       <div className="page watcher-page">
         <section className="watcher-hero">
@@ -352,9 +373,34 @@ export function Watcher() {
             <Metric label="Brands" value={brands.length} />
             <Metric label="Sources" value={`${enabledCount}/${sources.length}`} />
             <Metric label="Resources" value={totalResources} />
-            {SHOW_SIGNALS ? <Metric label="Signals" value={signals.length} /> : null}
+            <Metric
+              label="Crawler health"
+              value={crawlerHealthQuery.data?.status ?? "checking"}
+            />
           </div>
         </section>
+
+        {crawlerHealthQuery.data ? (
+          <section className={`watcher-service-strip is-${crawlerHealthQuery.data.status}`}>
+            <div>
+              <span className="watcher-section-kicker">Service boundary</span>
+              <strong>
+                {crawlerHealthQuery.data.queue.running} running · {crawlerHealthQuery.data.queue.queued} queued
+              </strong>
+              <span>
+                {crawlerHealthQuery.data.issues[0]?.message ??
+                  "Worker, scheduler, queue, and providers are reporting normally."}
+              </span>
+            </div>
+            <div className="watcher-service-badges">
+              {crawlerHealthQuery.data.services.map((service) => (
+                <span className={`is-${service.status}`} key={service.service_name}>
+                  {service.service_name}: {service.status}
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="watcher-panel watcher-toolbar">
           <label className="watcher-search-field">
@@ -371,7 +417,7 @@ export function Watcher() {
             onClick={() => selectedBrand && crawlBrandMutation.mutate(selectedBrand)}
           >
             <CirclePlay size={14} />
-            <span>{crawlBrandMutation.isPending ? "Running brand" : "Run selected brand"}</span>
+            <span>{crawlBusy ? "Crawl queued / running" : "Queue selected brand"}</span>
           </button>
         </section>
 
@@ -718,7 +764,13 @@ function AdapterCapability({ adapter }: { adapter: IntelAdapterDescriptor }) {
 
 function RunDiagnostics({ summary }: { summary: IntelCrawlSummary }) {
   if (summary.items.length === 0) {
-    return <p className="watcher-run-note">No enabled sources were due for this run.</p>;
+    return (
+      <p className="watcher-run-note">
+        {summary.status === "queued" || summary.status === "running"
+          ? "Durably queued — the crawler worker will claim this run."
+          : "No enabled sources were due for this run."}
+      </p>
+    );
   }
   return (
     <div className="watcher-run-diagnostics">

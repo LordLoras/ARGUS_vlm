@@ -11,6 +11,8 @@ import typer
 
 from ad_classifier.intelligence_crawler.config import IntelConfig, load_intel_config
 from ad_classifier.intelligence_crawler.digest import build_digest
+from ad_classifier.intelligence_crawler.exports import write_resource_export
+from ad_classifier.intelligence_crawler.manager import IntelManager
 from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
     TOYOTA_META_AD_LIBRARY_URL,
     run_meta_ad_library_probe,
@@ -93,6 +95,74 @@ def crawl(
     typer.echo(summary.model_dump_json(indent=2))
 
 
+@intel_app.command("worker")
+def worker_service(
+    config: _ConfigOpt = None,
+    once: Annotated[
+        bool, typer.Option("--once", help="Claim and process at most one queued crawl.")
+    ] = False,
+) -> None:
+    """Run the independent durable crawler worker."""
+    from ad_classifier.intelligence_crawler.worker_service import IntelCrawlerWorker
+
+    service = IntelCrawlerWorker(_load(config))
+    if once:
+        typer.echo(json.dumps({"did_work": service.run_once()}))
+        return
+    try:
+        service.run_forever()
+    except KeyboardInterrupt:
+        service.stop()
+
+
+@intel_app.command("scheduler")
+def scheduler_service(
+    config: _ConfigOpt = None,
+    once: Annotated[
+        bool, typer.Option("--once", help="Evaluate due sources and enqueue at most one run.")
+    ] = False,
+) -> None:
+    """Run the independent due-source scheduler."""
+    from ad_classifier.intelligence_crawler.scheduler_service import IntelScheduler
+
+    service = IntelScheduler(_load(config))
+    if once:
+        typer.echo(json.dumps({"queued_run_id": service.run_once()}))
+        return
+    try:
+        service.run_forever()
+    except KeyboardInterrupt:
+        service.stop()
+
+
+@intel_app.command("export")
+def export_resources(
+    output: Annotated[Path, typer.Option("--output", "-o", help="Output .json or .jsonl path")],
+    config: _ConfigOpt = None,
+    format: Annotated[
+        str, typer.Option("--format", help="Latest-resource export format: json or jsonl.")
+    ] = "json",
+    brand: Annotated[str | None, typer.Option("--brand", help="Optional brand filter.")] = None,
+    source: Annotated[
+        str | None, typer.Option("--source", help="Optional source id filter.")
+    ] = None,
+    include_backfill: Annotated[bool, typer.Option("--include-backfill/--no-backfill")] = True,
+) -> None:
+    """Write an atomic, versioned latest-resource JSON export."""
+    if format not in {"json", "jsonl"}:
+        raise typer.BadParameter("format must be json or jsonl")
+    manager = IntelManager(_load(config))
+    path = write_resource_export(
+        manager,
+        output,
+        export_format=format,
+        brand=brand,
+        source_id=source,
+        include_backfill=include_backfill,
+    )
+    typer.echo(json.dumps({"output": str(path), "format": format}, indent=2))
+
+
 @intel_app.command("signals")
 def signals(
     config: _ConfigOpt = None,
@@ -131,8 +201,6 @@ def resolve(
     config: _ConfigOpt = None,
 ) -> None:
     """Resolve a source's brand to an advertiser/page id and persist it safely."""
-    from ad_classifier.intelligence_crawler.manager import IntelManager
-
     cfg = _load(config)
     updated = IntelManager(cfg).resolve_source(source)
     if updated is None:

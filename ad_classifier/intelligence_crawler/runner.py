@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime
@@ -10,14 +9,15 @@ from uuid import uuid4
 
 import structlog
 
-from ad_classifier.entity_graph.rows import to_json
 from ad_classifier.intelligence_crawler import dedup, detect, scoring
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.contract import resource_snapshot, snapshot_hash
 from ad_classifier.intelligence_crawler.diagnostics import (
     classify_exception,
     safe_traceback,
 )
 from ad_classifier.intelligence_crawler.ids import (
+    change_id,
     evidence_id,
     new_run_id,
     observation_id,
@@ -338,11 +338,11 @@ class IntelRunner:
 
     def _persist_resource(self, conn, decision, source, run_id, now) -> bool:
         resource = self._build_resource(decision, source, run_id, now)
+        previous_hash = self.repo.get_resource_snapshot_hash(conn, resource.id)
+        current_snapshot = resource_snapshot(resource)
+        current_hash = snapshot_hash(current_snapshot)
         inserted = self.repo.insert_resource(conn, resource)
         snapshot = resource.model_dump(mode="json", exclude={"metadata"})
-        payload_hash = hashlib.sha256(
-            to_json({"resource": snapshot, "metadata": resource.metadata}).encode("utf-8")
-        ).hexdigest()
         self.repo.insert_observation(
             conn,
             IntelResourceObservation(
@@ -351,11 +351,23 @@ class IntelRunner:
                 source_id=source.id,
                 run_id=run_id,
                 observed_at=now,
-                payload_hash=payload_hash,
+                payload_hash=current_hash,
                 resource=snapshot,
                 metadata=resource.metadata,
             ),
         )
+        if inserted or previous_hash != current_hash:
+            self.repo.insert_resource_change(
+                conn,
+                change_id=change_id(run_id, resource.id),
+                resource_id=resource.id,
+                source_id=source.id,
+                run_id=run_id,
+                change_type="created" if inserted else "updated",
+                changed_at=now,
+                content_hash=current_hash,
+                previous_content_hash=previous_hash,
+            )
         for asset in media_assets(resource):
             self.repo.upsert_media_asset(conn, asset)
         return inserted

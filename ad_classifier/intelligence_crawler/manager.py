@@ -11,10 +11,12 @@ from pathlib import Path
 
 import structlog
 
+from ad_classifier.intelligence_crawler import consumer_service
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.diagnostics import safe_traceback
 from ad_classifier.intelligence_crawler.digest import build_digest
 from ad_classifier.intelligence_crawler.google_crawl_state import checkpoint_summary
+from ad_classifier.intelligence_crawler.health import build_health
 from ad_classifier.intelligence_crawler.ids import new_run_id
 from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
@@ -220,6 +222,44 @@ class IntelManager:
                 offset=offset,
             )
 
+    def list_resources_page(
+        self,
+        *,
+        brand: str | None = None,
+        source_id: str | None = None,
+        include_backfill: bool = True,
+        limit: int = 50,
+        offset: int = 0,
+        cursor: str | None = None,
+    ) -> tuple[list[IntelResourceView], str | None]:
+        return consumer_service.list_resources_page(
+            self.repo,
+            brand=brand,
+            source_id=source_id,
+            include_backfill=include_backfill,
+            limit=limit,
+            offset=offset,
+            cursor=cursor,
+        )
+
+    def list_resource_changes(
+        self,
+        *,
+        since: datetime | None = None,
+        cursor: str | None = None,
+        brand: str | None = None,
+        source_id: str | None = None,
+        limit: int = 50,
+    ) -> tuple[list[dict], str | None]:
+        return consumer_service.list_resource_changes(
+            self.repo,
+            since=since,
+            cursor=cursor,
+            brand=brand,
+            source_id=source_id,
+            limit=limit,
+        )
+
     def count_resources(
         self,
         *,
@@ -270,16 +310,44 @@ class IntelManager:
         source_id: str | None = None,
         brand: str | None = None,
         force: bool = False,
+        idempotency_key: str | None = None,
+        origin: str = "api",
     ) -> CrawlRunSummary:
         run_id = new_run_id()
+        request = {
+            "due": due,
+            "source_id": source_id,
+            "brand": brand,
+            "force": force,
+            "origin": origin,
+        }
         with self.repo.connect() as conn:
-            self.repo.queue_run(
+            run_id = self.repo.queue_run(
                 conn,
                 run_id,
-                {"due": due, "source_id": source_id, "brand": brand, "force": force},
+                request,
+                idempotency_key=idempotency_key,
             )
             conn.commit()
-        return CrawlRunSummary(run_id=run_id, status="queued")
+            stored = self.repo.get_run(conn, run_id)
+        status = stored["status"] if stored else "queued"
+        return CrawlRunSummary(run_id=run_id, status=status)
+
+    def retry_run(self, run_id: str) -> CrawlRunSummary | None:
+        with self.repo.connect(readonly=True) as conn:
+            existing = self.repo.get_run(conn, run_id)
+        if existing is None:
+            return None
+        if existing["status"] in {"queued", "running"}:
+            return CrawlRunSummary(run_id=run_id, status=existing["status"])
+        request = existing.get("request") or {}
+        return self.queue_crawl(
+            due=bool(request.get("due")),
+            source_id=request.get("source_id"),
+            brand=request.get("brand"),
+            force=bool(request.get("force")),
+            origin="retry",
+        )
 
     def run_queued_crawl(
         self,
@@ -317,6 +385,9 @@ class IntelManager:
                     error="Crawler setup failed; inspect structured logs.",
                 )
                 conn.commit()
+
+    def health(self) -> dict:
+        return build_health(self.config, self.repo)
 
     def resource_screenshot_path(self, resource_id: str) -> Path | None:
         """Locate a resource's card-screenshot file for serving over the API.

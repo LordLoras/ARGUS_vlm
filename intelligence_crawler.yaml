@@ -10,6 +10,18 @@ db_path: ./intelligence_crawler.db
 cache_dir: ./data/intelligence_crawler_cache
 market: US
 
+# These are opt-in process settings. Nothing is installed as a Windows service or
+# started automatically; run `ad-classifier intel worker` and `... scheduler` when ready.
+service:
+  worker_poll_seconds: 2
+  scheduler_poll_seconds: 60
+  run_lease_seconds: 300
+  heartbeat_seconds: 15
+  heartbeat_stale_seconds: 180
+  max_run_attempts: 5
+  snapshot_dir: ./output/intelligence_crawler
+  write_snapshots_after_run: true
+
 http:
   respect_robots_txt: true
   timeout_s: 12.0

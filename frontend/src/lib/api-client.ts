@@ -42,9 +42,11 @@ import type {
 import type {
   IntelAdapterDescriptor,
   IntelBrandOverview,
+  IntelCrawlRun,
   IntelCrawlSummary,
   IntelDigestEntry,
   IntelResource,
+  IntelHealth,
   IntelSignal,
   IntelSource,
   IntelSourceCreate,
@@ -583,6 +585,12 @@ export const api = {
       { method: "POST" }
     ),
 
+  queueIntelSourceCrawl: (sourceId: string, force = false) =>
+    apiFetch<IntelCrawlSummary>(
+      `/api/intelligence/sources/${encodeURIComponent(sourceId)}/crawl/queue${params({ force })}`,
+      { method: "POST" }
+    ),
+
   runIntelCrawl: (
     body: { due?: boolean; source_id?: string; brand?: string; force?: boolean } = {}
   ) =>
@@ -590,6 +598,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ due: true, ...body })
     }),
+
+  queueIntelCrawl: (
+    body: { due?: boolean; source_id?: string; brand?: string; force?: boolean } = {}
+  ) =>
+    apiFetch<IntelCrawlSummary>("/api/intelligence/crawl/queue", {
+      method: "POST",
+      body: JSON.stringify({ due: true, ...body })
+    }),
+
+  getIntelRun: async (runId: string): Promise<IntelCrawlSummary> => {
+    const run = await apiFetch<IntelCrawlRun>(
+      `/api/intelligence/runs/${encodeURIComponent(runId)}`
+    );
+    return { ...run, items: run.sources ?? [] };
+  },
+
+  getIntelHealth: () => apiFetch<IntelHealth>("/api/intelligence/health"),
 
   listIntelSignals: (
     query: { brand?: string; since?: string; status?: string; limit?: number } = {}

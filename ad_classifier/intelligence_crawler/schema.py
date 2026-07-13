@@ -65,7 +65,13 @@ CREATE TABLE IF NOT EXISTS intel_crawl_runs (
   resource_count INTEGER NOT NULL DEFAULT 0,
   signal_count INTEGER NOT NULL DEFAULT 0,
   error TEXT,
-  summary_json TEXT NOT NULL DEFAULT '{}'
+  summary_json TEXT NOT NULL DEFAULT '{}',
+  request_json TEXT NOT NULL DEFAULT '{}',
+  idempotency_key TEXT,
+  lease_owner TEXT,
+  lease_until TEXT,
+  heartbeat_at TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_intel_runs_status ON intel_crawl_runs(status, started_at);
@@ -91,6 +97,7 @@ CREATE TABLE IF NOT EXISTS intel_resources (
   has_variants INTEGER NOT NULL DEFAULT 0,
   thumbnail_url TEXT,
   duration_ms INTEGER,
+  snapshot_hash TEXT,
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -158,6 +165,29 @@ CREATE INDEX IF NOT EXISTS idx_intel_observations_resource
   ON intel_resource_observations(resource_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_intel_observations_source
   ON intel_resource_observations(source_id, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS intel_resource_changes (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL REFERENCES intel_resources(id) ON DELETE CASCADE,
+  source_id TEXT NOT NULL REFERENCES intel_sources(id),
+  run_id TEXT NOT NULL REFERENCES intel_crawl_runs(id),
+  change_type TEXT NOT NULL CHECK (change_type IN ('created','updated')),
+  changed_at TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  previous_content_hash TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_intel_resource_changes_feed
+  ON intel_resource_changes(changed_at, id);
+
+CREATE TABLE IF NOT EXISTS intel_service_heartbeats (
+  service_name TEXT PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  activity TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  heartbeat_at TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
 
 CREATE TABLE IF NOT EXISTS intel_campaign_groups (
   id TEXT PRIMARY KEY,
@@ -300,6 +330,48 @@ def initialize_intelligence_crawler_db(path: Path) -> list[str]:
                 "INSERT OR IGNORE INTO intel_migrations (version) VALUES ('004_crawl_resume')"
             )
             migrations.append("004_crawl_resume")
+        if "005_service_runtime" not in applied:
+            run_additions = (
+                ("request_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("idempotency_key", "TEXT"),
+                ("lease_owner", "TEXT"),
+                ("lease_until", "TEXT"),
+                ("heartbeat_at", "TEXT"),
+                ("attempt_count", "INTEGER NOT NULL DEFAULT 0"),
+            )
+            for column, ddl in run_additions:
+                if not _column_exists(conn, "intel_crawl_runs", column):
+                    conn.execute(f"ALTER TABLE intel_crawl_runs ADD COLUMN {column} {ddl}")
+            if not _column_exists(conn, "intel_resources", "snapshot_hash"):
+                conn.execute("ALTER TABLE intel_resources ADD COLUMN snapshot_hash TEXT")
+            conn.executescript("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_intel_runs_idempotency
+                  ON intel_crawl_runs(idempotency_key) WHERE idempotency_key IS NOT NULL;
+                CREATE TABLE IF NOT EXISTS intel_resource_changes (
+                  id TEXT PRIMARY KEY,
+                  resource_id TEXT NOT NULL REFERENCES intel_resources(id) ON DELETE CASCADE,
+                  source_id TEXT NOT NULL REFERENCES intel_sources(id),
+                  run_id TEXT NOT NULL REFERENCES intel_crawl_runs(id),
+                  change_type TEXT NOT NULL CHECK (change_type IN ('created','updated')),
+                  changed_at TEXT NOT NULL,
+                  content_hash TEXT NOT NULL,
+                  previous_content_hash TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_intel_resource_changes_feed
+                  ON intel_resource_changes(changed_at, id);
+                CREATE TABLE IF NOT EXISTS intel_service_heartbeats (
+                  service_name TEXT PRIMARY KEY,
+                  instance_id TEXT NOT NULL,
+                  activity TEXT NOT NULL,
+                  started_at TEXT NOT NULL,
+                  heartbeat_at TEXT NOT NULL,
+                  metadata_json TEXT NOT NULL DEFAULT '{}'
+                );
+                """)
+            conn.execute(
+                "INSERT OR IGNORE INTO intel_migrations (version) VALUES ('005_service_runtime')"
+            )
+            migrations.append("005_service_runtime")
         conn.commit()
         return migrations
     finally:
