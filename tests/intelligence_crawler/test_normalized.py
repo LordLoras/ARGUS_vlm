@@ -100,7 +100,7 @@ def test_google_ad_transparency_payload_normalizes_to_cross_provider_shape():
 def test_meta_ui_metadata_normalizes_default_variant_and_artifacts():
     metadata = {
         "source": "meta_ad_library_ui",
-        "source_url": "https://www.facebook.com/ads/library/?active_status=all&id=123",
+        "source_url": "https://www.facebook.com/ads/library/?active_status=all&country=US&id=123",
         "library_id": "123",
         "status": "Active",
         "started_running": "Jun 10, 2026",
@@ -153,6 +153,7 @@ def test_meta_ui_metadata_normalizes_default_variant_and_artifacts():
     assert normalized.creative.status == "Active"
     assert normalized.creative.variant_count == 2
     assert normalized.creative.has_variants is True
+    assert normalized.collection.requested_region_code == "US"
 
     variant = normalized.variants[0]
     assert variant.label == "Default creative"

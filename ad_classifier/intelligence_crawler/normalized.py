@@ -54,7 +54,7 @@ def build_normalized_resource(
     source_url = _first_str(metadata, "source_url", "startUrl", "start_url") or url
     delivery = _delivery_summary(metadata)
     requested_region = _first_str(
-        metadata, "requested_region", "requestedRegion", "region"
+        metadata, "requested_region", "requestedRegion", "region", "country"
     ) or _region_from_url(source_url)
     advertiser_name = _first_str(metadata, "advertiser_name", "advertiserName") or brand_name
     creative_id = _first_str(metadata, "creativeId", "creative_id", "library_id") or platform_id
@@ -405,7 +405,7 @@ def _region_from_url(url: str | None) -> str | None:
         return None
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
-    for key in ("region", "regionCode", "region_code"):
+    for key in ("region", "regionCode", "region_code", "country", "countryCode", "country_code"):
         values = query.get(key)
         if values:
             return _clean_str(values[0])
