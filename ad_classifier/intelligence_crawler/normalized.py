@@ -270,10 +270,6 @@ def _delivery_summary(metadata: dict) -> IntelDeliverySummary:
                 surfaces=_surfaces(item),
             )
         )
-    if not regions:
-        region_code = _first_str(metadata, "region", "regionCode", "region_code")
-        if region_code:
-            regions.append(IntelDeliveryRegion(region_code=region_code))
     return IntelDeliverySummary(regions=regions)
 
 

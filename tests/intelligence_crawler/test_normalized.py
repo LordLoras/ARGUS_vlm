@@ -164,3 +164,30 @@ def test_meta_ui_metadata_normalizes_default_variant_and_artifacts():
         ("video", "creative"),
         ("landing_page", "clickout"),
     }
+
+
+def test_us_requested_region_does_not_create_delivery_region_without_stats():
+    normalized = build_normalized_resource(
+        source_type="google_atc",
+        brand_name="McDonald's",
+        resource_type="atc_ad",
+        url="https://adstransparency.google.com/advertiser/AR16079427970682322945",
+        platform="google",
+        platform_id="CR123",
+        title="McDonald's ATC creative CR123",
+        description=None,
+        published_at=None,
+        fetched_at=NOW,
+        variant_count=None,
+        has_variants=False,
+        metadata={
+            "source": "google_atc",
+            "region": "US",
+            "advertiser_id": "AR16079427970682322945",
+            "advertiser_name": "McDonald's Corporation",
+        },
+        artifacts=[],
+    )
+
+    assert normalized.collection.requested_region_code == "US"
+    assert normalized.delivery.regions == []

@@ -107,7 +107,7 @@ Each resource returned by `GET /api/intelligence/resources` includes:
 
 | Field | Meaning |
 |---|---|
-| `regions` | Provider delivery regions. Empty when unknown. A single region with only `region_code` may be present when the adapter only knows the requested market. |
+| `regions` | Provider delivery regions. Empty when unknown. Do not populate this from the requested crawl market alone. |
 
 ## `normalized.delivery.regions[]`
 
@@ -164,7 +164,7 @@ or other region VMs. For current single-region crawls, use:
 
 ```json
 {
-  "delivery": { "regions": [{ "region_code": "US" }] },
+  "delivery": { "regions": [] },
   "collection": {
     "requested_region_code": "US",
     "collector_region_code": null,
