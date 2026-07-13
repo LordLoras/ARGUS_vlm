@@ -1,5 +1,8 @@
 # Intelligence Crawler Normalized Ad Schema
 
+> Last updated 2026-07-13. This is the current API contract for
+> `GET /api/intelligence/resources`.
+
 This is the API-facing ad-resource shape for digital ad library captures. It is
 computed at read time from `intel_resources` columns plus the raw adapter payload
 stored in `metadata_json`.
@@ -15,6 +18,9 @@ Each resource returned by `GET /api/intelligence/resources` includes:
   we have not normalized yet. It should not be the primary contract for analysis.
 - `normalized`: stable cross-provider data. This is what API clients, campaign
   analysis, and later TV-ad matching should prefer.
+
+`normalized` is not persisted as a separate DB column. Improvements to the normalizer
+apply to existing resource rows as soon as the API reads them.
 
 ## Top-level resource fields
 

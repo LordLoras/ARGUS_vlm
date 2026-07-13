@@ -31,6 +31,8 @@ Implemented surfaces:
   `candidate podium`, `small disclaimer`, or `product hero shot`
 - group related ads into campaigns
 - ask a tool-calling natural-language agent questions over the local database
+- collect digital ad-library creatives through the intelligence crawler Watcher
+  and expose raw provider metadata plus normalized cross-provider JSON
 
 ## Implemented Components
 
@@ -39,6 +41,7 @@ The repository includes the following runnable surfaces and local assets:
 | Area | Implementation |
 |---|---|
 | Multimodal evidence records | Frame samples, transcript segments, raw OCR, optional GLM-OCR text, rule triggers, VLM evidence, and marketing entities. |
+| Intelligence crawler / Watcher | `/experimental/watcher` manages Google Ads Transparency and Meta Ad Library sources, stores raw provider payloads/artifacts in `intelligence_crawler.db`, and returns normalized resource JSON through `/api/intelligence/resources`. |
 | Model benchmark page | `/benchmark` renders measured OpenRouter or OpenAI-compatible endpoint calls against five existing ad artifacts, with score, latency, token, cost, and per-ad breakdowns. |
 | Local transcription fallback | Git LFS includes the Windows whisper.cpp runtime and `ggml-tiny.en.bin` for immediate local transcription after setup. |
 | Application workflows | Library review, hybrid search, visual frame search, campaign grouping, campaign research, and a read-only natural-language agent. |
