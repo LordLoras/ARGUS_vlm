@@ -70,6 +70,11 @@ sources:
       # Google ends it or rejects a request. Image creatives carry no preview_url,
       # so they don't consume this budget.
       preview_enrichment_limit: 400
+      # Daily runs scan newest-first and stop after three fully-known pages. Every 72h a
+      # full reconciliation scans to Google's end; interrupted scans resume for up to 24h.
+      unchanged_pages_before_stop: 3
+      full_reconcile_hours: 72
+      checkpoint_ttl_hours: 24
 
   - id: jeep_atc
     brand: Jeep

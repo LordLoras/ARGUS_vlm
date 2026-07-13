@@ -44,7 +44,7 @@ def test_google_ad_transparency_payload_normalizes_to_cross_provider_shape():
             }
         ],
         "startUrl": (
-            "https://adstransparency.google.com/advertiser/" "AR08888592736429539329region=DE"
+            "https://adstransparency.google.com/advertiser/AR08888592736429539329region=DE"
         ),
         "targeting": {"targetingCategory": {"demographics": {"1": True, "2": False}}},
         "variations": [

@@ -730,6 +730,8 @@ function RunDiagnostics({ summary }: { summary: IntelCrawlSummary }) {
             <span>
               {item.outcome ?? item.status}
               {item.failure_category ? ` · ${friendlyCause(item.failure_category)}` : ""}
+              {item.scan_mode ? ` · ${item.scan_mode} scan` : ""}
+              {item.checkpoint_page ? ` · checkpoint page ${item.checkpoint_page}` : ""}
               {item.reason ? ` · ${item.reason}` : ""}
             </span>
           </div>
@@ -777,13 +779,17 @@ function SourceRow({
         <span>Tier {source.tier}</span>
         <span>{sourceStateLabel(source)}</span>
         <span>{source.enabled ? "enabled" : "disabled"}</span>
+        {status?.resume_available ? <span>resume page {status.resume_page ?? "?"}</span> : null}
+        {status?.provider_circuit ? <span>provider paused</span> : null}
       </div>
       <div className="watcher-source-health">
         <span className="watcher-health-dot" aria-hidden="true" />
         <div>
           <strong>{healthLabel(health)}</strong>
           <span>
-            {diagnostic
+            {status?.provider_circuit
+              ? `Provider circuit open until ${formatDate(status.provider_circuit.open_until)}`
+              : diagnostic
               ? `${friendlyCause(diagnostic.category)} · ${diagnostic.message}`
               : sourceHealthDetail(status)}
           </span>
@@ -793,7 +799,9 @@ function SourceRow({
       <div className="watcher-source-actions">
         <button className="watcher-card-action" disabled={crawlBusy} onClick={onRun}>
           <CirclePlay size={14} />
-          <span>{isRunning ? "Running" : "Run"}</span>
+          <span>
+            {isRunning ? "Running" : status?.resume_available ? "Retry / resume" : "Run"}
+          </span>
         </button>
         <button className="watcher-card-action" onClick={onToggle}>
           {source.enabled ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}

@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
+from urllib.error import HTTPError
 
 import structlog
 
@@ -31,13 +32,25 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     RpcFetch,
     default_preview_fetch,
     default_rpc_fetch,
-    parse_preview_artifacts,
     search_creatives_result,
+)
+from ad_classifier.intelligence_crawler.google_crawl_state import (
+    after_success,
+    checkpoint_summary,
+    clear_checkpoint,
+    is_known_unchanged,
+    plan_scan,
+    preview_needs_refresh,
+    with_checkpoint,
+)
+from ad_classifier.intelligence_crawler.google_creatives import (
+    creative_to_item,
+    enrich_preview_artifacts,
+    latest_published,
 )
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
     PollDiagnostic,
-    RawSourceItem,
     SourcePollResult,
     SourceState,
     Tier,
@@ -47,14 +60,13 @@ from ad_classifier.intelligence_crawler.sources.base import register_source
 logger = structlog.get_logger(__name__)
 
 GOOGLE_ATC_SOURCE_TYPE = "google_atc"
-_ADVERTISER_URL = "https://adstransparency.google.com/advertiser/{adv}?region=US"
-_CREATIVE_URL = "https://adstransparency.google.com/advertiser/{adv}/creative/{cid}?region=US"
 # Politeness pauses between consecutive live requests. An uncapped poll can make hundreds
 # of RPC pages and preview fetches; an unthrottled burst earns an HTTP 429.
 _RPC_PAGE_DELAY_S = 0.75
 _PREVIEW_FETCH_DELAY_S = 0.4
 
 Sleep = Callable[[float], None]
+CheckpointSink = Callable[[dict], None]
 
 
 @register_source(GOOGLE_ATC_SOURCE_TYPE)
@@ -85,6 +97,11 @@ class GoogleAtcAdapter:
             self._fetch = None  # injected feed client → no implicit network
             self._preview_fetch = preview_fetch
             self._sleep = sleep or (lambda _s: None)
+        self._checkpoint_sink: CheckpointSink | None = None
+
+    def set_checkpoint_sink(self, sink: CheckpointSink | None) -> None:
+        """Install the runner's durable per-page state writer."""
+        self._checkpoint_sink = sink
 
     def poll(self, source: IntelSource, state: SourceState, *, now: datetime) -> SourcePollResult:
         advertiser_id = (source.platform_id or "").strip()
@@ -118,6 +135,59 @@ class GoogleAtcAdapter:
         page_size = _int_config(source.config.get("page_size"), default=40, minimum=1, maximum=100)
         max_pages = _page_limit_config(source.config)
         preview_limit = _preview_limit(source)
+        full_reconcile_hours = _int_config(
+            source.config.get("full_reconcile_hours"), default=72, minimum=1, maximum=720
+        )
+        checkpoint_ttl_hours = _int_config(
+            source.config.get("checkpoint_ttl_hours"), default=24, minimum=1, maximum=168
+        )
+        unchanged_pages = _int_config(
+            source.config.get("unchanged_pages_before_stop"),
+            default=3,
+            minimum=1,
+            maximum=20,
+        )
+        plan = plan_scan(
+            state,
+            advertiser_id=advertiser_id,
+            region=US_REGION_CODE,
+            page_size=page_size,
+            now=now,
+            full_reconcile_hours=full_reconcile_hours,
+            checkpoint_ttl_hours=checkpoint_ttl_hours,
+            stop_after_unchanged_pages=unchanged_pages,
+        )
+        effective_mode = plan.checkpoint_mode if plan.mode == "resume" else plan.mode
+        effective_mode = effective_mode if effective_mode in {"full", "incremental"} else "full"
+        provider_state = state.provider_state
+        resume_present, _resume_page = checkpoint_summary(provider_state)
+        if plan.mode != "resume" and resume_present:
+            provider_state = clear_checkpoint(provider_state)
+            if self._checkpoint_sink is not None:
+                self._checkpoint_sink(provider_state)
+        checkpoint_offset = plan.prior_page_count
+
+        def persist_checkpoint(token: str, page_count: int, _request_count: int) -> None:
+            nonlocal provider_state
+            provider_state = with_checkpoint(
+                provider_state,
+                token=token,
+                fingerprint=plan.fingerprint,
+                mode=effective_mode,
+                page_count=checkpoint_offset + page_count,
+                now=now,
+            )
+            if self._checkpoint_sink is not None:
+                self._checkpoint_sink(provider_state)
+
+        known_predicate = None
+        stop_after_unchanged = 0
+        if effective_mode == "incremental":
+
+            def known_predicate(creative: dict) -> bool:
+                return is_known_unchanged(creative, plan.known_index)
+
+            stop_after_unchanged = plan.stop_after_unchanged_pages
         try:
             search = search_creatives_result(
                 advertiser_id,
@@ -125,9 +195,41 @@ class GoogleAtcAdapter:
                 region=US_REGION_CODE,
                 page_size=page_size,
                 max_pages=max_pages,
+                initial_after=plan.initial_after,
+                is_known_unchanged=known_predicate,
+                stop_after_unchanged_pages=stop_after_unchanged,
+                on_checkpoint=persist_checkpoint,
             )
         except Exception as exc:  # transport/parse failures are per-source, not fatal
             return _failed_poll(source.id, exc)
+
+        # Provider cursors are opaque and can expire. A rejected saved cursor is cleared and
+        # retried once from the head so a stale checkpoint can never wedge this source forever.
+        if plan.mode == "resume" and search.page_count == 0 and _checkpoint_rejected(search.error):
+            provider_state = clear_checkpoint(provider_state)
+            if self._checkpoint_sink is not None:
+                self._checkpoint_sink(provider_state)
+            first_requests = search.request_count
+            checkpoint_offset = 0
+            try:
+                fallback = search_creatives_result(
+                    advertiser_id,
+                    fetch=_throttled(self._fetch, _RPC_PAGE_DELAY_S, self._sleep),
+                    region=US_REGION_CODE,
+                    page_size=page_size,
+                    max_pages=max_pages,
+                    is_known_unchanged=known_predicate,
+                    stop_after_unchanged_pages=stop_after_unchanged,
+                    on_checkpoint=persist_checkpoint,
+                )
+                search = fallback.__class__(
+                    **{
+                        **fallback.__dict__,
+                        "request_count": first_requests + fallback.request_count,
+                    }
+                )
+            except Exception as exc:
+                return _failed_poll(source.id, exc)
 
         diagnostics: list[PollDiagnostic] = []
         if search.error is not None:
@@ -146,7 +248,11 @@ class GoogleAtcAdapter:
                 item_count=len(search.creatives),
                 traceback=safe_traceback(search.error),
             )
-        if search.continuation_remaining and search.error is None:
+        if (
+            search.continuation_remaining
+            and search.error is None
+            and not search.stopped_after_unchanged
+        ):
             diagnostics.append(
                 PollDiagnostic(
                     code="google_page_limit_reached",
@@ -169,38 +275,71 @@ class GoogleAtcAdapter:
                 diagnostics=diagnostics,
                 request_count=search.request_count,
                 page_count=search.page_count,
+                state_updates=provider_state,
+                scan_mode=plan.mode,
+                resumed=plan.mode == "resume",
+                checkpoint_page=plan.prior_page_count,
+                stop_reason="provider_error",
             )
 
+        # Known unchanged rows only need a freshness touch; they do not need another payload
+        # snapshot or preview request. New/changed/pending-preview creatives flow normally.
         creatives = search.creatives
+        verified_external_ids = [
+            str(creative["creative_id"])
+            for creative in creatives
+            if is_known_unchanged(creative, plan.known_index)
+            and not preview_needs_refresh(creative, plan.known_index)
+        ]
+        creatives = [
+            creative
+            for creative in creatives
+            if not is_known_unchanged(creative, plan.known_index)
+            or preview_needs_refresh(creative, plan.known_index)
+        ]
         preview_requests = 0
         # Once pagination is rejected (especially HTTP 429), make no more provider calls.
         # Successfully fetched pages are still persisted as an explicitly partial result.
         if search.error is None and self._preview_fetch is not None and preview_limit > 0:
-            creatives, preview_diagnostics, preview_requests = _enrich_preview_artifacts(
+            creatives, preview_diagnostics, preview_requests = enrich_preview_artifacts(
                 creatives,
                 preview_fetch=_throttled(self._preview_fetch, _PREVIEW_FETCH_DELAY_S, self._sleep),
                 limit=preview_limit,
+                known_index=plan.known_index,
             )
             diagnostics.extend(preview_diagnostics)
 
-        items = [_creative_to_item(source, advertiser_id, c) for c in creatives]
+        pagination_succeeded = search.error is None and search.complete
+        if pagination_succeeded:
+            provider_state = after_success(
+                provider_state,
+                mode=effective_mode,
+                reached_provider_end=not search.continuation_remaining,
+                now=now,
+            )
+            if self._checkpoint_sink is not None:
+                self._checkpoint_sink(provider_state)
+
+        items = [creative_to_item(source, advertiser_id, c) for c in creatives]
         complete = search.complete and not diagnostics
         outcome = "success" if items else "explicit_empty"
+        if not items and search.creatives:
+            outcome = "not_modified"
         if not complete:
             outcome = "partial"
         return SourcePollResult(
             source_id=source.id,
             items=items,
-            new_watermark=_latest_published(items) or state.watermark,
+            new_watermark=latest_published(items) or state.watermark,
             outcome=outcome,
             complete=complete,
-            truncated=search.continuation_remaining,
+            truncated=search.continuation_remaining and not search.stopped_after_unchanged,
             truncation_reason=(
                 "Google pagination was interrupted by a provider error."
                 if search.error is not None and search.continuation_remaining
                 else (
                     "Configured Google page limit reached before the continuation token ended."
-                    if search.continuation_remaining
+                    if search.continuation_remaining and not search.stopped_after_unchanged
                     else None
                 )
             ),
@@ -208,6 +347,14 @@ class GoogleAtcAdapter:
             request_count=search.request_count + preview_requests,
             page_count=search.page_count,
             provider_item_count=len(search.creatives),
+            verified_external_ids=verified_external_ids,
+            state_updates=provider_state,
+            scan_mode=plan.mode,
+            resumed=plan.mode == "resume",
+            checkpoint_page=(
+                checkpoint_offset + search.page_count if not pagination_succeeded else None
+            ),
+            stop_reason=_stop_reason(search),
         )
 
 
@@ -225,109 +372,27 @@ def _throttled(fn, delay_s: float, sleep: Sleep):
     return wrapper
 
 
-def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -> RawSourceItem:
-    cid = creative["creative_id"]
-    adv = creative.get("advertiser_id") or advertiser_id
-    url = _CREATIVE_URL.format(adv=adv, cid=cid)
-    raw_advertiser_name = creative.get("advertiser_name")
-    advertiser_name = _display_advertiser_name(raw_advertiser_name, source.brand_name)
-    # `preview_artifacts` is a dict only when the preview was actually fetched (possibly empty);
-    # absent when enrichment was skipped (budget/disabled) — the two must be distinguished.
-    preview_fetched = isinstance(creative.get("preview_artifacts"), dict)
-    preview_artifacts = creative.get("preview_artifacts")
-    preview_artifacts = preview_artifacts if isinstance(preview_artifacts, dict) else {}
-    # Inline image comes straight from the RPC (field 3.3.2) — no fetch needed. Merge it with
-    # anything the (best-effort) preview fetch found for hosted/video creatives.
-    inline_images = _list_artifact(creative, "image_sources")
-    image_sources = _dedupe_str(
-        [*inline_images, *_list_artifact(preview_artifacts, "image_sources")]
-    )
-    video_sources = _list_artifact(preview_artifacts, "video_sources")
-    video_posters = _list_artifact(preview_artifacts, "video_posters")
-    thumbnail_url = _first_present(video_posters, image_sources)
-    # Dynamic = we fetched the preview and it yielded no static image or video → a rich-media /
-    # HTML5 banner the ad server renders at run time. A video we simply didn't enrich is NOT
-    # dynamic, so require preview_fetched (not just the presence of a preview_url).
-    dynamic_creative = (
-        preview_fetched
-        and bool(creative.get("preview_url"))
-        and not image_sources
-        and not video_sources
-    )
-    display_format = "rich_media" if dynamic_creative else creative.get("format")
-    return RawSourceItem(
-        external_id=cid,
-        url=url,
-        canonical_url=url,
-        resource_type="atc_ad",
-        title=f"{advertiser_name} ATC creative {cid}",
-        description=_creative_description(creative.get("text")),
-        published_at=_epoch_to_dt(creative.get("first_shown")),
-        thumbnail_url=thumbnail_url,
-        raw={
-            "source": GOOGLE_ATC_SOURCE_TYPE,
-            "advertiser_id": adv,
-            "advertiser_name": advertiser_name,
-            "advertiser_name_raw": (
-                raw_advertiser_name if raw_advertiser_name != advertiser_name else None
-            ),
-            "advertiser_url": _ADVERTISER_URL.format(adv=adv),
-            "format_code": creative.get("format_code"),
-            "format": display_format,
-            "first_shown": creative.get("first_shown"),
-            "last_shown": creative.get("last_shown"),
-            "preview_url": creative.get("preview_url"),
-            "region": "US",
-            "has_inline_image": bool(inline_images),
-            "dynamic_creative": dynamic_creative,
-            "preview_enriched": bool(preview_artifacts),
-            "youtube_video_ids": _list_artifact(preview_artifacts, "youtube_video_ids"),
-            "image_sources": image_sources,
-            "video_sources": video_sources,
-            "video_posters": video_posters,
-            "links": _links_artifact(preview_artifacts),
-        },
-    )
+def _checkpoint_rejected(error: BaseException | None) -> bool:
+    return isinstance(error, HTTPError) and error.code in {400, 404, 410}
 
 
-def _enrich_preview_artifacts(
-    creatives: list[dict], *, preview_fetch: PreviewFetch, limit: int
-) -> tuple[list[dict], list[PollDiagnostic], int]:
-    enriched: list[dict] = []
-    diagnostics: list[PollDiagnostic] = []
-    fetched = 0
-    for creative in creatives:
-        next_creative = dict(creative)
-        preview_url = str(next_creative.get("preview_url") or "").strip()
-        if preview_url and fetched < limit:
-            fetched += 1
-            try:
-                script = preview_fetch(preview_url)
-                next_creative["preview_artifacts"] = parse_preview_artifacts(
-                    script, preview_url=preview_url
-                )
-            except Exception as exc:
-                diagnostic = classify_exception(
-                    exc, provider=GOOGLE_ATC_SOURCE_TYPE, phase="preview_asset"
-                )
-                diagnostics.append(
-                    diagnostic.model_copy(
-                        update={
-                            "code": "google_preview_asset_fetch_failed",
-                            "category": "asset_fetch",
-                            "message": (
-                                "Google preview asset fetch failed for creative "
-                                f"{creative.get('creative_id')}."
-                            ),
-                            "details": {"cause_category": diagnostic.category},
-                        }
-                    )
-                )
-        enriched.append(next_creative)
-    return enriched, diagnostics, fetched
+def _stop_reason(search) -> str:
+    if search.error is not None:
+        return "provider_error"
+    if search.stopped_after_unchanged:
+        return "unchanged_overlap"
+    if search.continuation_remaining:
+        return "page_limit"
+    return "provider_end"
 
 
 def _failed_poll(source_id: str, exc: BaseException) -> SourcePollResult:
+    logger.warning(
+        "google_poll_failed",
+        source_id=source_id,
+        stage="google_atc.creative_pages",
+        traceback=safe_traceback(exc),
+    )
     return SourcePollResult(
         source_id=source_id,
         outcome="failed",
@@ -337,20 +402,6 @@ def _failed_poll(source_id: str, exc: BaseException) -> SourcePollResult:
         ],
         request_count=1,
     )
-
-
-def _epoch_to_dt(value: int | None) -> datetime | None:
-    if value is None:
-        return None
-    try:
-        return datetime.fromtimestamp(int(value), tz=UTC)
-    except (OverflowError, OSError, ValueError):
-        return None
-
-
-def _latest_published(items: list[RawSourceItem]) -> str | None:
-    dates = [item.published_at for item in items if item.published_at is not None]
-    return max(dates).isoformat() if dates else None
 
 
 def _preview_limit(source: IntelSource) -> int:
@@ -393,57 +444,3 @@ def _int_config(value, *, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
-
-
-def _list_artifact(artifacts: dict, key: str) -> list[str]:
-    values = artifacts.get(key)
-    if not isinstance(values, list):
-        return []
-    return [str(value).strip() for value in values if str(value or "").strip()]
-
-
-def _links_artifact(artifacts: dict) -> list[dict[str, str]]:
-    values = artifacts.get("links")
-    if not isinstance(values, list):
-        return []
-    links: list[dict[str, str]] = []
-    for value in values:
-        if not isinstance(value, dict):
-            continue
-        href = str(value.get("href") or "").strip()
-        text = str(value.get("text") or "Link").strip()
-        if href:
-            links.append({"text": text, "href": href})
-    return links
-
-
-def _first_present(*groups: list[str]) -> str | None:
-    for group in groups:
-        if group:
-            return group[0]
-    return None
-
-
-def _dedupe_str(values: list[str]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        if value and value not in seen:
-            seen.add(value)
-            out.append(value)
-    return out
-
-
-def _creative_description(text: object) -> str | None:
-    """Ad copy recovered from the inline creative HTML (empty for image-only creatives)."""
-    if not isinstance(text, str):
-        return None
-    clean = " ".join(text.split()).strip()
-    return clean[:600] or None
-
-
-def _display_advertiser_name(value: object, fallback: str) -> str:
-    text = str(value or "").strip()
-    if not text or "\ufffd" in text:
-        return fallback
-    return text

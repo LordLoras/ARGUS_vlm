@@ -123,6 +123,21 @@ def test_digest_and_source_types(tmp_path):
 
 def test_brand_and_resource_artifact_endpoints(tmp_path):
     client = _client(tmp_path)
+    manager = client.app.state.intel_manager
+    with manager.repo.connect() as conn:
+        manager.repo.update_source_state(
+            conn,
+            "s1",
+            state_json={
+                "google_atc": {
+                    "checkpoint": {
+                        "token": "opaque-secret-cursor",
+                        "page_count": 8,
+                    }
+                }
+            },
+        )
+        conn.commit()
 
     brands = client.get("/api/intelligence/brands").json()["items"]
     toyota = next(item for item in brands if item["brand_name"] == "Toyota")
@@ -148,6 +163,10 @@ def test_brand_and_resource_artifact_endpoints(tmp_path):
     statuses = client.get("/api/intelligence/source-statuses").json()["items"]
     assert statuses[0]["source"]["id"] == "s1"
     assert statuses[0]["state"]["last_outcome"] is None
+    assert statuses[0]["resume_available"] is False
+    assert statuses[0]["resume_page"] is None
+    assert "provider_state" not in statuses[0]["state"]
+    assert "opaque-secret-cursor" not in str(statuses[0])
 
 
 def test_resource_screenshot_endpoint(tmp_path):

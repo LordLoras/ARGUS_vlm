@@ -40,7 +40,7 @@ successful observation of that resource. Media assets are projected into
 |---|---|
 | `POST /api/intelligence/crawl` | Synchronous bounded crawl; useful for CLI/demo actions. |
 | `POST /api/intelligence/crawl/queue` | Returns HTTP 202 with a `run_id`; executes after the response. Preferred for middleware and long Meta crawls. |
-| `POST /api/intelligence/sources/{source_id}/crawl` | Synchronous explicit-source crawl, even when disabled. |
+| `POST /api/intelligence/sources/{source_id}/crawl` | Synchronous explicit-source crawl, even when disabled; honors freshness/cooldown by default. |
 | `POST /api/intelligence/sources/{source_id}/crawl/queue` | Queued explicit-source crawl. |
 | `GET /api/intelligence/runs` | Recent crawl summaries. |
 | `GET /api/intelligence/runs/{run_id}` | Crawl plus every per-source outcome/diagnostic. |
@@ -51,6 +51,10 @@ Queued execution through FastAPI background tasks avoids holding a client connec
 but it is still in-process. For stronger crash recovery or multiple API replicas, run a
 separate local scheduler/worker that claims queued rows; the current ledger schema is
 already suitable for that evolution.
+
+All crawl payloads accept `force: false`. Keep the default for routine and UI-driven
+runs. `force: true` bypasses freshness, source cooldown, and provider-circuit guards and
+is intended only for deliberate operator recovery/testing; leases are never bypassed.
 
 ## Poll Outcomes
 
@@ -89,11 +93,17 @@ go only to structured logs.
 
 - `due=true` selects enabled, unarchived sources whose `next_due_at` and
   `cooldown_until` are due.
-- Explicit `source_id` runs bypass enabled/due selection for diagnosis.
+- Explicit `source_id` runs bypass enabled selection but return a durable
+  `source_not_due`, `source_cooldown_active`, or `provider_circuit_open` skipped result
+  without network traffic when guarded. Use `force=true` only deliberately.
 - Each crawl/source pair has a unique lease owner. Lease acquisition is one atomic
   compare-and-set update; a shared process name cannot re-enter a held lease.
 - Successful complete polls use the source interval. Partial polls retry sooner.
-  Rate limits and failures use category-aware bounded exponential backoff.
+  Rate limits and failures use category-aware bounded exponential backoff. A provider's
+  `Retry-After` header is persisted and wins when it requests a longer wait.
+- A rate-limit or access-block failure opens a provider-wide circuit until its persisted
+  cooldown. Remaining sources of that provider are logged as skipped without making a
+  request. Other provider families continue.
 - Archiving a source disables it and preserves current resources and history. If it is
   archived during a poll, the provider result is discarded.
 
@@ -116,6 +126,23 @@ mode by default. A provider interruption stops all remaining requests for that s
 retains earlier pages as a partial result, and records the machine-readable failure
 category and code in the run ledger.
 
+Google additionally uses three request-minimization/recovery layers:
+
+1. Every successful page durably stores the next opaque cursor and page number. A later
+   retry uses `scan_mode=resume`; a rejected/expired cursor is cleared and retried once
+   from page one.
+2. Normal incremental scans start at the newest page and stop after three consecutive
+   fully-known, signature-unchanged pages (`unchanged_pages_before_stop`). New or changed
+   ads still flow to the current projection; verified unchanged rows advance
+   `last_seen_at`/`fetched_at` without duplicating payload snapshots or refetching previews.
+3. A periodic full reconciliation (`full_reconcile_hours`, default 72) scans to provider
+   end so older changes or ordering anomalies are eventually observed. Checkpoints expire
+   after `checkpoint_ttl_hours` (default 24), preventing a stale cursor from wedging a source.
+
+Run rows expose `scan_mode`, `resumed`, `checkpoint_page`, and `stop_reason`; source status
+exposes only `resume_available`/`resume_page`, never the opaque cursor itself. A preview
+429/block stops the remaining preview burst immediately and opens the same circuit.
+
 ## Optional Mutation Authentication
 
 Read endpoints remain available for local consumers. If the environment variable named
@@ -130,6 +157,9 @@ for a loopback-only desktop demo; set it when exposing the service beyond localh
 2. Alert on `last_success_at` age, not merely `last_attempt_at`.
 3. Inspect `failure_category`, `error_code`, and `phase` before retrying.
 4. Use `/runs/{run_id}` for request/page/provider-item counts and truncation details.
-5. Inspect structured logs for the traceback; never expose them to API clients.
-6. Treat `explicit_empty` as healthy only because the adapter recognized a provider
+5. If `resume_available` is true, let cooldown expire and use normal Retry; the crawler
+   continues from the saved Google page. Old failures recorded before migration 004 have
+   no recoverable token and must restart from page one.
+6. Inspect structured logs for the traceback; never expose them to API clients.
+7. Treat `explicit_empty` as healthy only because the adapter recognized a provider
    empty state—an unrecognized blank page is `provider_ui_changed`/failed.

@@ -43,6 +43,8 @@ Core:
 - `repository.py` plus focused repository mixins — source state, latest resources, observations/runs, signals, and row projection.
 - `normalized.py` — cross-provider resource normalizer for Google, Meta, and future adapters.
 - `runner.py` + `run_policy.py` — source orchestration, atomic leasing, cold-start/backfill detection, scheduling, retry/cooldown, and idempotent refresh.
+- `request_guard.py` — freshness guard and provider-wide rate-limit/block circuit breaker.
+- `google_crawl_state.py` + `google_creatives.py` — durable Google cursors, incremental/full reconciliation planning, creative signatures, and preview reuse.
 - `diagnostics.py` — stable failure categories/codes for UI changes, response changes, 429s, blocking, transport, parse, request-limit, asset, and configuration failures.
 - `manager.py` — API-facing facade and source adapter factory.
 - `watchlist.py`, `detect.py`, `dedup.py`, `scoring.py`, `digest.py` — watchlist, newness detection, grouping, confidence, digest.
@@ -82,16 +84,11 @@ Important current behavior:
 
 ## Current Demo State
 
-The local demo DB was reset on 2026-07-13 and repopulated with one brand:
-
-| Brand | Source | Resources |
-|---|---|---:|
-| McDonald's | Google Ads Transparency Center | 9 |
-| McDonald's | Meta Ad Library | 172 |
-
-Both McDonald's sources are enabled in the DB. Other seed sources remain available but have
-zero resources until crawled again. See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) for how to
-demo or refresh this data without triggering broad Google 429 risk.
+The 2026-07-13 ten-brand exercise left **10,500 latest resources** in the local DB:
+9 Google McDonald's creatives, 9,217 Google Samsung creatives, and 1,274 Meta creatives
+across Apple, DoorDash, Duolingo, GEICO, McDonald's, Samsung, and Starbucks. Sources were
+returned to their pre-run disabled state after collection. The run ledger preserves the
+complete/partial/429 outcomes. See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) before any live refresh.
 
 ## Reliability Notes
 
@@ -101,9 +98,11 @@ demo or refresh this data without triggering broad Google 429 risk.
 - Partial results may update resources actually observed, but retain the previous complete-success timestamp and schedule an earlier retry.
 - Unique run owners plus atomic compare-and-set leases prevent overlapping source runs.
 - `due=true` honors `next_due_at` and `cooldown_until`; 429 and provider failures use category-aware backoff.
+- Normal explicit retries also honor freshness/cooldown; `force=true` is an operator-only override.
+- HTTP `Retry-After` extends cooldown, and a rate-limit/block opens a provider-wide circuit so subsequent same-provider sources make zero requests.
 - Full tracebacks stay in structured logs. API/UI receive bounded diagnostic code, category, phase, HTTP status, and safe message.
 - Meta captures cards cumulatively while scrolling so virtualized cards are not lost, and reports configured collection limits as partial.
-- Google preserves successful earlier pages if a later page fails, and reports remaining continuation tokens as partial/request-limited.
+- Google checkpoints every successful page, resumes from that cursor after failure, performs low-request signature overlap scans between 72-hour full reconciliations, and reuses unchanged preview artifacts.
 
 ## Deliberate Non-goals
 
@@ -124,4 +123,4 @@ black --check ad_classifier/intelligence_crawler tests/intelligence_crawler
 npm --prefix frontend run build
 ```
 
-Current crawler test count as of this update: **112 passing tests**.
+Current crawler test count as of this update: **125 passing tests**.

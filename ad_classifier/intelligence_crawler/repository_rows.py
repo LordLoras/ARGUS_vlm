@@ -70,6 +70,7 @@ def state(row: sqlite3.Row) -> SourceState:
         last_error_code=row_get(row, "last_error_code"),
         cooldown_until=parse_iso(row_get(row, "cooldown_until")),
         last_diagnostics=[PollDiagnostic.model_validate(item) for item in diagnostics],
+        provider_state=loads_dict(row_get(row, "state_json")) or {},
     )
 
 
@@ -249,6 +250,10 @@ def source_run_dict(row: sqlite3.Row) -> dict:
         "page_count": int(row["page_count"] or 0),
         "provider_item_count": row["provider_item_count"],
         "next_due_at": parse_iso(row["next_due_at"]),
+        "scan_mode": row_get(row, "scan_mode"),
+        "resumed": bool(row_get(row, "resumed") or 0),
+        "checkpoint_page": row_get(row, "checkpoint_page"),
+        "stop_reason": row_get(row, "stop_reason"),
     }
 
 

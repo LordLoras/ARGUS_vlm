@@ -43,7 +43,8 @@ analysis axis for the demo.
 
 ```mermaid
 flowchart LR
-    A["Curated brand/source registry"] --> B["Adapter poll"]
+    A["Curated brand/source registry"] --> H["Freshness + provider-circuit guard"]
+    H --> B["Adapter poll / Google resume"]
     B --> C["Raw provider item"]
     C --> D["Cold-start/newness detection"]
     D --> E["Atomically update latest resource + append observation/run ledger"]
@@ -59,6 +60,8 @@ Key behavior:
 4. Provider-specific payloads stay in `metadata`.
 5. Consumers use `normalized` for one stable shape across Google, Meta, and future adapters.
 6. Provider failures have machine-readable causes; an incomplete result never advances the last-complete-success marker.
+7. Rate limits stop the same-provider batch, and Google commits a resume cursor after every page.
+8. Incremental overlap scans minimize requests; periodic full reconciliation catches older changes.
 
 ## What A Resource Represents
 
@@ -84,11 +87,7 @@ pipeline stage that consumes crawler resource JSON and artifacts.
 
 ## Demo Baseline
 
-Current local demo data is intentionally small and reliable:
-
-- McDonald's Google ATC: 9 resources.
-- McDonald's Meta Ad Library: 172 resources.
-- Both sources enabled.
-
-This avoids depending on a broad live Google crawl during a demo, where repeated ATC
-requests can trigger HTTP 429.
+The local DB preserves 10,500 resources from the ten-brand exercise, including 9,217
+Samsung Google creatives and cross-provider McDonald's/Samsung examples. All 17 seed
+sources are disabled after collection; Watcher still displays the cached resources and
+their complete/partial/429 run evidence without depending on live provider access.

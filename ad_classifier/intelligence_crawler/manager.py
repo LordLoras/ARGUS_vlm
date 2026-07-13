@@ -14,6 +14,7 @@ import structlog
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.diagnostics import safe_traceback
 from ad_classifier.intelligence_crawler.digest import build_digest
+from ad_classifier.intelligence_crawler.google_crawl_state import checkpoint_summary
 from ad_classifier.intelligence_crawler.ids import new_run_id
 from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
@@ -108,6 +109,9 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
             "max_pages": 0,
             "preview_enrichment": True,
             "preview_enrichment_limit": 40,
+            "unchanged_pages_before_stop": 3,
+            "full_reconcile_hours": 72,
+            "checkpoint_ttl_hours": 24,
         },
         provides=[
             "ATC creative IDs",
@@ -248,21 +252,31 @@ class IntelManager:
             return self.repo.get_run(conn, run_id)
 
     def run_crawl(
-        self, *, due: bool = False, source_id: str | None = None, brand: str | None = None
+        self,
+        *,
+        due: bool = False,
+        source_id: str | None = None,
+        brand: str | None = None,
+        force: bool = False,
     ) -> CrawlRunSummary:
         return IntelRunner(self.config, repo=self.repo).run(
-            due=due, source_id=source_id, brand=brand
+            due=due, source_id=source_id, brand=brand, force=force
         )
 
     def queue_crawl(
-        self, *, due: bool = False, source_id: str | None = None, brand: str | None = None
+        self,
+        *,
+        due: bool = False,
+        source_id: str | None = None,
+        brand: str | None = None,
+        force: bool = False,
     ) -> CrawlRunSummary:
         run_id = new_run_id()
         with self.repo.connect() as conn:
             self.repo.queue_run(
                 conn,
                 run_id,
-                {"due": due, "source_id": source_id, "brand": brand},
+                {"due": due, "source_id": source_id, "brand": brand, "force": force},
             )
             conn.commit()
         return CrawlRunSummary(run_id=run_id, status="queued")
@@ -274,10 +288,15 @@ class IntelManager:
         due: bool = False,
         source_id: str | None = None,
         brand: str | None = None,
+        force: bool = False,
     ) -> None:
         try:
             IntelRunner(self.config, repo=self.repo).run(
-                due=due, source_id=source_id, brand=brand, run_id=run_id
+                due=due,
+                source_id=source_id,
+                brand=brand,
+                run_id=run_id,
+                force=force,
             )
         except Exception as exc:
             logger.error(
@@ -338,7 +357,20 @@ class IntelManager:
                 return None
             state = self.repo.get_source_state(conn, source_id)
             recent_runs = self.repo.list_source_runs(conn, source_id, limit=run_limit)
-        return IntelSourceStatus(source=source, state=state, recent_runs=recent_runs)
+            circuit = self.repo.get_provider_circuit(conn, source.source_type)
+            resume_available, resume_page = (
+                checkpoint_summary(state.provider_state)
+                if source.source_type == "google_atc"
+                else (False, None)
+            )
+        return IntelSourceStatus(
+            source=source,
+            state=state,
+            recent_runs=recent_runs,
+            provider_circuit=circuit,
+            resume_available=resume_available,
+            resume_page=resume_page,
+        )
 
     def list_source_statuses(self, *, brand: str | None = None) -> list[IntelSourceStatus]:
         with self.repo.connect(readonly=True) as conn:

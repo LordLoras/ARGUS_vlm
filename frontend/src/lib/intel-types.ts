@@ -249,6 +249,10 @@ export type IntelSourceRunItem = {
   error_code?: string | null;
   diagnostics: IntelPollDiagnostic[];
   next_due_at?: string | null;
+  scan_mode?: "full" | "incremental" | "resume" | null;
+  resumed: boolean;
+  checkpoint_page?: number | null;
+  stop_reason?: string | null;
 };
 
 export type IntelSourceState = {
@@ -284,6 +288,16 @@ export type IntelSourceStatus = {
       provider_item_count?: number | null;
     }
   >;
+  provider_circuit?: {
+    provider: string;
+    open_until: string;
+    source_id: string;
+    error_code: string;
+    category: string;
+    message?: string | null;
+  } | null;
+  resume_available: boolean;
+  resume_page?: number | null;
 };
 
 export type IntelCrawlSummary = {

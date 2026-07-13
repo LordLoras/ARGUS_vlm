@@ -19,19 +19,27 @@ npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 
 ## Current Demo Dataset
 
-The crawler DB was reset and repopulated on 2026-07-13 for a small, reliable demo.
+The crawler DB contains the preserved 2026-07-13 ten-brand exercise. All sources were
+returned to disabled after collection, so opening Watcher cannot trigger network traffic.
 
 | Brand | Source | Resources | Notes |
 |---|---|---:|---|
-| McDonald's | Google Ads Transparency Center | 9 | Small safe ATC set; includes video creatives with YouTube links/posters. |
-| McDonald's | Meta Ad Library | 172 | Visible cards with screenshots, copy, library IDs, media URLs where exposed, and version counts. |
+| Apple | Meta Ad Library | 130 | Complete visible-card run. |
+| DoorDash | Meta Ad Library | 250 | Partial at the configured card limit. |
+| Duolingo | Meta Ad Library | 49 | Complete visible-card run. |
+| GEICO | Meta Ad Library | 250 | Partial at the configured card limit. |
+| McDonald's | Google Ads Transparency Center | 9 | Small ATC set with video links/posters. |
+| McDonald's | Meta Ad Library | 268 | Cross-provider comparison brand. |
+| Samsung | Google Ads Transparency Center | 9,217 | Large preserved catalog for scale/pagination demo. |
+| Samsung | Meta Ad Library | 77 | Complete visible-card run. |
+| Starbucks | Meta Ad Library | 250 | Partial at the configured card limit. |
 
 Watcher should show:
 
 - `10` brands from the seed/watchlist.
-- `2/17` enabled sources.
-- `181` resources.
-- McDonald's selected with both Google and Meta enabled.
+- `0/17` enabled sources (safe cached demo state).
+- `10,500` resources.
+- Preserved run/source health showing complete, configured-limit partial, and real Google 429 causes.
 
 Screenshots from before/after the reset live in:
 
@@ -42,8 +50,8 @@ output/intel_demo_screenshots/
 ## What To Show
 
 1. Open Watcher.
-2. Select **McDonald's**.
-3. Show the source cards: Google Ads Transparency + Meta Ad Library, both enabled.
+2. Select **McDonald's** for the clearest Google/Meta comparison, or **Samsung** to show scale.
+3. Show the source cards and explain that disabled affects future polling, not preserved data.
 4. Scroll to **Resources captured**.
 5. Use adapter filter:
    - `All adapters`
@@ -58,16 +66,20 @@ output/intel_demo_screenshots/
 
 ## Live Run Guidance
 
-Safe live run:
+The reliable presentation path is the cached DB. Do not start a broad provider crawl on
+stage. A normal explicit retry is guarded: if the copy is fresh, cooling down, or another
+source opened the provider circuit, it creates a skipped run with zero provider requests.
+
+Operator retry after the displayed due/cooldown time:
 
 ```powershell
 python -m ad_classifier intel crawl --source mcdonalds_atc
 ```
 
-Expected behavior:
-
-- first fresh DB run: `new_resources=9`, `backfilled=9`, `baseline=true`;
-- later re-run: existing rows refresh in place, no duplicate resources.
+If a post-migration Google run was interrupted after at least one page, Watcher shows
+`Retry / resume` plus the saved page. The normal retry continues from that cursor. The
+real 429 runs already in this demo DB happened before migration 004, so they correctly
+have no saved cursor and will restart from page one when eventually retried.
 
 Avoid live during the demo:
 
@@ -77,34 +89,21 @@ python -m ad_classifier intel crawl --source mcdonalds_meta_ads
 
 Meta is browser-driven and can take minutes. Run it before the demo if you need to refresh.
 
-Do not run broad ATC sources on stage (`apple_atc`, `ford_atc`, `toyota_atc`, etc.).
-Repeated Google ATC requests can trigger HTTP 429 after heavy testing. If that happens,
-wait and use the cached DB.
+Never use `--force` on stage. It intentionally bypasses freshness, cooldown, and provider
+circuit guards and exists only for controlled operator recovery/testing.
 
-## Reset / Rebuild The Demo DB
+## Back Up / Rebuild The Demo DB
 
-Only delete the crawler DB, not the submitted-ad DB:
-
-```powershell
-Remove-Item .\intelligence_crawler.db, .\intelligence_crawler.db-shm, .\intelligence_crawler.db-wal -ErrorAction SilentlyContinue
-python -m ad_classifier intel crawl --source mcdonalds_atc
-python -m ad_classifier intel crawl --source mcdonalds_meta_ads
-```
-
-Then enable only the two McDonald's sources if needed:
+Back up the crawler DB before experimenting:
 
 ```powershell
-@'
-import sqlite3
-conn = sqlite3.connect("intelligence_crawler.db")
-conn.execute("""
-UPDATE intel_sources
-SET enabled = 1, updated_at = datetime('now')
-WHERE id IN ('mcdonalds_atc', 'mcdonalds_meta_ads')
-""")
-conn.commit()
-'@ | .\.venv\Scripts\python.exe -
+Copy-Item .\intelligence_crawler.db .\output\intelligence_crawler.demo-backup.db
 ```
+
+Deleting/rebuilding the DB discards the 10,500-resource demo and can require hours of
+provider work or hit 429. If a rebuild is truly needed, delete only the crawler DB (never
+the submitted-ad DB), run `intel init-db`, enable sources intentionally, and use queued
+normal crawls. Preserve cooldowns; do not force a multi-brand rebuild.
 
 ## Known Caveats
 

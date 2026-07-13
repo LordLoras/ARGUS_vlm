@@ -577,13 +577,15 @@ export const api = {
       method: "DELETE"
     }),
 
-  crawlIntelSource: (sourceId: string) =>
+  crawlIntelSource: (sourceId: string, force = false) =>
     apiFetch<IntelCrawlSummary>(
-      `/api/intelligence/sources/${encodeURIComponent(sourceId)}/crawl`,
+      `/api/intelligence/sources/${encodeURIComponent(sourceId)}/crawl${params({ force })}`,
       { method: "POST" }
     ),
 
-  runIntelCrawl: (body: { due?: boolean; source_id?: string; brand?: string } = {}) =>
+  runIntelCrawl: (
+    body: { due?: boolean; source_id?: string; brand?: string; force?: boolean } = {}
+  ) =>
     apiFetch<IntelCrawlSummary>("/api/intelligence/crawl", {
       method: "POST",
       body: JSON.stringify({ due: true, ...body })

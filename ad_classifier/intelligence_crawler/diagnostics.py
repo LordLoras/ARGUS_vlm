@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import socket
 import traceback
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 
 from ad_classifier.intelligence_crawler.models import FailureCategory, PollDiagnostic
@@ -77,6 +79,7 @@ def classify_exception(
         provider=provider,
         phase=phase,
         http_status=status,
+        details=_retry_after_details(exc),
     )
 
 
@@ -142,3 +145,22 @@ def _safe_message(exc: BaseException) -> str:
         return f"Provider HTTP request failed with status {exc.code}."
     raw = " ".join(str(exc).split())
     return (raw or exc.__class__.__name__)[:300]
+
+
+def _retry_after_details(exc: BaseException) -> dict[str, int | str]:
+    if not isinstance(exc, HTTPError) or not exc.headers:
+        return {}
+    raw = str(exc.headers.get("Retry-After") or "").strip()
+    if not raw:
+        return {}
+    try:
+        seconds = max(0, int(raw))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(raw)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=UTC)
+            seconds = max(0, int((retry_at - datetime.now(UTC)).total_seconds()))
+        except (TypeError, ValueError, OverflowError):
+            return {"retry_after": raw[:100]}
+    return {"retry_after": raw[:100], "retry_after_seconds": seconds}

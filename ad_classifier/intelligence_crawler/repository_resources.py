@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 
 from ad_classifier.entity_graph.rows import loads_dict, to_json
 from ad_classifier.intelligence_crawler.models import (
@@ -20,6 +21,42 @@ class ResourceRepositoryMixin:
             "SELECT id FROM intel_resources WHERE source_id = ?", (source_id,)
         ).fetchall()
         return {str(row["id"]) for row in rows}
+
+    def resource_metadata_index(self, conn: sqlite3.Connection, source_id: str) -> dict[str, dict]:
+        rows = conn.execute(
+            "SELECT platform_id, description, metadata_json FROM intel_resources "
+            "WHERE source_id = ? AND platform_id IS NOT NULL",
+            (source_id,),
+        ).fetchall()
+        return {
+            str(row["platform_id"]): {
+                "description": row["description"],
+                "metadata": loads_dict(row["metadata_json"]) or {},
+            }
+            for row in rows
+        }
+
+    def touch_resources_seen(
+        self,
+        conn: sqlite3.Connection,
+        source_id: str,
+        external_ids: list[str],
+        *,
+        seen_at: datetime,
+    ) -> int:
+        """Advance freshness for verified unchanged rows without duplicating snapshots."""
+        unique_ids = list(dict.fromkeys(value for value in external_ids if value))
+        touched = 0
+        for start in range(0, len(unique_ids), 500):
+            chunk = unique_ids[start : start + 500]
+            placeholders = ",".join("?" for _ in chunk)
+            cursor = conn.execute(
+                f"UPDATE intel_resources SET last_seen_at = ?, fetched_at = ? "
+                f"WHERE source_id = ? AND platform_id IN ({placeholders})",
+                [iso(seen_at), iso(seen_at), source_id, *chunk],
+            )
+            touched += cursor.rowcount
+        return touched
 
     def insert_resource(self, conn: sqlite3.Connection, resource: IntelResource) -> bool:
         existed = (

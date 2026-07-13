@@ -13,8 +13,10 @@
 - Latest-resource projection plus append-only observation/source-run ledgers.
 - Explicit complete/partial/failed outcomes, stable failure categories, cooldown/backoff, and due scheduling.
 - Queued crawl API for long-running provider work.
+- Provider-wide circuit breaking, `Retry-After` handling, freshness guards, and explicit operator `force` override.
+- Durable Google page checkpoints/resume, incremental overlap scans, periodic full reconciliation, and preview reuse.
 - Lean US region handling: `collection.requested_region_code`, not synthetic `delivery.regions`.
-- One-brand demo DB: McDonald's with 9 Google ATC resources and 172 Meta resources.
+- Ten-brand exercise DB with 10,500 latest resources and complete per-source run diagnostics.
 
 ## Priority Backlog
 
@@ -44,13 +46,15 @@ Recommended default:
 - download full videos only when a user queues analysis or pins a resource for demo;
 - store copyright-sensitive assets for internal research only, not redistribution.
 
-### 3. Google ATC Resilience
+### 3. Google ATC Resilience and Telemetry
 
 Google can 429 after repeated heavy requests.
 
-Implemented: earlier successful pages survive later-page failures, 429 is classified,
-cooldown/backoff is persisted, and Watcher shows the cause. Remaining work is to tune
-preview budgets from production telemetry and keep a safe pre-crawled demo source.
+Implemented: earlier successful pages survive later-page failures; continuation cursors
+are committed per page; retry resumes; stale cursors fall back safely; 429/Retry-After,
+provider circuits, incremental overlap scans, full reconciliation, preview reuse, and
+Watcher health are all persisted. Remaining work is operational tuning from long-running
+telemetry and optional alert delivery outside the API/UI.
 
 ### 4. Meta Variant Expansion
 

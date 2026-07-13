@@ -32,6 +32,7 @@ class CrawlPayload(BaseModel):
     due: bool = True
     source_id: str | None = None
     brand: str | None = None
+    force: bool = False
 
 
 class SourceCreatePayload(BaseModel):
@@ -238,7 +239,10 @@ def run_crawl(payload: CrawlPayload, request: Request) -> dict[str, Any]:
     _require_mutation_key(request)
     summary = _call_manager(
         lambda: _manager(request).run_crawl(
-            due=payload.due, source_id=payload.source_id, brand=payload.brand
+            due=payload.due,
+            source_id=payload.source_id,
+            brand=payload.brand,
+            force=payload.force,
         )
     )
     return summary.model_dump(mode="json")
@@ -252,7 +256,10 @@ def queue_crawl(
     manager = _manager(request)
     summary = _call_manager(
         lambda: manager.queue_crawl(
-            due=payload.due, source_id=payload.source_id, brand=payload.brand
+            due=payload.due,
+            source_id=payload.source_id,
+            brand=payload.brand,
+            force=payload.force,
         )
     )
     background_tasks.add_task(
@@ -261,6 +268,7 @@ def queue_crawl(
         due=payload.due,
         source_id=payload.source_id,
         brand=payload.brand,
+        force=payload.force,
     )
     return summary.model_dump(mode="json")
 
@@ -357,20 +365,27 @@ def get_source_status(
 
 
 @router.post("/intelligence/sources/{source_id}/crawl")
-def crawl_source(source_id: str, request: Request) -> dict[str, Any]:
+def crawl_source(
+    source_id: str, request: Request, force: bool = Query(default=False)
+) -> dict[str, Any]:
     _require_mutation_key(request)
-    summary = _call_manager(lambda: _manager(request).run_crawl(source_id=source_id))
+    summary = _call_manager(lambda: _manager(request).run_crawl(source_id=source_id, force=force))
     return summary.model_dump(mode="json")
 
 
 @router.post("/intelligence/sources/{source_id}/crawl/queue", status_code=202)
 def queue_source_crawl(
-    source_id: str, request: Request, background_tasks: BackgroundTasks
+    source_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    force: bool = Query(default=False),
 ) -> dict[str, Any]:
     _require_mutation_key(request)
     manager = _manager(request)
     if _call_manager(lambda: manager.get_source(source_id)) is None:
         raise HTTPException(status_code=404, detail="source not found")
-    summary = _call_manager(lambda: manager.queue_crawl(source_id=source_id))
-    background_tasks.add_task(manager.run_queued_crawl, summary.run_id, source_id=source_id)
+    summary = _call_manager(lambda: manager.queue_crawl(source_id=source_id, force=force))
+    background_tasks.add_task(
+        manager.run_queued_crawl, summary.run_id, source_id=source_id, force=force
+    )
     return summary.model_dump(mode="json")

@@ -144,6 +144,10 @@ class LedgerRepositoryMixin:
         page_count: int = 0,
         provider_item_count: int | None = None,
         next_due_at: datetime | None = None,
+        scan_mode: str | None = None,
+        resumed: bool = False,
+        checkpoint_page: int | None = None,
+        stop_reason: str | None = None,
     ) -> None:
         conn.execute(
             """
@@ -151,7 +155,8 @@ class LedgerRepositoryMixin:
               status=?, outcome=?, finished_at=datetime('now'), complete=?, truncated=?,
               truncation_reason=?, new_resources=?, refreshed=?, backfilled=?, filtered=?,
               new_signals=?, error_category=?, error_code=?, error=?, diagnostics_json=?,
-              request_count=?, page_count=?, provider_item_count=?, next_due_at=?
+              request_count=?, page_count=?, provider_item_count=?, next_due_at=?,
+              scan_mode=?, resumed=?, checkpoint_page=?, stop_reason=?
             WHERE run_id=? AND source_id=?
             """,
             (
@@ -173,6 +178,10 @@ class LedgerRepositoryMixin:
                 page_count,
                 provider_item_count,
                 iso(next_due_at),
+                scan_mode,
+                int(resumed),
+                checkpoint_page,
+                stop_reason,
                 run_id,
                 source_id,
             ),
@@ -182,8 +191,7 @@ class LedgerRepositoryMixin:
         self, conn: sqlite3.Connection, source_id: str, *, limit: int = 20
     ) -> list[dict]:
         rows = conn.execute(
-            "SELECT * FROM intel_source_runs WHERE source_id = ? "
-            "ORDER BY started_at DESC LIMIT ?",
+            "SELECT * FROM intel_source_runs WHERE source_id = ? ORDER BY started_at DESC LIMIT ?",
             (source_id, limit),
         ).fetchall()
         return [source_run_dict(row) for row in rows]

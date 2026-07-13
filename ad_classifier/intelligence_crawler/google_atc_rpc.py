@@ -47,6 +47,8 @@ _FORMAT_LABELS = {1: "text", 2: "image", 3: "video"}
 # (service_method, f_req_dict) -> parsed JSON dict. Injected so tests need no network.
 RpcFetch = Callable[[str, dict], dict]
 PreviewFetch = Callable[[str], str]
+CreativePredicate = Callable[[dict], bool]
+CheckpointCallback = Callable[[str, int, int], None]
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,8 @@ class CreativeSearchResult:
     complete: bool
     continuation_remaining: bool = False
     error: BaseException | None = None
+    continuation_token: str | None = None
+    stopped_after_unchanged: bool = False
 
 
 _URL_RE = re.compile(r"https?:(?:(?:\\?/\\?/)|(?://))[^\"'<>\s]+", re.IGNORECASE)
@@ -205,13 +209,18 @@ def search_creatives_result(
     region: int = US_REGION_CODE,
     page_size: int = _DEFAULT_PAGE_SIZE,
     max_pages: int | None = 1,
+    initial_after: str | None = None,
+    is_known_unchanged: CreativePredicate | None = None,
+    stop_after_unchanged_pages: int = 0,
+    on_checkpoint: CheckpointCallback | None = None,
 ) -> CreativeSearchResult:
     """Search with completeness metadata and preservation of successful earlier pages."""
     creatives: list[dict] = []
     seen: set[str] = set()
-    token: str | None = None
+    token = initial_after
     request_count = 0
     page_count = 0
+    unchanged_pages = 0
     page_limit = max(max_pages, 1) if max_pages is not None else None
     while page_limit is None or page_count < page_limit:
         try:
@@ -224,14 +233,26 @@ def search_creatives_result(
             )
         except Exception as exc:
             return CreativeSearchResult(
-                creatives, request_count, page_count, False, bool(token), exc
+                creatives=creatives,
+                request_count=request_count,
+                page_count=page_count,
+                complete=False,
+                continuation_remaining=bool(token),
+                error=exc,
+                continuation_token=token,
             )
         if not isinstance(payload, dict) or not isinstance(payload.get("1"), list):
             error = ProviderApiChangedError(
                 "Google ATC SearchCreatives response did not match the expected contract."
             )
             return CreativeSearchResult(
-                creatives, request_count, page_count, False, bool(token), error
+                creatives=creatives,
+                request_count=request_count,
+                page_count=page_count,
+                complete=False,
+                continuation_remaining=bool(token),
+                error=error,
+                continuation_token=token,
             )
         page_count += 1
         page = parse_creatives(payload)
@@ -241,18 +262,48 @@ def search_creatives_result(
         creatives.extend(fresh)
         token = payload.get("2") if isinstance(payload.get("2"), str) else None
         if not token:
-            return CreativeSearchResult(creatives, request_count, page_count, True)
+            return CreativeSearchResult(
+                creatives=creatives,
+                request_count=request_count,
+                page_count=page_count,
+                complete=True,
+            )
         if not page or not fresh:
             error = ProviderApiChangedError(
                 "Google ATC returned a continuation token without a usable next page."
             )
-            return CreativeSearchResult(creatives, request_count, page_count, False, True, error)
+            return CreativeSearchResult(
+                creatives=creatives,
+                request_count=request_count,
+                page_count=page_count,
+                complete=False,
+                continuation_remaining=True,
+                error=error,
+                continuation_token=token,
+            )
+        if on_checkpoint is not None:
+            on_checkpoint(token, page_count, request_count)
+        if is_known_unchanged is not None and page:
+            unchanged_pages = (
+                unchanged_pages + 1 if all(is_known_unchanged(item) for item in page) else 0
+            )
+            if stop_after_unchanged_pages > 0 and unchanged_pages >= stop_after_unchanged_pages:
+                return CreativeSearchResult(
+                    creatives=creatives,
+                    request_count=request_count,
+                    page_count=page_count,
+                    complete=True,
+                    continuation_remaining=True,
+                    continuation_token=token,
+                    stopped_after_unchanged=True,
+                )
     return CreativeSearchResult(
-        creatives,
-        request_count,
-        page_count,
+        creatives=creatives,
+        request_count=request_count,
+        page_count=page_count,
         complete=not bool(token),
         continuation_remaining=bool(token),
+        continuation_token=token,
     )
 
 

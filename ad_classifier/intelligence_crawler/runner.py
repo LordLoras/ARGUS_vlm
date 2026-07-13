@@ -34,6 +34,7 @@ from ad_classifier.intelligence_crawler.models import (
     SourceRunItem,
 )
 from ad_classifier.intelligence_crawler.repository import IntelRepository
+from ad_classifier.intelligence_crawler.request_guard import request_guard
 from ad_classifier.intelligence_crawler.run_policy import (
     media_assets,
     normalize_poll_result,
@@ -79,6 +80,7 @@ class IntelRunner:
         source_id: str | None = None,
         brand: str | None = None,
         run_id: str | None = None,
+        force: bool = False,
     ) -> CrawlRunSummary:
         reserved_run_id = run_id
         run_id = reserved_run_id or new_run_id()
@@ -97,7 +99,13 @@ class IntelRunner:
 
             for source in selected:
                 try:
-                    item = self._process_source(conn, run_id, source)
+                    item = self._process_source(
+                        conn,
+                        run_id,
+                        source,
+                        force=force,
+                        respect_freshness=source_id is not None,
+                    )
                     conn.commit()
                 except Exception as exc:  # isolate one provider/source from the rest
                     conn.rollback()
@@ -135,9 +143,36 @@ class IntelRunner:
         )
 
     def _process_source(
-        self, conn: sqlite3.Connection, run_id: str, source_ref: IntelSource
+        self,
+        conn: sqlite3.Connection,
+        run_id: str,
+        source_ref: IntelSource,
+        *,
+        force: bool,
+        respect_freshness: bool,
     ) -> SourceRunItem:
         now = self._now()
+        if not force:
+            guard = request_guard(
+                self.repo,
+                conn,
+                source_ref,
+                now,
+                respect_freshness=respect_freshness,
+            )
+            if guard is not None:
+                log = logger.warning if guard.failure_category else logger.info
+                log(
+                    "intel_source_request_guarded",
+                    source_id=source_ref.id,
+                    source_type=source_ref.source_type,
+                    stage="request_guard",
+                    stop_reason=guard.stop_reason,
+                    error_code=guard.error_code,
+                    next_due_at=guard.next_due_at,
+                )
+                self._store_skipped_run(conn, run_id, source_ref.id, now, guard)
+                return guard
         lease_owner = self._lease_owner(run_id, source_ref.id)
         if not self.repo.acquire_lease(
             conn, source_ref.id, lease_owner, now=now, ttl_seconds=LEASE_TTL_SECONDS
@@ -166,10 +201,27 @@ class IntelRunner:
                 return item
 
             state = self.repo.get_source_state(conn, source.id)
+            if source.source_type == "google_atc":
+                state = state.model_copy(
+                    update={
+                        "runtime_context": {
+                            "resource_index": self.repo.resource_metadata_index(conn, source.id)
+                        }
+                    }
+                )
             self.repo.update_source_state(conn, source.id, last_attempt_at=now)
             conn.commit()
 
-            result = self.adapter_factory(source.source_type).poll(source, state, now=now)
+            adapter = self.adapter_factory(source.source_type)
+            checkpoint_setter = getattr(adapter, "set_checkpoint_sink", None)
+            if callable(checkpoint_setter):
+
+                def persist_provider_state(provider_state: dict) -> None:
+                    self.repo.update_source_state(conn, source.id, state_json=provider_state)
+                    conn.commit()
+
+                checkpoint_setter(persist_provider_state)
+            result = adapter.poll(source, state, now=now)
             result = normalize_poll_result(result, source.source_type)
             self.repo.renew_lease(
                 conn,
@@ -198,6 +250,13 @@ class IntelRunner:
                 lookback_days=self.config.detection.new_signal_lookback_days,
                 activated_at=source.source_activated_at,
             )
+            if result.verified_external_ids:
+                self.repo.touch_resources_seen(
+                    conn,
+                    source.id,
+                    result.verified_external_ids,
+                    seen_at=now,
+                )
             counts = self._persist_detection(conn, run_id, source, detection, now)
 
             # An incomplete baseline must not activate the source: the next complete poll is
@@ -223,6 +282,11 @@ class IntelRunner:
                 watermark=(result.new_watermark or state.watermark),
                 etag=(result.etag or state.etag),
                 last_modified=(result.last_modified or state.last_modified),
+                state_json=(
+                    result.state_updates
+                    if result.state_updates is not None
+                    else state.provider_state
+                ),
             )
             status = "polled" if result.complete else "partial"
             reason = poll_reason(result, detection.baseline_mode)
@@ -239,6 +303,10 @@ class IntelRunner:
                 error_code=primary.code if primary else None,
                 diagnostics=result.diagnostics,
                 next_due_at=next_due,
+                scan_mode=result.scan_mode,
+                resumed=result.resumed,
+                checkpoint_page=result.checkpoint_page,
+                stop_reason=result.stop_reason,
                 **counts,
             )
             self._finish_source_run(conn, run_id, item, result=result)
@@ -335,6 +403,9 @@ class IntelRunner:
             last_error_category=primary.category if primary else "unknown",
             last_error_code=primary.code if primary else "provider_poll_failed",
             diagnostics_json=result.diagnostics,
+            state_json=(
+                result.state_updates if result.state_updates is not None else state.provider_state
+            ),
         )
         item = SourceRunItem(
             source_id=source.id,
@@ -346,6 +417,10 @@ class IntelRunner:
             error_code=primary.code if primary else "provider_poll_failed",
             diagnostics=result.diagnostics,
             next_due_at=next_due,
+            scan_mode=result.scan_mode,
+            resumed=result.resumed,
+            checkpoint_page=result.checkpoint_page,
+            stop_reason=result.stop_reason,
         )
         self._finish_source_run(conn, run_id, item, result=result)
         return item
@@ -399,6 +474,10 @@ class IntelRunner:
             page_count=result.page_count if result else 0,
             provider_item_count=result.provider_item_count if result else None,
             next_due_at=item.next_due_at,
+            scan_mode=item.scan_mode,
+            resumed=item.resumed,
+            checkpoint_page=item.checkpoint_page,
+            stop_reason=item.stop_reason,
         )
 
     def _emit_signal(self, conn, source: IntelSource, decision, now: datetime) -> bool:

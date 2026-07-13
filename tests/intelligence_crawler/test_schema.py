@@ -26,6 +26,7 @@ def test_initialize_creates_tables_and_is_idempotent(tmp_path):
     applied = initialize_intelligence_crawler_db(db)
     assert "001_initial" in applied
     assert "003_crawl_observability" in applied
+    assert "004_crawl_resume" in applied
 
     # Second call applies nothing new.
     assert initialize_intelligence_crawler_db(db) == []
@@ -34,6 +35,10 @@ def test_initialize_creates_tables_and_is_idempotent(tmp_path):
     try:
         rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         names = {row[0] for row in rows}
+        source_run_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(intel_source_runs)").fetchall()
+        }
     finally:
         conn.close()
     assert names >= EXPECTED_TABLES
+    assert {"scan_mode", "resumed", "checkpoint_page", "stop_reason"} <= source_run_columns

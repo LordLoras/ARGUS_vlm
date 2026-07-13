@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from urllib.error import HTTPError
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.google_atc_rpc import (
@@ -11,6 +12,10 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     parse_preview_artifacts,
     resolve_advertiser,
     search_advertisers,
+)
+from ad_classifier.intelligence_crawler.google_crawl_state import (
+    query_fingerprint,
+    with_checkpoint,
 )
 from ad_classifier.intelligence_crawler.models import IntelSource, SourceState
 from ad_classifier.intelligence_crawler.sources.base import available_source_types
@@ -252,6 +257,35 @@ def test_adapter_preview_enrichment_failure_keeps_items():
     assert result.items[0].raw["preview_enriched"] is False
 
 
+def test_preview_rate_limit_stops_remaining_preview_requests():
+    payload = {
+        "1": [
+            {
+                "1": ADV,
+                "2": f"CR_{number}",
+                "3": {"1": {"4": f"https://preview/{number}"}},
+            }
+            for number in (1, 2, 3)
+        ]
+    }
+    preview_calls = []
+
+    def preview_fetch(url):
+        preview_calls.append(url)
+        raise HTTPError(url, 429, "Too Many Requests", {"Retry-After": "600"}, None)
+
+    result = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: payload,
+        preview_fetch=preview_fetch,
+        intel_config=IntelConfig(),
+    ).poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
+
+    assert preview_calls == ["https://preview/1"]
+    assert result.outcome == "partial"
+    assert result.diagnostics[0].category == "rate_limited"
+    assert result.diagnostics[0].details["retry_after_seconds"] == 600
+
+
 def test_pagination_follows_cursor_and_dedups():
     # page 1 carries a continuation token (field "2"); page 2 has none -> stop.
     page1 = {
@@ -315,6 +349,171 @@ def test_later_page_failure_retains_prior_pages_and_reports_partial():
     assert result.complete is False
     assert result.diagnostics[0].category == "rate_limited"
     assert result.truncation_reason == "Google pagination was interrupted by a provider error."
+    checkpoint = result.state_updates["google_atc"]["checkpoint"]
+    assert checkpoint["token"] == "TOKEN_ABC"
+    assert checkpoint["page_count"] == 1
+    assert result.checkpoint_page == 1
+    assert result.stop_reason == "provider_error"
+
+
+def test_resume_uses_saved_cursor_and_clears_checkpoint_at_provider_end():
+    calls = []
+    fingerprint = query_fingerprint(ADV, region=US_REGION_CODE, page_size=40)
+    provider_state = with_checkpoint(
+        {},
+        token="SAVED_TOKEN",
+        fingerprint=fingerprint,
+        mode="full",
+        page_count=7,
+        now=NOW,
+    )
+
+    def fetch(method, freq):
+        calls.append(freq)
+        return {"1": [{"1": ADV, "2": "CR_RESUMED"}]}
+
+    result = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig()).poll(
+        _source(),
+        SourceState(source_id="salesforce_atc", provider_state=provider_state),
+        now=NOW,
+    )
+
+    assert calls[0]["4"] == "SAVED_TOKEN"
+    assert [item.external_id for item in result.items] == ["CR_RESUMED"]
+    assert result.scan_mode == "resume"
+    assert result.resumed is True
+    assert result.stop_reason == "provider_end"
+    assert "checkpoint" not in result.state_updates["google_atc"]
+
+
+def test_rejected_saved_cursor_restarts_once_from_head():
+    calls = []
+    fingerprint = query_fingerprint(ADV, region=US_REGION_CODE, page_size=40)
+    provider_state = with_checkpoint(
+        {},
+        token="EXPIRED_TOKEN",
+        fingerprint=fingerprint,
+        mode="full",
+        page_count=4,
+        now=NOW,
+    )
+
+    def fetch(method, freq):
+        calls.append(freq)
+        if freq.get("4") == "EXPIRED_TOKEN":
+            raise HTTPError("https://google", 410, "Gone", {}, None)
+        return {"1": [{"1": ADV, "2": "CR_FROM_HEAD"}]}
+
+    result = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig()).poll(
+        _source(),
+        SourceState(source_id="salesforce_atc", provider_state=provider_state),
+        now=NOW,
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["4"] == "EXPIRED_TOKEN"
+    assert "4" not in calls[1]
+    assert result.complete is True
+    assert result.request_count == 2
+    assert "checkpoint" not in result.state_updates["google_atc"]
+
+
+def test_incremental_scan_stops_after_known_overlap_without_rewriting_items():
+    calls = []
+    known = {}
+    for number in range(1, 5):
+        known[f"CR_{number}"] = {
+            "description": None,
+            "metadata": {
+                "advertiser_id": ADV,
+                "advertiser_name": None,
+                "format_code": None,
+                "first_shown": 1770000000 + number,
+                "last_shown": None,
+                "preview_url": None,
+                "inline_image_sources": [],
+                "creative_text": None,
+            },
+        }
+
+    def fetch(method, freq):
+        calls.append(freq)
+        number = len(calls)
+        return {
+            "1": [
+                {
+                    "1": ADV,
+                    "2": f"CR_{number}",
+                    "6": {"1": str(1770000000 + number)},
+                }
+            ],
+            "2": f"TOKEN_{number}",
+        }
+
+    state = SourceState(
+        source_id="salesforce_atc",
+        provider_state={"google_atc": {"last_full_success_at": NOW.isoformat()}},
+        runtime_context={"resource_index": known},
+    )
+    result = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig()).poll(
+        _source(config={"unchanged_pages_before_stop": 3}), state, now=NOW
+    )
+
+    assert len(calls) == 3
+    assert result.items == []
+    assert result.verified_external_ids == ["CR_1", "CR_2", "CR_3"]
+    assert result.complete is True
+    assert result.truncated is False
+    assert result.truncation_reason is None
+    assert result.outcome == "not_modified"
+    assert result.scan_mode == "incremental"
+    assert result.stop_reason == "unchanged_overlap"
+
+
+def test_changed_creative_reuses_cached_preview_without_another_get():
+    preview_calls = []
+    preview_url = SEARCH_PAYLOAD["1"][0]["3"]["1"]["4"]
+    state = SourceState(
+        source_id="salesforce_atc",
+        provider_state={"google_atc": {"last_full_success_at": NOW.isoformat()}},
+        runtime_context={
+            "resource_index": {
+                "CR17113391207746109441": {
+                    "description": None,
+                    "metadata": {
+                        "advertiser_id": ADV,
+                        "advertiser_name": "Salesforce, Inc.",
+                        "format_code": 3,
+                        "first_shown": 1774647000,
+                        "last_shown": 1,
+                        "preview_url": preview_url,
+                        "inline_image_sources": [],
+                        "creative_text": None,
+                        "preview_enriched": True,
+                        "youtube_video_ids": ["cachedVideo"],
+                        "video_sources": ["https://youtube.com/watch?v=cachedVideo"],
+                        "video_posters": ["https://img/cached.jpg"],
+                        "image_sources": [],
+                        "links": [],
+                    },
+                }
+            }
+        },
+    )
+
+    def preview_fetch(url):
+        preview_calls.append(url)
+        return PREVIEW_JS
+
+    result = GoogleAtcAdapter(
+        rpc_fetch=lambda m, q: {"1": [SEARCH_PAYLOAD["1"][0]]},
+        preview_fetch=preview_fetch,
+        intel_config=IntelConfig(),
+    ).poll(_source(), state, now=NOW)
+
+    assert preview_calls == []
+    assert result.items[0].raw["preview_enriched"] is True
+    assert result.items[0].raw["video_sources"] == ["https://youtube.com/watch?v=cachedVideo"]
 
 
 def test_unlimited_pagination_stops_on_429_without_preview_requests():

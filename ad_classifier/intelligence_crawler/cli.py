@@ -79,10 +79,17 @@ def crawl(
         str | None, typer.Option("--source", help="Crawl one source id (even if disabled).")
     ] = None,
     brand: Annotated[str | None, typer.Option("--brand", help="Restrict to one brand.")] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Bypass freshness/cooldown guards (operator recovery only).",
+        ),
+    ] = False,
 ) -> None:
     """Poll sources and persist new resources/signals."""
     cfg = _load(config)
-    summary = IntelRunner(cfg).run(due=due, source_id=source, brand=brand)
+    summary = IntelRunner(cfg).run(due=due, source_id=source, brand=brand, force=force)
     typer.echo(summary.model_dump_json(indent=2))
 
 

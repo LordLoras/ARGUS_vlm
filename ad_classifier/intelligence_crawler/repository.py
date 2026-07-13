@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ad_classifier.entity_graph.rows import loads_dict, to_json
@@ -14,6 +14,7 @@ from ad_classifier.intelligence_crawler.models import (
     IntelBrandOverview,
     IntelSource,
     IntelSourceStatus,
+    ProviderCircuit,
     SourceState,
 )
 from ad_classifier.intelligence_crawler.repository_ledger import LedgerRepositoryMixin
@@ -330,6 +331,15 @@ class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepo
                 source=source,
                 state=states.get(source.id, SourceState(source_id=source.id)),
                 recent_runs=([latest_runs[source.id]] if source.id in latest_runs else []),
+                provider_circuit=self.get_provider_circuit(conn, source.source_type),
+                resume_available=(
+                    source.source_type == "google_atc" and _resume_checkpoint(states.get(source.id))
+                ),
+                resume_page=(
+                    _resume_page(states.get(source.id))
+                    if source.source_type == "google_atc"
+                    else None
+                ),
             )
             for source in sources
         ]
@@ -377,6 +387,7 @@ class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepo
             "last_error_code",
             "cooldown_until",
             "diagnostics_json",
+            "state_json",
         }
         sets = []
         values: list[object] = []
@@ -384,9 +395,42 @@ class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepo
             if key not in columns:
                 raise KeyError(f"unknown source_state field: {key}")
             sets.append(f"{key} = ?")
-            values.append(_diagnostics_json(value) if key == "diagnostics_json" else _coerce(value))
+            if key == "diagnostics_json":
+                values.append(_diagnostics_json(value))
+            elif key == "state_json":
+                values.append(to_json(value or {}))
+            else:
+                values.append(_coerce(value))
         values.append(source_id)
         conn.execute(f"UPDATE intel_source_state SET {', '.join(sets)} WHERE source_id = ?", values)
+
+    def get_provider_circuit(
+        self, conn: sqlite3.Connection, source_type: str, *, now: datetime | None = None
+    ) -> ProviderCircuit | None:
+        now_value = iso(now or datetime.now(UTC))
+        row = conn.execute(
+            """
+            SELECT st.source_id, st.cooldown_until, st.last_error_category,
+                   st.last_error_code, st.last_error
+            FROM intel_source_state st
+            JOIN intel_sources s ON s.id = st.source_id
+            WHERE s.source_type = ? AND s.archived_at IS NULL
+              AND st.last_error_category IN ('rate_limited', 'blocked')
+              AND st.cooldown_until IS NOT NULL AND st.cooldown_until > ?
+            ORDER BY st.cooldown_until DESC LIMIT 1
+            """,
+            (source_type, now_value),
+        ).fetchone()
+        if row is None:
+            return None
+        return ProviderCircuit(
+            provider=source_type,
+            open_until=parse_iso(row["cooldown_until"]),
+            source_id=str(row["source_id"]),
+            error_code=str(row["last_error_code"] or "provider_circuit_open"),
+            category=row["last_error_category"],
+            message=row["last_error"],
+        )
 
     def acquire_lease(
         self,
@@ -420,8 +464,7 @@ class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepo
         now_utc = as_utc(now)
         assert now_utc is not None
         cur = conn.execute(
-            "UPDATE intel_source_state SET lease_until = ? "
-            "WHERE source_id = ? AND lease_owner = ?",
+            "UPDATE intel_source_state SET lease_until = ? WHERE source_id = ? AND lease_owner = ?",
             (iso(now_utc + timedelta(seconds=ttl_seconds)), source_id, owner),
         )
         return cur.rowcount == 1
@@ -437,3 +480,17 @@ class IntelRepository(LedgerRepositoryMixin, ResourceRepositoryMixin, SignalRepo
         conn.execute(
             "INSERT OR IGNORE INTO intel_source_state (source_id) VALUES (?)", (source_id,)
         )
+
+
+def _resume_checkpoint(state: SourceState | None) -> bool:
+    google = state.provider_state.get("google_atc", {}) if state else {}
+    return bool(isinstance(google, dict) and google.get("checkpoint", {}).get("token"))
+
+
+def _resume_page(state: SourceState | None) -> int | None:
+    google = state.provider_state.get("google_atc", {}) if state else {}
+    checkpoint = google.get("checkpoint", {}) if isinstance(google, dict) else {}
+    try:
+        return int(checkpoint["page_count"]) if checkpoint.get("token") else None
+    except (TypeError, ValueError):
+        return None

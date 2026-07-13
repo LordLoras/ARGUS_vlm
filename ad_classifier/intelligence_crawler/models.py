@@ -29,6 +29,7 @@ SignalStatus = Literal[
 ]
 RunStatus = Literal["queued", "running", "completed", "failed", "degraded"]
 PollOutcome = Literal["success", "partial", "not_modified", "explicit_empty", "failed"]
+ScanMode = Literal["full", "incremental", "resume"]
 FailureCategory = Literal[
     "configuration",
     "authentication",
@@ -93,6 +94,8 @@ class SourceState(StrictModel):
     last_error_code: str | None = None
     cooldown_until: datetime | None = None
     last_diagnostics: list[PollDiagnostic] = Field(default_factory=list)
+    provider_state: dict[str, Any] = Field(default_factory=dict, exclude=True)
+    runtime_context: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
 
 class RawSourceItem(StrictModel):
@@ -128,6 +131,12 @@ class SourcePollResult(StrictModel):
     request_count: int = 0
     page_count: int = 0
     provider_item_count: int | None = None
+    verified_external_ids: list[str] = Field(default_factory=list, exclude=True)
+    state_updates: dict[str, Any] | None = None
+    scan_mode: ScanMode | None = None
+    resumed: bool = False
+    checkpoint_page: int | None = None
+    stop_reason: str | None = None
     errors: list[str] = Field(default_factory=list)
 
 
@@ -417,12 +426,28 @@ class SourceRunItem(StrictModel):
     error_code: str | None = None
     diagnostics: list[PollDiagnostic] = Field(default_factory=list)
     next_due_at: datetime | None = None
+    scan_mode: ScanMode | None = None
+    resumed: bool = False
+    checkpoint_page: int | None = None
+    stop_reason: str | None = None
+
+
+class ProviderCircuit(StrictModel):
+    provider: str
+    open_until: datetime
+    source_id: str
+    error_code: str
+    category: FailureCategory
+    message: str | None = None
 
 
 class IntelSourceStatus(StrictModel):
     source: IntelSource
     state: SourceState
     recent_runs: list[dict[str, Any]] = Field(default_factory=list)
+    provider_circuit: ProviderCircuit | None = None
+    resume_available: bool = False
+    resume_page: int | None = None
 
 
 class CrawlRunSummary(StrictModel):

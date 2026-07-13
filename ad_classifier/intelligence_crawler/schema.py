@@ -132,6 +132,10 @@ CREATE TABLE IF NOT EXISTS intel_source_runs (
   page_count INTEGER NOT NULL DEFAULT 0,
   provider_item_count INTEGER,
   next_due_at TEXT,
+  scan_mode TEXT,
+  resumed INTEGER NOT NULL DEFAULT 0,
+  checkpoint_page INTEGER,
+  stop_reason TEXT,
   PRIMARY KEY (run_id, source_id)
 );
 
@@ -277,6 +281,25 @@ def initialize_intelligence_crawler_db(path: Path) -> list[str]:
                 "VALUES ('003_crawl_observability')"
             )
             migrations.append("003_crawl_observability")
+        if "004_crawl_resume" not in applied:
+            source_run_additions = (
+                ("scan_mode", "TEXT"),
+                ("resumed", "INTEGER NOT NULL DEFAULT 0"),
+                ("checkpoint_page", "INTEGER"),
+                ("stop_reason", "TEXT"),
+            )
+            for column, ddl in source_run_additions:
+                if not _column_exists(conn, "intel_source_runs", column):
+                    conn.execute(f"ALTER TABLE intel_source_runs ADD COLUMN {column} {ddl}")
+            if not _column_exists(conn, "intel_source_state", "state_json"):
+                conn.execute(
+                    "ALTER TABLE intel_source_state "
+                    "ADD COLUMN state_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            conn.execute(
+                "INSERT OR IGNORE INTO intel_migrations (version) VALUES ('004_crawl_resume')"
+            )
+            migrations.append("004_crawl_resume")
         conn.commit()
         return migrations
     finally:

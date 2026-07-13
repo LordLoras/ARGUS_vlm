@@ -133,6 +133,40 @@ def test_repoll_refreshes_stored_metadata(tmp_path):
     assert media_count == 1
 
 
+def test_verified_unchanged_resource_advances_freshness_without_ledger_noise(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [OLD_ITEM])
+    IntelRunner(cfg, now_fn=lambda: T0).run(due=True)
+
+    class UnchangedAdapter:
+        tier = "A"
+
+        def poll(self, source, state, *, now):
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="not_modified",
+                verified_external_ids=["old1"],
+            )
+
+    summary = IntelRunner(
+        cfg,
+        now_fn=lambda: T1,
+        adapter_factory=lambda _source_type: UnchangedAdapter(),
+    ).run(due=False)
+
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        resource = repo.list_resources(conn, source_id="s1")[0]
+        observations = conn.execute(
+            "SELECT COUNT(*) FROM intel_resource_observations WHERE resource_id = ?",
+            (resource.id,),
+        ).fetchone()[0]
+    assert summary.items[0].outcome == "not_modified"
+    assert resource.last_seen_at == T1
+    assert resource.fetched_at == T1
+    assert observations == 1
+
+
 def test_due_run_obeys_next_due_schedule(tmp_path):
     db = tmp_path / "intel.db"
     cfg = _config(db, [OLD_ITEM])
@@ -141,6 +175,169 @@ def test_due_run_obeys_next_due_schedule(tmp_path):
     assert IntelRunner(cfg, now_fn=lambda: T1).run(due=True).source_count == 0
     after_interval = T0 + timedelta(hours=13)
     assert IntelRunner(cfg, now_fn=lambda: after_interval).run(due=True).source_count == 1
+
+
+def test_explicit_source_run_respects_freshness_unless_forced(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [OLD_ITEM])
+    IntelRunner(cfg, now_fn=lambda: T0).run(due=True)
+
+    guarded = IntelRunner(cfg, now_fn=lambda: T1).run(source_id="s1")
+    forced = IntelRunner(cfg, now_fn=lambda: T1).run(source_id="s1", force=True)
+
+    assert guarded.items[0].status == "skipped"
+    assert guarded.items[0].error_code == "source_not_due"
+    assert "Current copy is fresh" in guarded.items[0].reason
+    assert forced.items[0].status == "polled"
+
+
+def test_rate_limit_opens_provider_circuit_for_remaining_sources(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = IntelConfig(
+        db_path=db,
+        watchlist=WatchlistConfig(
+            include_graph_brands=False, entity_graph_db_path=None, seed_brands=["A", "B"]
+        ),
+        sources=[
+            SourceConfig(
+                id="g1",
+                brand="A",
+                source_type="google_atc",
+                enabled=True,
+                platform_id="AR_A",
+            ),
+            SourceConfig(
+                id="g2",
+                brand="B",
+                source_type="google_atc",
+                enabled=True,
+                platform_id="AR_B",
+            ),
+        ],
+    )
+    calls = []
+
+    class RateLimitedAdapter:
+        tier = "B"
+
+        def poll(self, source, state, *, now):
+            calls.append(source.id)
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    PollDiagnostic(
+                        code="provider_rate_limited",
+                        category="rate_limited",
+                        message="Google returned HTTP 429.",
+                        retryable=True,
+                    )
+                ],
+            )
+
+    summary = IntelRunner(
+        cfg,
+        now_fn=lambda: T0,
+        adapter_factory=lambda _source_type: RateLimitedAdapter(),
+    ).run(due=False)
+
+    assert calls == ["g1"]
+    assert [item.status for item in summary.items] == ["failed", "skipped"]
+    assert summary.items[1].error_code == "provider_circuit_open"
+    assert summary.items[1].next_due_at == T0 + timedelta(hours=1)
+    assert summary.status == "degraded"
+
+
+def test_force_bypasses_open_provider_circuit(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [], source_type="google_atc")
+    cfg = cfg.model_copy(
+        update={"sources": [cfg.sources[0].model_copy(update={"platform_id": "AR_A", "tier": "B"})]}
+    )
+    repo = IntelRepository(db)
+    with repo.connect() as conn:
+        repo.sync_sources(conn, [cfg.sources[0].to_source()])
+        repo.update_source_state(
+            conn,
+            "s1",
+            last_error="Google returned HTTP 429.",
+            last_error_category="rate_limited",
+            last_error_code="provider_rate_limited",
+            cooldown_until=T0 + timedelta(hours=2),
+            next_due_at=T0 + timedelta(hours=2),
+        )
+        conn.commit()
+
+    class CompleteAdapter:
+        tier = "B"
+
+        def poll(self, source, state, *, now):
+            return SourcePollResult(source_id=source.id, outcome="explicit_empty")
+
+    guarded = IntelRunner(
+        cfg,
+        repo=repo,
+        now_fn=lambda: T1,
+        adapter_factory=lambda _source_type: CompleteAdapter(),
+    ).run(source_id="s1")
+    forced = IntelRunner(
+        cfg,
+        repo=repo,
+        now_fn=lambda: T1,
+        adapter_factory=lambda _source_type: CompleteAdapter(),
+    ).run(source_id="s1", force=True)
+
+    assert guarded.items[0].error_code == "provider_circuit_open"
+    assert forced.items[0].status == "polled"
+
+
+def test_page_checkpoint_is_durable_even_when_adapter_crashes(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [], source_type="google_atc")
+    cfg = cfg.model_copy(
+        update={"sources": [cfg.sources[0].model_copy(update={"platform_id": "AR_A", "tier": "B"})]}
+    )
+
+    class CrashingCheckpointAdapter:
+        tier = "B"
+
+        def set_checkpoint_sink(self, sink):
+            self.sink = sink
+
+        def poll(self, source, state, *, now):
+            self.sink(
+                {
+                    "google_atc": {
+                        "checkpoint": {
+                            "token": "NEXT_PAGE",
+                            "fingerprint": "fingerprint",
+                            "mode": "full",
+                            "page_count": 12,
+                            "updated_at": now.isoformat(),
+                        }
+                    }
+                }
+            )
+            raise RuntimeError("worker terminated after page")
+
+    summary = IntelRunner(
+        cfg,
+        now_fn=lambda: T0,
+        adapter_factory=lambda _source_type: CrashingCheckpointAdapter(),
+    ).run(due=True)
+
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        state = repo.get_source_state(conn, "s1")
+        status = repo.list_source_statuses(conn)[0]
+    checkpoint = state.provider_state["google_atc"]["checkpoint"]
+    assert summary.items[0].status == "failed"
+    assert checkpoint["token"] == "NEXT_PAGE"
+    assert checkpoint["page_count"] == 12
+    assert status.resume_available is True
+    assert status.resume_page == 12
+    assert "provider_state" not in status.model_dump(mode="json")["state"]
 
 
 def test_partial_baseline_persists_observation_but_does_not_activate(tmp_path):

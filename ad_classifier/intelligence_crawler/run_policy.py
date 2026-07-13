@@ -47,6 +47,9 @@ def schedule(source, now, result, consecutive_errors):
         delay = timedelta(hours=6)
     else:
         delay = timedelta(minutes=min(360, 15 * (2 ** min(consecutive_errors - 1, 4))))
+    retry_after = primary.details.get("retry_after_seconds") if primary else None
+    if isinstance(retry_after, (int, float)):
+        delay = max(delay, timedelta(seconds=max(0, retry_after)))
     next_due = now + delay
     return next_due, next_due
 
