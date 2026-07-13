@@ -9,7 +9,7 @@
 - [intellegence_crawler_overview.md](intellegence_crawler_overview.md) — plain-language overview.
 - [intelligence_crawler_normalized_ad_schema.md](intelligence_crawler_normalized_ad_schema.md) —
   API/resource JSON field guide.
-- [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) — current ten-brand cached demo flow and safe retry guidance.
+- [demo_present.md](demo_present.md) — top-level service brief, current ten-brand demo flow, and safe retry guidance.
 - [intel_crawler_followups.md](intel_crawler_followups.md) — short current backlog.
 
 ## Research / Background

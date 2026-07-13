@@ -4,7 +4,7 @@
 > Companion docs: [overview](intellegence_crawler_overview.md),
 > [normalized schema](intelligence_crawler_normalized_ad_schema.md),
 > [operations and failure semantics](intelligence_crawler_operations.md),
-> [demo runbook](DEMO_RUNBOOK.md), and [follow-ups](intel_crawler_followups.md).
+> [demo/service brief](demo_present.md), and [follow-ups](intel_crawler_followups.md).
 
 ## What It Is
 
@@ -98,7 +98,7 @@ The 2026-07-13 ten-brand exercise left **10,500 latest resources** in the local 
 9 Google McDonald's creatives, 9,217 Google Samsung creatives, and 1,274 Meta creatives
 across Apple, DoorDash, Duolingo, GEICO, McDonald's, Samsung, and Starbucks. Sources were
 returned to their pre-run disabled state after collection. The run ledger preserves the
-complete/partial/429 outcomes. See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) before any live refresh.
+complete/partial/429 outcomes. See [demo_present.md](demo_present.md) before any live refresh.
 
 ## Reliability Notes
 

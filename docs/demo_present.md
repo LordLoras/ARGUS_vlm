@@ -1,6 +1,83 @@
-# ARGUS Watcher — Demo Runbook
+# ARGUS Digital Ad Crawler — Demo & Service Brief
 
 > Last updated 2026-07-13.
+
+## Service At A Glance
+
+The intelligence crawler is ARGUS's local-first digital-ad collection middleware. It
+collects the latest observable ads and creative metadata from curated brand/provider
+sources, records exactly how every crawl ended, and serves normalized JSON to ARGUS or
+another consumer. The Watcher frontend is a presentation and operations shell; provider
+collection does not run inside React or a FastAPI background task.
+
+The current reliability tiers are intentional:
+
+- **Tier A — Meta Ad Library:** first-party ad library and the strongest current source.
+- **Tier B — Google Ads Transparency:** first-party transparency inventory through a
+  brittle, unofficial internal RPC.
+- **Tier C — YouTube, newsroom/RSS, and third-party discovery:** useful corroborating or
+  discovery sources, but not treated as authoritative ad-library coverage.
+
+OCR, AI/VLM classification, full-video analysis, campaign clustering, and TV-ad mapping
+are not responsibilities of this service. A downstream service can consume the crawler's
+JSON and artifacts later without coupling those workloads to provider collection.
+
+## Runtime Model
+
+| Component | Responsibility | Provider requests? |
+|---|---|---:|
+| ARGUS Watcher | Show cached ads, source/run diagnostics, queue actions, and service health. | No |
+| FastAPI | Serve latest JSON, changes, exports, health, and durably enqueue crawl runs. | Only for explicit synchronous developer endpoints |
+| Crawler worker | Atomically claim queued runs, enforce leases/guards, call adapters, and write results/snapshots. | Yes |
+| Scheduler | Find enabled sources that are due and enqueue one deduplicated due run. | No |
+| `intelligence_crawler.db` | WAL-mode latest projection, queue, source state, observations, and diagnostic ledgers. | No |
+
+The worker and scheduler are independent opt-in processes. They are not installed as
+Windows services and are not started automatically. This keeps the current demo safe
+while preserving a clean deployment boundary for later supervision.
+
+The database contains two logical views in one atomic store:
+
+- `intel_resources` is the authoritative latest projection returned to normal consumers.
+- observations, resource changes, crawl runs, and source runs are secondary audit and
+  recovery ledgers. Consumers do not need to replay them to obtain current JSON.
+
+## Reliability And Recovery
+
+- Routine runs honor freshness, `next_due_at`, cooldowns, and provider-wide circuits, so
+  current cached copy does not cause unnecessary requests.
+- Queue submissions support `Idempotency-Key`; worker claims and source leases prevent
+  duplicate execution.
+- Every failure exposes a stable cause such as `provider_ui_changed`,
+  `provider_api_changed`, `rate_limited`, `request_limit`, `blocked`, `transport`, or
+  `parse_error`. Full tracebacks remain in structured logs.
+- Google persists a page cursor after every successful page. A safe retry resumes from
+  that cursor; expired/rejected cursors fall back once to page one.
+- An abandoned worker run is failed and replaced only after its source lease expires,
+  preventing a stalled process and its replacement from flooding the provider.
+- `GET /api/intelligence/health` reports queue, worker, scheduler, source, circuit, and
+  resume state. `critical` means work cannot currently progress safely; `degraded` means
+  a provider/source needs attention.
+
+## Consumer Contract
+
+The current contract version is `1.0`:
+
+| Surface | Use |
+|---|---|
+| `GET /api/intelligence/resources` | Latest-only normalized resources with preferred opaque cursor pagination. |
+| `GET /api/intelligence/resources/changes` | Semantic created/updated events; timestamp-only refreshes do not produce noise. |
+| `GET /api/intelligence/resources/export?format=json\|jsonl` | Stream a filtered latest-only export. |
+| `GET /api/intelligence/runs/{run_id}` | Run and per-source request/page/error diagnostics. |
+| `POST /api/intelligence/runs/{run_id}/retry` | Queue the same request again while retaining cooldown/cursor guards. |
+| `GET /api/intelligence/health` | Aggregate operational state for ARGUS or monitoring. |
+
+After a worker run, atomic non-HTTP snapshots are written by default to
+`output/intelligence_crawler/`:
+
+- `latest_resources.json`
+- `source_statuses.json`
+- `health.json`
 
 ## Start / Access
 
