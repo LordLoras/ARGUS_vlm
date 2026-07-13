@@ -135,6 +135,9 @@ def test_brand_and_resource_artifact_endpoints(tmp_path):
         "items"
     ]
     assert [resource["id"] for resource in resources] == ["res_demo"]
+    assert resources[0]["normalized"]["provider"] == "mock"
+    assert resources[0]["normalized"]["advertiser"]["name"] == "Toyota"
+    assert resources[0]["normalized"]["variants"][0]["landing_url"] == "https://toyota.com"
     artifact_types = {artifact["artifact_type"] for artifact in resources[0]["artifacts"]}
     assert {"card_screenshot", "image_url", "video_url", "link"} <= artifact_types
 

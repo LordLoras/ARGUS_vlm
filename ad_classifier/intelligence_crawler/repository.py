@@ -22,6 +22,7 @@ from ad_classifier.intelligence_crawler.models import (
     RunStatus,
     SourceState,
 )
+from ad_classifier.intelligence_crawler.normalized import build_normalized_resource
 from ad_classifier.intelligence_crawler.schema import initialize_intelligence_crawler_db
 from ad_classifier.intelligence_crawler.timeutils import as_utc, iso, parse_iso
 
@@ -725,6 +726,10 @@ def _resource_view(
     metadata = loads_dict(row["metadata_json"]) or {}
     summary = _artifact_summary_from_metadata(metadata, media_asset_count=len(media_artifacts))
     artifacts = [*_artifacts_from_metadata(metadata), *media_artifacts]
+    published_at = parse_iso(row["published_at"])
+    fetched_at = _req_dt(row["fetched_at"])
+    variant_count = _int_or_none(_row_get(row, "variant_count"))
+    has_variants = bool(_row_get(row, "has_variants") or 0)
     return IntelResourceView(
         id=row["id"],
         brand_name=row["brand_name"],
@@ -732,17 +737,34 @@ def _resource_view(
         source_type=row["source_type"],
         resource_type=row["resource_type"],
         url=row["url"],
+        platform=_row_get(row, "platform"),
         platform_id=row["platform_id"],
         title=row["title"],
         description=row["description"],
-        published_at=parse_iso(row["published_at"]),
+        published_at=published_at,
         first_seen_at=_req_dt(row["first_seen_at"]),
-        fetched_at=_req_dt(row["fetched_at"]),
+        fetched_at=fetched_at,
         is_backfill=bool(row["is_backfill"]),
-        variant_count=_int_or_none(_row_get(row, "variant_count")),
-        has_variants=bool(_row_get(row, "has_variants") or 0),
+        variant_count=variant_count,
+        has_variants=has_variants,
         artifact_summary=summary,
         artifacts=artifacts,
+        normalized=build_normalized_resource(
+            source_type=str(row["source_type"]),
+            brand_name=str(row["brand_name"]),
+            resource_type=str(row["resource_type"]),
+            url=row["url"],
+            platform=_row_get(row, "platform"),
+            platform_id=row["platform_id"],
+            title=row["title"],
+            description=row["description"],
+            published_at=published_at,
+            fetched_at=fetched_at,
+            variant_count=variant_count,
+            has_variants=has_variants,
+            metadata=metadata,
+            artifacts=artifacts,
+        ),
         metadata=metadata,
     )
 

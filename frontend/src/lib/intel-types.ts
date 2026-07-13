@@ -68,6 +68,94 @@ export type IntelResourceArtifact = {
   text?: string | null;
 };
 
+export type IntelImpressionRange = {
+  lower_bound?: number | null;
+  upper_bound?: number | null;
+};
+
+export type IntelDeliverySurface = {
+  surface_code?: string | null;
+  surface_name?: string | null;
+  impressions?: IntelImpressionRange | null;
+};
+
+export type IntelDeliveryRegion = {
+  region_code?: string | null;
+  region_name?: string | null;
+  first_shown_at?: string | null;
+  last_shown_at?: string | null;
+  impressions?: IntelImpressionRange | null;
+  surfaces: IntelDeliverySurface[];
+};
+
+export type IntelDeliverySummary = {
+  regions: IntelDeliveryRegion[];
+};
+
+export type IntelCollectionContext = {
+  requested_region_code?: string | null;
+  collector_region_code?: string | null;
+  collector_id?: string | null;
+  source_url?: string | null;
+};
+
+export type IntelTargetingSummary = {
+  raw: Record<string, unknown>;
+  decoded: Record<string, unknown>;
+};
+
+export type IntelNormalizedAdvertiser = {
+  id?: string | null;
+  name?: string | null;
+  url?: string | null;
+};
+
+export type IntelCreativeAsset = {
+  asset_type: string;
+  role: string;
+  url?: string | null;
+  path?: string | null;
+  text?: string | null;
+  source?: string | null;
+};
+
+export type IntelCreativeVariant = {
+  id?: string | null;
+  label?: string | null;
+  description?: string | null;
+  cta?: string | null;
+  landing_url?: string | null;
+  assets: IntelCreativeAsset[];
+};
+
+export type IntelNormalizedCreative = {
+  id?: string | null;
+  library_url?: string | null;
+  format?: string | null;
+  status?: string | null;
+  title?: string | null;
+  description?: string | null;
+  first_shown_at?: string | null;
+  last_shown_at?: string | null;
+  served_days?: number | null;
+  variant_count?: number | null;
+  has_variants: boolean;
+};
+
+export type IntelNormalizedResource = {
+  provider: string;
+  adapter: string;
+  platform?: string | null;
+  source_url?: string | null;
+  fetched_at: string;
+  advertiser: IntelNormalizedAdvertiser;
+  creative: IntelNormalizedCreative;
+  variants: IntelCreativeVariant[];
+  delivery: IntelDeliverySummary;
+  targeting: IntelTargetingSummary;
+  collection: IntelCollectionContext;
+};
+
 export type IntelResource = {
   id: string;
   brand_name: string;
@@ -75,6 +163,7 @@ export type IntelResource = {
   source_type: string;
   resource_type: string;
   url?: string | null;
+  platform?: string | null;
   platform_id?: string | null;
   title?: string | null;
   description?: string | null;
@@ -86,6 +175,7 @@ export type IntelResource = {
   has_variants?: boolean;
   artifact_summary: IntelArtifactSummary;
   artifacts: IntelResourceArtifact[];
+  normalized?: IntelNormalizedResource | null;
   metadata: Record<string, unknown>;
 };
 

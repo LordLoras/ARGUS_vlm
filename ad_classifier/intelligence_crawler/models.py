@@ -144,6 +144,94 @@ class IntelResourceArtifact(StrictModel):
     text: str | None = None
 
 
+class IntelImpressionRange(StrictModel):
+    lower_bound: int | None = None
+    upper_bound: int | None = None
+
+
+class IntelDeliverySurface(StrictModel):
+    surface_code: str | None = None
+    surface_name: str | None = None
+    impressions: IntelImpressionRange | None = None
+
+
+class IntelDeliveryRegion(StrictModel):
+    region_code: str | None = None
+    region_name: str | None = None
+    first_shown_at: datetime | None = None
+    last_shown_at: datetime | None = None
+    impressions: IntelImpressionRange | None = None
+    surfaces: list[IntelDeliverySurface] = Field(default_factory=list)
+
+
+class IntelDeliverySummary(StrictModel):
+    regions: list[IntelDeliveryRegion] = Field(default_factory=list)
+
+
+class IntelCollectionContext(StrictModel):
+    requested_region_code: str | None = None
+    collector_region_code: str | None = None
+    collector_id: str | None = None
+    source_url: str | None = None
+
+
+class IntelTargetingSummary(StrictModel):
+    raw: dict = Field(default_factory=dict)
+    decoded: dict = Field(default_factory=dict)
+
+
+class IntelNormalizedAdvertiser(StrictModel):
+    id: str | None = None
+    name: str | None = None
+    url: str | None = None
+
+
+class IntelCreativeAsset(StrictModel):
+    asset_type: str
+    role: str
+    url: str | None = None
+    path: str | None = None
+    text: str | None = None
+    source: str | None = None
+
+
+class IntelCreativeVariant(StrictModel):
+    id: str | None = None
+    label: str | None = None
+    description: str | None = None
+    cta: str | None = None
+    landing_url: str | None = None
+    assets: list[IntelCreativeAsset] = Field(default_factory=list)
+
+
+class IntelNormalizedCreative(StrictModel):
+    id: str | None = None
+    library_url: str | None = None
+    format: str | None = None
+    status: str | None = None
+    title: str | None = None
+    description: str | None = None
+    first_shown_at: datetime | None = None
+    last_shown_at: datetime | None = None
+    served_days: int | None = None
+    variant_count: int | None = None
+    has_variants: bool = False
+
+
+class IntelNormalizedResource(StrictModel):
+    provider: str
+    adapter: str
+    platform: str | None = None
+    source_url: str | None = None
+    fetched_at: datetime
+    advertiser: IntelNormalizedAdvertiser = Field(default_factory=IntelNormalizedAdvertiser)
+    creative: IntelNormalizedCreative = Field(default_factory=IntelNormalizedCreative)
+    variants: list[IntelCreativeVariant] = Field(default_factory=list)
+    delivery: IntelDeliverySummary = Field(default_factory=IntelDeliverySummary)
+    targeting: IntelTargetingSummary = Field(default_factory=IntelTargetingSummary)
+    collection: IntelCollectionContext = Field(default_factory=IntelCollectionContext)
+
+
 class IntelResourceView(StrictModel):
     id: str
     brand_name: str
@@ -151,6 +239,7 @@ class IntelResourceView(StrictModel):
     source_type: str
     resource_type: str
     url: str | None = None
+    platform: str | None = None
     platform_id: str | None = None
     title: str | None = None
     description: str | None = None
@@ -162,6 +251,7 @@ class IntelResourceView(StrictModel):
     has_variants: bool = False
     artifact_summary: IntelArtifactSummary = Field(default_factory=IntelArtifactSummary)
     artifacts: list[IntelResourceArtifact] = Field(default_factory=list)
+    normalized: IntelNormalizedResource | None = None
     metadata: dict = Field(default_factory=dict)
 
 
