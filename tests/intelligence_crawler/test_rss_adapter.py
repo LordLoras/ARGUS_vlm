@@ -78,4 +78,13 @@ def test_304_preserves_watermark():
 def test_missing_url_reports_error():
     result = _adapter(RSS).poll(_source(url=None), SourceState(source_id="rss1"), now=NOW)
     assert result.items == []
-    assert result.errors and "feed url" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].code == "rss_feed_url_missing"
+
+
+def test_malformed_feed_is_failure_not_empty_success():
+    result = _adapter("<html>not a feed</html>").poll(
+        _source(), SourceState(source_id="rss1"), now=NOW
+    )
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].category == "parse_error"

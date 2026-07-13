@@ -89,7 +89,103 @@
 
 .watcher-run-summary {
   grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+
+.watcher-run-result {
+  display: grid;
+  gap: 10px;
   margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--watcher-line);
+  border-left: 3px solid var(--watcher-green);
+  border-radius: 8px;
+  background: rgba(5, 8, 12, 0.72);
+}
+
+.watcher-run-result.is-degraded {
+  border-left-color: var(--watcher-amber);
+}
+
+.watcher-run-result.is-failed {
+  border-left-color: var(--watcher-red);
+}
+
+.watcher-run-diagnostics {
+  display: grid;
+  gap: 6px;
+}
+
+.watcher-run-line,
+.watcher-source-health {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--watcher-line-soft);
+  border-radius: 6px;
+  background: #090c11;
+}
+
+.watcher-run-line > div,
+.watcher-source-health > div {
+  display: grid;
+  gap: 2px;
+}
+
+.watcher-run-line span,
+.watcher-source-health span,
+.watcher-run-note {
+  margin: 0;
+  color: var(--watcher-text-soft);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.watcher-run-line code,
+.watcher-source-health code {
+  color: var(--watcher-text-dim);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.watcher-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--watcher-green);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.09);
+}
+
+.watcher-run-line.is-partial .watcher-health-dot,
+.watcher-run-line.is-skipped .watcher-health-dot,
+.is-health-partial .watcher-health-dot {
+  background: var(--watcher-amber);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+}
+
+.watcher-run-line.is-failed .watcher-health-dot,
+.is-health-failed .watcher-health-dot {
+  background: var(--watcher-red);
+  box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.1);
+}
+
+.is-health-running .watcher-health-dot {
+  background: var(--watcher-cyan);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+  animation: watcher-health-pulse 1.4s ease-in-out infinite;
+}
+
+.is-health-never .watcher-health-dot {
+  background: var(--watcher-text-dim);
+  box-shadow: none;
+}
+
+@keyframes watcher-health-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }
 
 .watcher-metric {
@@ -358,6 +454,18 @@
 
 .watcher-source-row.is-enabled {
   border-color: rgba(52, 211, 153, 0.28);
+}
+
+.watcher-source-row.is-health-partial {
+  border-color: rgba(251, 191, 36, 0.34);
+}
+
+.watcher-source-row.is-health-failed {
+  border-color: rgba(251, 113, 133, 0.4);
+}
+
+.watcher-source-health {
+  padding: 8px 9px;
 }
 
 .watcher-source-row > div:first-child,

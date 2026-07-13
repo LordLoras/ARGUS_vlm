@@ -4,7 +4,11 @@ import threading
 from datetime import UTC, datetime, timedelta
 
 from ad_classifier.intelligence_crawler.config import IntelConfig, SourceConfig, WatchlistConfig
-from ad_classifier.intelligence_crawler.models import SourcePollResult
+from ad_classifier.intelligence_crawler.models import (
+    PollDiagnostic,
+    RawSourceItem,
+    SourcePollResult,
+)
 from ad_classifier.intelligence_crawler.repository import IntelRepository
 from ad_classifier.intelligence_crawler.runner import IntelRunner
 
@@ -64,7 +68,7 @@ def test_coldstart_then_live_with_campaign_grouping(tmp_path):
 
     # Run 2: activation persisted; two new items in the same campaign go live.
     summary2 = IntelRunner(_config(db, [OLD_ITEM, NEW_PRESS, NEW_VIDEO]), now_fn=lambda: T1).run(
-        due=True
+        due=False
     )
     assert summary2.items[0].baseline is False
     assert summary2.signal_count == 2  # old1 already seen; the two new ones emit
@@ -84,8 +88,8 @@ def test_repoll_is_idempotent(tmp_path):
     db = tmp_path / "intel.db"
     IntelRunner(_config(db, [OLD_ITEM]), now_fn=lambda: T0).run(due=True)  # baseline
     cfg = _config(db, [OLD_ITEM, NEW_VIDEO])
-    first = IntelRunner(cfg, now_fn=lambda: T1).run(due=True)
-    second = IntelRunner(cfg, now_fn=lambda: T1).run(due=True)
+    first = IntelRunner(cfg, now_fn=lambda: T1).run(due=False)
+    second = IntelRunner(cfg, now_fn=lambda: T1).run(due=False)
     assert first.signal_count == 1
     assert second.signal_count == 0  # nothing new on re-poll
 
@@ -100,7 +104,7 @@ def test_repoll_refreshes_stored_metadata(tmp_path):
         "title": "Camry Reborn official commercial (extended cut)",
         "raw": {"image_sources": ["https://tpc.googlesyndication.com/archive/simgad/1"]},
     }
-    summary = IntelRunner(_config(db, [enriched]), now_fn=lambda: T1).run(due=True)
+    summary = IntelRunner(_config(db, [enriched]), now_fn=lambda: T1).run(due=False)
 
     item = summary.items[0]
     assert item.new_resources == 0
@@ -110,6 +114,13 @@ def test_repoll_refreshes_stored_metadata(tmp_path):
     repo = IntelRepository(db)
     with repo.connect(readonly=True) as conn:
         views = repo.list_resources(conn, source_id="s1")
+        observation_count = conn.execute(
+            "SELECT COUNT(*) FROM intel_resource_observations WHERE resource_id = ?",
+            (views[0].id,),
+        ).fetchone()[0]
+        media_count = conn.execute(
+            "SELECT COUNT(*) FROM intel_media_assets WHERE resource_id = ?", (views[0].id,)
+        ).fetchone()[0]
     assert len(views) == 1
     got = views[0]
     assert got.title == "Camry Reborn official commercial (extended cut)"
@@ -117,6 +128,84 @@ def test_repoll_refreshes_stored_metadata(tmp_path):
     # First-seen properties survive the refresh.
     assert got.is_backfill is True
     assert got.first_seen_at == T0
+    assert got.last_seen_at == T1
+    assert observation_count == 2
+    assert media_count == 1
+
+
+def test_due_run_obeys_next_due_schedule(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [OLD_ITEM])
+
+    assert IntelRunner(cfg, now_fn=lambda: T0).run(due=True).source_count == 1
+    assert IntelRunner(cfg, now_fn=lambda: T1).run(due=True).source_count == 0
+    after_interval = T0 + timedelta(hours=13)
+    assert IntelRunner(cfg, now_fn=lambda: after_interval).run(due=True).source_count == 1
+
+
+def test_partial_baseline_persists_observation_but_does_not_activate(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [])
+
+    class PartialAdapter:
+        tier = "A"
+
+        def poll(self, source, state, *, now):
+            return SourcePollResult(
+                source_id=source.id,
+                items=[RawSourceItem.model_validate(NEW_VIDEO)],
+                outcome="partial",
+                complete=False,
+                truncated=True,
+                truncation_reason="Configured page limit reached.",
+                diagnostics=[
+                    PollDiagnostic(
+                        code="page_limit_reached",
+                        category="request_limit",
+                        message="Configured page limit reached.",
+                        retryable=True,
+                    )
+                ],
+            )
+
+    summary = IntelRunner(
+        cfg, now_fn=lambda: T0, adapter_factory=lambda _source_type: PartialAdapter()
+    ).run(due=True)
+
+    assert summary.status == "degraded"
+    assert summary.items[0].status == "partial"
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        state = repo.get_source_state(conn, "s1")
+        source = repo.get_source(conn, "s1")
+        observations = conn.execute("SELECT COUNT(*) FROM intel_resource_observations").fetchone()[
+            0
+        ]
+    assert state.last_success_at is None
+    assert state.last_outcome == "partial"
+    assert state.last_error_category == "request_limit"
+    assert source is not None and source.source_activated_at is None
+    assert observations == 1
+
+
+def test_failure_preserves_previous_complete_success(tmp_path):
+    db = tmp_path / "intel.db"
+    cfg = _config(db, [OLD_ITEM])
+    IntelRunner(cfg, now_fn=lambda: T0).run(due=True)
+
+    IntelRunner(cfg, now_fn=lambda: T1, adapter_factory=lambda _source_type: _BoomAdapter()).run(
+        due=False
+    )
+
+    repo = IntelRepository(db)
+    with repo.connect(readonly=True) as conn:
+        state = repo.get_source_state(conn, "s1")
+        runs = repo.list_source_runs(conn, "s1")
+    assert state.last_success_at == T0
+    assert state.last_attempt_at == T1
+    assert state.last_outcome == "failed"
+    assert runs[0]["status"] == "failed"
+    assert runs[0]["error_code"] == "provider_poll_failed"
 
 
 def test_runner_seed_does_not_disable_curated_db_source(tmp_path):
@@ -151,7 +240,7 @@ def test_non_ad_video_is_filtered_not_signaled(tmp_path):
         "title": "2026 RAV4 full walkaround",  # no ad cue, no duration -> below the gate
         "published_at": T1.isoformat(),
     }
-    summary = IntelRunner(_config(db, [OLD_ITEM, walkaround]), now_fn=lambda: T1).run(due=True)
+    summary = IntelRunner(_config(db, [OLD_ITEM, walkaround]), now_fn=lambda: T1).run(due=False)
     assert summary.signal_count == 0
     item = summary.items[0]
     assert item.filtered == 1
@@ -168,14 +257,14 @@ class _BoomAdapter:
         raise RuntimeError("boom")
 
 
-def test_source_failure_marks_run_degraded(tmp_path):
+def test_only_source_failure_marks_run_failed(tmp_path):
     db = tmp_path / "intel.db"
     cfg = _config(db, [])
     # Force the adapter to raise (a whole-source failure) via the factory seam.
     summary = IntelRunner(
         cfg, now_fn=lambda: T1, adapter_factory=lambda _stype: _BoomAdapter()
     ).run(due=True)
-    assert summary.status == "degraded"
+    assert summary.status == "failed"
     assert summary.items[0].status == "failed"
 
 
@@ -220,4 +309,6 @@ def test_slow_poll_does_not_hold_write_lock(tmp_path):
     assert not thread.is_alive()
     summary = result["summary"]
     assert summary.items[0].status == "skipped"
-    assert summary.items[0].reason == "source deleted during poll"
+    assert summary.items[0].reason == (
+        "Source was archived during polling; provider result was discarded."
+    )

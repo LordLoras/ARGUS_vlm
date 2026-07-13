@@ -246,7 +246,9 @@ def test_adapter_preview_enrichment_failure_keeps_items():
         "CR17113391207746109441",
         "CR99988877766655544433",
     ]
-    assert result.errors and "preview 403" in result.errors[0]
+    assert result.outcome == "partial"
+    assert result.diagnostics[0].category == "asset_fetch"
+    assert result.diagnostics[0].code == "google_preview_asset_fetch_failed"
     assert result.items[0].raw["preview_enriched"] is False
 
 
@@ -285,6 +287,33 @@ def test_pagination_respects_max_pages():
         _source(config={"max_pages": 3}), SourceState(source_id="salesforce_atc"), now=NOW
     )
     assert len(result.items) == 3  # exactly max_pages pages fetched
+    assert result.outcome == "partial"
+    assert result.truncated is True
+    assert result.diagnostics[0].category == "request_limit"
+
+
+def test_later_page_failure_retains_prior_pages_and_reports_partial():
+    calls = 0
+
+    def fetch(method, freq):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {
+                "1": [{"1": ADV, "2": "CR_A", "6": {"1": "1770000000"}}],
+                "2": "TOKEN_ABC",
+            }
+        raise RuntimeError("rpc 429")
+
+    adapter = GoogleAtcAdapter(rpc_fetch=fetch, intel_config=IntelConfig())
+    result = adapter.poll(
+        _source(config={"max_pages": 5}), SourceState(source_id="salesforce_atc"), now=NOW
+    )
+
+    assert [item.external_id for item in result.items] == ["CR_A"]
+    assert result.outcome == "partial"
+    assert result.complete is False
+    assert result.diagnostics[0].category == "rate_limited"
 
 
 def test_live_fetches_are_throttled_between_requests():
@@ -315,7 +344,8 @@ def test_missing_advertiser_id_reports_error():
         _source(platform_id=None), SourceState(source_id="salesforce_atc"), now=NOW
     )
     assert result.items == []
-    assert result.errors and "platform_id" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].code == "google_advertiser_id_missing"
 
 
 def test_injected_feed_disables_network():
@@ -323,7 +353,8 @@ def test_injected_feed_disables_network():
     adapter = GoogleAtcAdapter(http=lambda *a, **k: None, intel_config=IntelConfig())
     result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
     assert result.items == []
-    assert result.errors and "rpc client" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].code == "google_rpc_client_unavailable"
 
 
 def test_rpc_failure_is_isolated():
@@ -333,7 +364,8 @@ def test_rpc_failure_is_isolated():
     adapter = GoogleAtcAdapter(rpc_fetch=boom, intel_config=IntelConfig())
     result = adapter.poll(_source(), SourceState(source_id="salesforce_atc"), now=NOW)
     assert result.items == []
-    assert result.errors and "rpc 429" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].category == "rate_limited"
 
 
 def test_parse_creatives_extracts_inline_image_from_field_3_3_2():

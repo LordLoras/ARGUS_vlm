@@ -28,6 +28,14 @@ def evidence_id(signal_id_: str, resource_id_: str | None) -> str:
     return "ev_" + digest(signal_id_, resource_id_ or "")[:20]
 
 
+def observation_id(run_id: str, resource_id_: str) -> str:
+    return "obs_" + digest(run_id, resource_id_)[:20]
+
+
+def media_asset_id(resource_id_: str, asset_type: str, identity: str) -> str:
+    return "asset_" + digest(resource_id_, asset_type, identity)[:20]
+
+
 def match_id(signal_id_: str, target_type: str, target_id: str) -> str:
     return "mat_" + digest(signal_id_, target_type, target_id)[:20]
 

@@ -47,7 +47,8 @@ import type {
   IntelResource,
   IntelSignal,
   IntelSource,
-  IntelSourceCreate
+  IntelSourceCreate,
+  IntelSourceStatus
 } from "./intel-types";
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -524,6 +525,11 @@ export const api = {
   listIntelSources: (query: { brand?: string; enabled_only?: boolean } = {}) =>
     apiFetch<{ items: IntelSource[] }>(`/api/intelligence/sources${params(query)}`),
 
+  listIntelSourceStatuses: (query: { brand?: string } = {}) =>
+    apiFetch<{ items: IntelSourceStatus[] }>(
+      `/api/intelligence/source-statuses${params(query)}`
+    ),
+
   listIntelAdapters: () =>
     apiFetch<{ items: IntelAdapterDescriptor[] }>("/api/intelligence/adapters"),
 
@@ -538,9 +544,16 @@ export const api = {
       source_id?: string;
       include_backfill?: boolean;
       limit?: number;
+      offset?: number;
     } = {}
   ) =>
-    apiFetch<{ items: IntelResource[]; limit: number }>(
+    apiFetch<{
+      items: IntelResource[];
+      limit: number;
+      offset: number;
+      total: number;
+      next_offset?: number | null;
+    }>(
       `/api/intelligence/resources${params(query)}`
     ),
 
@@ -560,7 +573,7 @@ export const api = {
     }),
 
   deleteIntelSource: (sourceId: string) =>
-    apiFetch<{ deleted: string }>(`/api/intelligence/sources/${encodeURIComponent(sourceId)}`, {
+    apiFetch<{ archived: string }>(`/api/intelligence/sources/${encodeURIComponent(sourceId)}`, {
       method: "DELETE"
     }),
 

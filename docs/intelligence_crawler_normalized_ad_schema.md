@@ -1,11 +1,15 @@
 # Intelligence Crawler Normalized Ad Schema
 
 > Last updated 2026-07-13. This is the current API contract for
-> `GET /api/intelligence/resources`.
+> `GET /api/intelligence/resources` and `GET /api/intelligence/resources/{resource_id}`.
 
 This is the API-facing ad-resource shape for digital ad library captures. It is
 computed at read time from `intel_resources` columns plus the raw adapter payload
 stored in `metadata_json`.
+
+These endpoints return the authoritative latest projection only. Historical snapshots
+live in `intel_resource_observations` and are exposed separately through
+`GET /api/intelligence/resources/{resource_id}/history`.
 
 The design goal is to keep provider facts without making Google, Meta, YouTube,
 or future adapters leak their private field names into downstream analysis.
@@ -14,7 +18,7 @@ or future adapters leak their private field names into downstream analysis.
 
 Each resource returned by `GET /api/intelligence/resources` includes:
 
-- `metadata`: raw adapter/provider data. This is for debugging, replay, and fields
+- `metadata`: adapter-produced provider metadata. This is for debugging, replay, and fields
   we have not normalized yet. It should not be the primary contract for analysis.
 - `normalized`: stable cross-provider data. This is what API clients, campaign
   analysis, and later TV-ad matching should prefer.
@@ -38,7 +42,10 @@ apply to existing resource rows as soon as the API reads them.
 | `description` | Best available text/copy summary from the adapter. |
 | `published_at` | Provider first-seen/started date when known. |
 | `first_seen_at` | Time our crawler first observed the resource. |
+| `last_seen_at` | Time our crawler most recently observed the resource in a provider result. |
 | `fetched_at` | Time our crawler last fetched/refreshed the resource. |
+| `thumbnail_url` | Latest provider thumbnail/poster URL when supplied by the adapter. |
+| `duration_ms` | Latest provider/enrichment duration when known. |
 | `is_backfill` | True when the item was recorded during baseline/backfill and did not emit a live signal. |
 | `variant_count` | Provider-reported creative variant count when known. |
 | `has_variants` | True when the provider says the creative has multiple versions or the count is greater than one. |

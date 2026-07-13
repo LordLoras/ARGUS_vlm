@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS intel_sources (
   allowed_domains_json TEXT NOT NULL DEFAULT '[]',
   config_json TEXT NOT NULL DEFAULT '{}',
   notes TEXT,
+  archived_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -46,6 +47,11 @@ CREATE TABLE IF NOT EXISTS intel_source_state (
   watermark TEXT,
   lease_until TEXT,
   lease_owner TEXT,
+  last_outcome TEXT,
+  last_error_category TEXT,
+  last_error_code TEXT,
+  cooldown_until TEXT,
+  diagnostics_json TEXT NOT NULL DEFAULT '[]',
   state_json TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -78,10 +84,13 @@ CREATE TABLE IF NOT EXISTS intel_resources (
   description TEXT,
   published_at TEXT,
   first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT,
   fetched_at TEXT NOT NULL,
   is_backfill INTEGER NOT NULL DEFAULT 0,
   variant_count INTEGER,
   has_variants INTEGER NOT NULL DEFAULT 0,
+  thumbnail_url TEXT,
+  duration_ms INTEGER,
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -99,6 +108,52 @@ CREATE TABLE IF NOT EXISTS intel_media_assets (
   phash TEXT,
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
+
+CREATE TABLE IF NOT EXISTS intel_source_runs (
+  run_id TEXT NOT NULL REFERENCES intel_crawl_runs(id) ON DELETE CASCADE,
+  source_id TEXT NOT NULL REFERENCES intel_sources(id),
+  status TEXT NOT NULL CHECK (status IN ('running','polled','partial','skipped','failed')),
+  outcome TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  complete INTEGER NOT NULL DEFAULT 1,
+  truncated INTEGER NOT NULL DEFAULT 0,
+  truncation_reason TEXT,
+  new_resources INTEGER NOT NULL DEFAULT 0,
+  refreshed INTEGER NOT NULL DEFAULT 0,
+  backfilled INTEGER NOT NULL DEFAULT 0,
+  filtered INTEGER NOT NULL DEFAULT 0,
+  new_signals INTEGER NOT NULL DEFAULT 0,
+  error_category TEXT,
+  error_code TEXT,
+  error TEXT,
+  diagnostics_json TEXT NOT NULL DEFAULT '[]',
+  request_count INTEGER NOT NULL DEFAULT 0,
+  page_count INTEGER NOT NULL DEFAULT 0,
+  provider_item_count INTEGER,
+  next_due_at TEXT,
+  PRIMARY KEY (run_id, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_intel_source_runs_source
+  ON intel_source_runs(source_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS intel_resource_observations (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL REFERENCES intel_resources(id),
+  source_id TEXT NOT NULL REFERENCES intel_sources(id),
+  run_id TEXT NOT NULL REFERENCES intel_crawl_runs(id),
+  observed_at TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  resource_json TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  UNIQUE(run_id, resource_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_intel_observations_resource
+  ON intel_resource_observations(resource_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_intel_observations_source
+  ON intel_resource_observations(source_id, observed_at DESC);
 
 CREATE TABLE IF NOT EXISTS intel_campaign_groups (
   id TEXT PRIMARY KEY,
@@ -196,6 +251,32 @@ def initialize_intelligence_crawler_db(path: Path) -> list[str]:
                 "INSERT OR IGNORE INTO intel_migrations (version) VALUES ('002_resource_variants')"
             )
             migrations.append("002_resource_variants")
+        if "003_crawl_observability" not in applied:
+            columns = {
+                "intel_sources": (("archived_at", "TEXT"),),
+                "intel_source_state": (
+                    ("last_outcome", "TEXT"),
+                    ("last_error_category", "TEXT"),
+                    ("last_error_code", "TEXT"),
+                    ("cooldown_until", "TEXT"),
+                    ("diagnostics_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ),
+                "intel_resources": (
+                    ("last_seen_at", "TEXT"),
+                    ("thumbnail_url", "TEXT"),
+                    ("duration_ms", "INTEGER"),
+                ),
+            }
+            for table, additions in columns.items():
+                for column, ddl in additions:
+                    if not _column_exists(conn, table, column):
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+            # The main schema creates the new ledger tables on both fresh and existing DBs.
+            conn.execute(
+                "INSERT OR IGNORE INTO intel_migrations (version) "
+                "VALUES ('003_crawl_observability')"
+            )
+            migrations.append("003_crawl_observability")
         conn.commit()
         return migrations
     finally:

@@ -24,8 +24,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import structlog
+
+from ad_classifier.intelligence_crawler.diagnostics import ProviderApiChangedError
 
 logger = structlog.get_logger(__name__)
 
@@ -44,6 +47,17 @@ _FORMAT_LABELS = {1: "text", 2: "image", 3: "video"}
 # (service_method, f_req_dict) -> parsed JSON dict. Injected so tests need no network.
 RpcFetch = Callable[[str, dict], dict]
 PreviewFetch = Callable[[str], str]
+
+
+@dataclass(frozen=True)
+class CreativeSearchResult:
+    creatives: list[dict]
+    request_count: int
+    page_count: int
+    complete: bool
+    continuation_remaining: bool = False
+    error: BaseException | None = None
+
 
 _URL_RE = re.compile(r"https?:(?:(?:\\?/\\?/)|(?://))[^\"'<>\s]+", re.IGNORECASE)
 _YOUTUBE_ID_RE = re.compile(
@@ -174,27 +188,70 @@ def search_creatives(
     de-duplicating by creative id. Stops early when the token is empty, a page is empty, or
     a page yields nothing new.
     """
+    return search_creatives_result(
+        advertiser_id,
+        fetch=fetch,
+        region=region,
+        page_size=page_size,
+        max_pages=max_pages,
+    ).creatives
+
+
+def search_creatives_result(
+    advertiser_id: str,
+    *,
+    fetch: RpcFetch,
+    region: int = US_REGION_CODE,
+    page_size: int = _DEFAULT_PAGE_SIZE,
+    max_pages: int = 1,
+) -> CreativeSearchResult:
+    """Search with completeness metadata and preservation of successful earlier pages."""
     creatives: list[dict] = []
     seen: set[str] = set()
     token: str | None = None
+    request_count = 0
+    page_count = 0
     for _ in range(max(max_pages, 1)):
-        payload = fetch(
-            "SearchService/SearchCreatives",
-            advertiser_creatives_freq(
-                advertiser_id, region=region, page_size=page_size, after=token
-            ),
-        )
-        if not isinstance(payload, dict):
-            break
+        try:
+            request_count += 1
+            payload = fetch(
+                "SearchService/SearchCreatives",
+                advertiser_creatives_freq(
+                    advertiser_id, region=region, page_size=page_size, after=token
+                ),
+            )
+        except Exception as exc:
+            return CreativeSearchResult(
+                creatives, request_count, page_count, False, bool(token), exc
+            )
+        if not isinstance(payload, dict) or not isinstance(payload.get("1"), list):
+            error = ProviderApiChangedError(
+                "Google ATC SearchCreatives response did not match the expected contract."
+            )
+            return CreativeSearchResult(
+                creatives, request_count, page_count, False, bool(token), error
+            )
+        page_count += 1
         page = parse_creatives(payload)
         fresh = [c for c in page if c["creative_id"] not in seen]
         for creative in fresh:
             seen.add(creative["creative_id"])
         creatives.extend(fresh)
         token = payload.get("2") if isinstance(payload.get("2"), str) else None
-        if not token or not page or not fresh:
-            break
-    return creatives
+        if not token:
+            return CreativeSearchResult(creatives, request_count, page_count, True)
+        if not page or not fresh:
+            error = ProviderApiChangedError(
+                "Google ATC returned a continuation token without a usable next page."
+            )
+            return CreativeSearchResult(creatives, request_count, page_count, False, True, error)
+    return CreativeSearchResult(
+        creatives,
+        request_count,
+        page_count,
+        complete=not bool(token),
+        continuation_remaining=bool(token),
+    )
 
 
 def parse_preview_artifacts(script: str, *, preview_url: str | None = None) -> dict:

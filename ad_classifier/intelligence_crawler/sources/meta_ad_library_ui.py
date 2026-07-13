@@ -19,12 +19,17 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.diagnostics import (
+    classify_exception,
+    configuration_diagnostic,
+)
 from ad_classifier.intelligence_crawler.meta_ad_library_probe import (
     MetaProbeResult,
     run_meta_ad_library_probe,
 )
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
+    PollDiagnostic,
     RawSourceItem,
     SourcePollResult,
     SourceState,
@@ -44,7 +49,7 @@ ProbeRunner = Callable[..., MetaProbeResult]
 class MetaAdLibraryUiAdapter:
     """Observe public Meta Ad Library cards for a configured page id."""
 
-    tier: Tier = "B"
+    tier: Tier = "A"
 
     def __init__(
         self,
@@ -61,15 +66,27 @@ class MetaAdLibraryUiAdapter:
         if not page_id:
             return SourcePollResult(
                 source_id=source.id,
-                errors=["meta_ad_library_ui source needs platform_id set to the Meta page id"],
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    configuration_diagnostic(
+                        "meta_page_id_missing",
+                        "Meta Ad Library source needs a Facebook Page ID.",
+                        provider=META_AD_LIBRARY_SOURCE_TYPE,
+                    )
+                ],
             )
 
         active_status = _active_status(source.config.get("active_status"), default="active")
         sort_mode = _string_config(source.config.get("sort_mode"), default=DEFAULT_SORT_MODE)
         sort_direction = _sort_direction(source.config.get("sort_direction"))
         scrolls = _int_config(source.config.get("scrolls"), default=20, minimum=0, maximum=200)
-        max_cards = _int_config(source.config.get("max_cards"), default=250, minimum=1, maximum=1000)
-        wait_ms = _int_config(source.config.get("wait_ms"), default=1800, minimum=250, maximum=15000)
+        max_cards = _int_config(
+            source.config.get("max_cards"), default=250, minimum=1, maximum=1000
+        )
+        wait_ms = _int_config(
+            source.config.get("wait_ms"), default=1800, minimum=250, maximum=15000
+        )
         stop_after_no_new = _int_config(
             source.config.get("stop_after_no_new"), default=3, minimum=0, maximum=20
         )
@@ -94,14 +111,82 @@ class MetaAdLibraryUiAdapter:
                 stop_after_no_new=stop_after_no_new,
             )
         except Exception as exc:
-            return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    classify_exception(
+                        exc, provider=META_AD_LIBRARY_SOURCE_TYPE, phase="public_ui_probe"
+                    )
+                ],
+                request_count=1,
+            )
 
         cards = [card for card in result.cards if _include_card(card, include_statuses)]
         items = [_card_to_item(source, result.source_url, card) for card in cards]
+        diagnostics: list[PollDiagnostic] = []
+        truncated = result.hit_card_limit or result.hit_scroll_limit
+        truncation_reason = None
+        if truncated:
+            truncation_reason = (
+                "Meta collection reached its configured card or scroll limit while new "
+                "cards were still appearing."
+            )
+            diagnostics.append(
+                PollDiagnostic(
+                    code="meta_collection_limit_reached",
+                    category="request_limit",
+                    message=truncation_reason,
+                    retryable=True,
+                    provider=META_AD_LIBRARY_SOURCE_TYPE,
+                    phase="public_ui_probe",
+                    details={
+                        "scrolls_completed": result.scrolls_completed,
+                        "cards_captured": result.cards_count,
+                        "max_cards": max_cards,
+                    },
+                )
+            )
+        if result.page_state == "ads" and not items:
+            message = "Meta showed an ads result state but no recognizable ad cards were captured."
+            diagnostics.append(
+                PollDiagnostic(
+                    code="meta_card_contract_changed",
+                    category="provider_ui_changed",
+                    message=message,
+                    provider=META_AD_LIBRARY_SOURCE_TYPE,
+                    phase="card_extraction",
+                    details={"library_ids_seen": result.unique_library_ids_seen},
+                )
+            )
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=diagnostics,
+                request_count=1,
+                page_count=result.scrolls_completed + 1,
+                provider_item_count=result.unique_library_ids_seen,
+            )
+        if result.page_state == "explicit_empty":
+            outcome = "explicit_empty"
+        elif truncated:
+            outcome = "partial"
+        else:
+            outcome = "success"
         return SourcePollResult(
             source_id=source.id,
             items=items,
             new_watermark=_latest_published(items) or state.watermark,
+            outcome=outcome,
+            complete=not truncated,
+            truncated=truncated,
+            truncation_reason=truncation_reason,
+            diagnostics=diagnostics,
+            request_count=1,
+            page_count=result.scrolls_completed + 1,
+            provider_item_count=result.unique_library_ids_seen,
         )
 
 
@@ -203,9 +288,7 @@ def _creative_copy_for_card(brand_name: str, text: str) -> str:
         )
         if brand_marker:
             compact = compact[brand_marker.end() :].strip()
-    compact = re.sub(
-        r"\b(?:Active|Inactive)?\s*Library\s+ID[:\s]*[0-9]+\b", " ", compact
-    )
+    compact = re.sub(r"\b(?:Active|Inactive)?\s*Library\s+ID[:\s]*[0-9]+\b", " ", compact)
     compact = re.sub(
         r"^\s*(?:Active|Inactive)?\s*(?:Low|Medium|High)?\s*impression\s+count\s+"
         r"(?:Impressions:\s*<?[0-9,]+)?\s*(?:See ad)?\s*",

@@ -18,7 +18,7 @@ ARGUS a local inventory of observed digital creatives with:
 - source provenance,
 - original provider URLs,
 - screenshots and media URLs,
-- raw provider metadata,
+- provider-derived metadata snapshots,
 - normalized cross-provider JSON,
 - timestamps for first seen/fetched/provider-published dates.
 
@@ -32,6 +32,9 @@ ARGUS a local inventory of observed digital creatives with:
 | RSS / Atom | Official newsroom or trade-feed monitoring. |
 | Mock | Offline testing and local smoke data. |
 
+Reliability/provenance tiers are fixed by adapter family: Meta is A, Google Ads
+Transparency is B, and YouTube/RSS/newsroom or other indirect discovery is C.
+
 This is US-focused. The crawler keeps requested market context under
 `normalized.collection.requested_region_code`, but it does not treat region as a primary
 analysis axis for the demo.
@@ -43,8 +46,8 @@ flowchart LR
     A["Curated brand/source registry"] --> B["Adapter poll"]
     B --> C["Raw provider item"]
     C --> D["Cold-start/newness detection"]
-    D --> E["Persist resource + metadata + artifacts"]
-    E --> F["Generate normalized JSON at API read time"]
+    D --> E["Atomically update latest resource + append observation/run ledger"]
+    E --> F["Generate latest normalized JSON at API read time"]
     F --> G["Watcher UI / API consumers"]
 ```
 
@@ -55,6 +58,7 @@ Key behavior:
 3. Re-polls refresh existing resources instead of duplicating them.
 4. Provider-specific payloads stay in `metadata`.
 5. Consumers use `normalized` for one stable shape across Google, Meta, and future adapters.
+6. Provider failures have machine-readable causes; an incomplete result never advances the last-complete-success marker.
 
 ## What A Resource Represents
 

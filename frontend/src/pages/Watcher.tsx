@@ -36,6 +36,7 @@ import type {
   IntelResourceArtifact,
   IntelSignal,
   IntelSource,
+  IntelSourceStatus,
   IntelTier
 } from "../lib/intel-types";
 import "./Watcher.css";
@@ -49,7 +50,7 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
     helper_text:
       "Public Meta Ad Library monitoring for a Facebook advertiser Page ID, not a single ad or campaign id. " +
       "Stores visible cards, screenshots, copy, image URLs, exposed video URLs, and multiple-version counts when shown.",
-    default_tier: "B",
+    default_tier: "A",
     platform: "meta",
     requires_url: false,
     requires_platform_id: true,
@@ -77,7 +78,7 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
     target_label: "Channel ID",
     target_placeholder: "UC...",
     helper_text: "Official channel monitoring through public feeds and video metadata.",
-    default_tier: "A",
+    default_tier: "C",
     platform: "youtube",
     requires_url: false,
     requires_platform_id: true,
@@ -90,7 +91,7 @@ const FALLBACK_ADAPTERS: IntelAdapterDescriptor[] = [
     target_label: "Feed URL",
     target_placeholder: "https://pressroom.toyota.com/product/feed/",
     helper_text: "Robots-gated feed monitoring for newsroom and trade-press releases.",
-    default_tier: "A",
+    default_tier: "C",
     platform: null,
     requires_url: true,
     requires_platform_id: false,
@@ -155,7 +156,7 @@ export function Watcher() {
   const [sourceType, setSourceType] = useState("meta_ad_library_ui");
   const [url, setUrl] = useState("");
   const [platformId, setPlatformId] = useState("");
-  const [tier, setTier] = useState<IntelTier>("B");
+  const [tier, setTier] = useState<IntelTier>("A");
   const [enabled, setEnabled] = useState(true);
   const [metaSortMode, setMetaSortMode] = useState("relevancy_monthly_grouped");
   const [resourceSort, setResourceSort] = useState<ResourceSort>("videos");
@@ -175,6 +176,11 @@ export function Watcher() {
     queryKey: ["intel-sources"],
     queryFn: () => api.listIntelSources()
   });
+  const sourceStatusesQuery = useQuery({
+    queryKey: ["intel-source-statuses", selectedBrand],
+    queryFn: () => api.listIntelSourceStatuses({ brand: selectedBrand ?? undefined }),
+    enabled: Boolean(selectedBrand)
+  });
   const signalsQuery = useQuery({
     queryKey: ["intel-signals"],
     queryFn: () => api.listIntelSignals({ limit: 100 }),
@@ -191,6 +197,13 @@ export function Watcher() {
     adapters.find((adapter) => adapter.source_type === sourceType) ?? adapters[0] ?? FALLBACK_ADAPTERS[0];
   const brands = brandsQuery.data?.items ?? [];
   const sources = sourcesQuery.data?.items ?? [];
+  const sourceStatusById = useMemo(
+    () =>
+      new Map(
+        (sourceStatusesQuery.data?.items ?? []).map((status) => [status.source.id, status])
+      ),
+    [sourceStatusesQuery.data?.items]
+  );
   const signals = signalsQuery.data?.items ?? [];
   const resources = resourcesQuery.data?.items ?? [];
   const resourceAdapterOptions = useMemo(
@@ -240,6 +253,7 @@ export function Watcher() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["intel-brands"] });
     void queryClient.invalidateQueries({ queryKey: ["intel-sources"] });
+    void queryClient.invalidateQueries({ queryKey: ["intel-source-statuses"] });
     void queryClient.invalidateQueries({ queryKey: ["intel-signals"] });
     void queryClient.invalidateQueries({ queryKey: ["intel-resources"] });
   };
@@ -439,11 +453,13 @@ export function Watcher() {
                   </select>
                 </label>
                 <label className="watcher-field">
-                  <span>Tier</span>
+                  <span>Reliability tier · provider policy</span>
                   <select
                     className="input"
                     value={tier}
                     onChange={(event) => setTier(event.target.value as IntelTier)}
+                    disabled
+                    title="Meta is A, Google Ads Transparency is B, and indirect feeds are C."
                   >
                     <option value="A">A - strong</option>
                     <option value="B">B - medium</option>
@@ -514,11 +530,16 @@ export function Watcher() {
               <AdapterCapability adapter={selectedAdapter} />
               {error ? <div className="watcher-error">{error}</div> : null}
               {lastRun ? (
-                <div className="watcher-run-summary">
-                  <Metric label="Status" value={lastRun.status} />
-                  <Metric label="Sources" value={lastRun.source_count} />
-                  <Metric label="New resources" value={lastRun.resource_count} />
-                  {SHOW_SIGNALS ? <Metric label="New signals" value={lastRun.signal_count} /> : null}
+                <div className={`watcher-run-result is-${lastRun.status}`}>
+                  <div className="watcher-run-summary">
+                    <Metric label="Status" value={lastRun.status} />
+                    <Metric label="Sources" value={lastRun.source_count} />
+                    <Metric label="New resources" value={lastRun.resource_count} />
+                    {SHOW_SIGNALS ? (
+                      <Metric label="New signals" value={lastRun.signal_count} />
+                    ) : null}
+                  </div>
+                  <RunDiagnostics summary={lastRun} />
                 </div>
               ) : null}
             </section>
@@ -548,6 +569,7 @@ export function Watcher() {
                       onRun={() => crawlSourceMutation.mutate(source.id)}
                       onToggle={() => toggleMutation.mutate(source)}
                       source={source}
+                      status={sourceStatusById.get(source.id)}
                     />
                   ))}
                 </div>
@@ -694,6 +716,30 @@ function AdapterCapability({ adapter }: { adapter: IntelAdapterDescriptor }) {
   );
 }
 
+function RunDiagnostics({ summary }: { summary: IntelCrawlSummary }) {
+  if (summary.items.length === 0) {
+    return <p className="watcher-run-note">No enabled sources were due for this run.</p>;
+  }
+  return (
+    <div className="watcher-run-diagnostics">
+      {summary.items.map((item) => (
+        <div className={`watcher-run-line is-${item.status}`} key={item.source_id}>
+          <span className="watcher-health-dot" aria-hidden="true" />
+          <div>
+            <strong>{item.source_id}</strong>
+            <span>
+              {item.outcome ?? item.status}
+              {item.failure_category ? ` · ${friendlyCause(item.failure_category)}` : ""}
+              {item.reason ? ` · ${item.reason}` : ""}
+            </span>
+          </div>
+          <code>{item.error_code ?? `${item.new_resources} new`}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SourceRow({
   adapters,
   crawlBusy,
@@ -701,7 +747,8 @@ function SourceRow({
   onDelete,
   onRun,
   onToggle,
-  source
+  source,
+  status
 }: {
   adapters: IntelAdapterDescriptor[];
   crawlBusy: boolean;
@@ -710,9 +757,18 @@ function SourceRow({
   onRun: () => void;
   onToggle: () => void;
   source: IntelSource;
+  status?: IntelSourceStatus;
 }) {
+  const state = status?.state;
+  const latestRun = status?.recent_runs[0];
+  const health = isRunning
+    ? "running"
+    : (state?.last_outcome ?? (latestRun?.status === "running" ? "running" : "never"));
+  const diagnostic = state?.last_diagnostics[0];
   return (
-    <article className={`watcher-source-row ${source.enabled ? "is-enabled" : ""}`}>
+    <article
+      className={`watcher-source-row ${source.enabled ? "is-enabled" : ""} is-health-${health}`}
+    >
       <div>
         <strong>{adapterLabel(source.source_type, adapters)}</strong>
         <span>{sourceTarget(source)}</span>
@@ -721,6 +777,18 @@ function SourceRow({
         <span>Tier {source.tier}</span>
         <span>{sourceStateLabel(source)}</span>
         <span>{source.enabled ? "enabled" : "disabled"}</span>
+      </div>
+      <div className="watcher-source-health">
+        <span className="watcher-health-dot" aria-hidden="true" />
+        <div>
+          <strong>{healthLabel(health)}</strong>
+          <span>
+            {diagnostic
+              ? `${friendlyCause(diagnostic.category)} · ${diagnostic.message}`
+              : sourceHealthDetail(status)}
+          </span>
+        </div>
+        {state?.last_error_code ? <code>{state.last_error_code}</code> : null}
       </div>
       <div className="watcher-source-actions">
         <button className="watcher-card-action" disabled={crawlBusy} onClick={onRun}>
@@ -733,11 +801,51 @@ function SourceRow({
         </button>
         <button className="watcher-card-action danger" onClick={onDelete}>
           <Trash2 size={14} />
-          <span>Delete</span>
+          <span>Archive</span>
         </button>
       </div>
     </article>
   );
+}
+
+function healthLabel(health: string) {
+  const labels: Record<string, string> = {
+    success: "Complete crawl",
+    not_modified: "Up to date",
+    explicit_empty: "Complete · no ads",
+    partial: "Incomplete crawl",
+    failed: "Crawl failed",
+    running: "Crawl running",
+    never: "Never crawled"
+  };
+  return labels[health] ?? health.replace(/_/g, " ");
+}
+
+function friendlyCause(category: string) {
+  const labels: Record<string, string> = {
+    provider_ui_changed: "Provider UI changed",
+    provider_api_changed: "Provider response changed",
+    rate_limited: "Rate limited",
+    request_limit: "Configured collection limit",
+    asset_fetch: "Creative asset fetch",
+    authentication: "Authentication",
+    configuration: "Configuration",
+    blocked: "Provider blocked access",
+    transport: "Network or provider outage",
+    parse_error: "Response parsing"
+  };
+  return labels[category] ?? category.replace(/_/g, " ");
+}
+
+function sourceHealthDetail(status?: IntelSourceStatus) {
+  if (!status) return "Health data is loading.";
+  const state = status.state;
+  if (state.last_success_at) {
+    const retry = state.next_due_at ? ` · next ${formatDate(state.next_due_at)}` : "";
+    return `Last complete ${formatDate(state.last_success_at)}${retry}`;
+  }
+  if (state.last_attempt_at) return `Last attempted ${formatDate(state.last_attempt_at)}`;
+  return "Run once to establish the complete baseline.";
 }
 
 function ResourceCard({

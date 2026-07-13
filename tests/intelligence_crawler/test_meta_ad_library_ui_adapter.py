@@ -133,7 +133,8 @@ def test_meta_adapter_requires_page_id(tmp_path) -> None:
     result = adapter.poll(source, SourceState(source_id=source.id), now=NOW)
 
     assert result.items == []
-    assert "platform_id" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].code == "meta_page_id_missing"
 
 
 def test_meta_adapter_can_filter_statuses_locally(tmp_path) -> None:

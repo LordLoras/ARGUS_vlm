@@ -131,15 +131,21 @@ def test_brand_and_resource_artifact_endpoints(tmp_path):
     assert toyota["artifact_summary"]["screenshot_count"] == 1
     assert toyota["artifact_summary"]["image_source_count"] == 1
 
-    resources = client.get("/api/intelligence/resources", params={"brand": "Toyota"}).json()[
-        "items"
-    ]
+    resource_page = client.get("/api/intelligence/resources", params={"brand": "Toyota"}).json()
+    resources = resource_page["items"]
+    assert resource_page["total"] == 1
+    assert resource_page["next_offset"] is None
     assert [resource["id"] for resource in resources] == ["res_demo"]
     assert resources[0]["normalized"]["provider"] == "mock"
     assert resources[0]["normalized"]["advertiser"]["name"] == "Toyota"
     assert resources[0]["normalized"]["variants"][0]["landing_url"] == "https://toyota.com"
     artifact_types = {artifact["artifact_type"] for artifact in resources[0]["artifacts"]}
     assert {"card_screenshot", "image_url", "video_url", "link"} <= artifact_types
+    assert client.get("/api/intelligence/resources/res_demo").json()["id"] == "res_demo"
+
+    statuses = client.get("/api/intelligence/source-statuses").json()["items"]
+    assert statuses[0]["source"]["id"] == "s1"
+    assert statuses[0]["state"]["last_outcome"] is None
 
 
 def test_resource_screenshot_endpoint(tmp_path):
@@ -173,6 +179,19 @@ def test_crawl_endpoint_runs(tmp_path):
     assert resp.json()["status"] in {"completed", "degraded"}
 
 
+def test_queued_crawl_returns_immediately_addressable_run(tmp_path):
+    client = _client(tmp_path)
+    response = client.post("/api/intelligence/crawl/queue", json={"due": True})
+
+    assert response.status_code == 202
+    queued = response.json()
+    assert queued["status"] == "queued"
+    run = client.get(f"/api/intelligence/runs/{queued['run_id']}")
+    assert run.status_code == 200
+    # TestClient completes background tasks before returning; a real server returns first.
+    assert run.json()["status"] in {"completed", "degraded", "failed"}
+
+
 def test_source_crud_api(tmp_path):
     client = _client(tmp_path)
 
@@ -190,6 +209,7 @@ def test_source_crud_api(tmp_path):
     source = created.json()
     sid = source["id"]
     assert source["brand_name"] == "Toyota" and source["enabled"] is True
+    assert source["tier"] == "C"  # provider reliability tier is canonical
 
     listed = client.get("/api/intelligence/sources").json()["items"]
     assert any(s["id"] == sid for s in listed)
@@ -199,7 +219,8 @@ def test_source_crud_api(tmp_path):
     disabled = client.patch(f"/api/intelligence/sources/{sid}", json={"enabled": False})
     assert disabled.status_code == 200 and disabled.json()["enabled"] is False
 
-    assert client.delete(f"/api/intelligence/sources/{sid}").status_code == 200
+    archived = client.delete(f"/api/intelligence/sources/{sid}")
+    assert archived.status_code == 200 and archived.json() == {"archived": sid}
     assert (
         client.patch(f"/api/intelligence/sources/{sid}", json={"enabled": True}).status_code == 404
     )
@@ -218,3 +239,20 @@ def test_source_delete_reports_busy_database(tmp_path, monkeypatch):
 
     assert response.status_code == 409
     assert "database is busy" in response.json()["detail"]
+
+
+def test_mutations_require_optional_service_key(tmp_path, monkeypatch):
+    client = _client(tmp_path)
+    monkeypatch.setenv("INTELLIGENCE_CRAWLER_API_KEY", "demo-secret")
+
+    denied = client.post("/api/intelligence/crawl", json={"due": True})
+    assert denied.status_code == 401
+
+    allowed = client.post(
+        "/api/intelligence/crawl",
+        json={"due": True},
+        headers={"X-Intelligence-Key": "demo-secret"},
+    )
+    assert allowed.status_code == 200
+    run_id = allowed.json()["run_id"]
+    assert client.get(f"/api/intelligence/runs/{run_id}").status_code == 200

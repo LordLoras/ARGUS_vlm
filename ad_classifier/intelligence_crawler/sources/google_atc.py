@@ -20,6 +20,10 @@ from datetime import UTC, datetime
 import structlog
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.diagnostics import (
+    classify_exception,
+    configuration_diagnostic,
+)
 from ad_classifier.intelligence_crawler.google_atc_rpc import (
     US_REGION_CODE,
     PreviewFetch,
@@ -27,10 +31,11 @@ from ad_classifier.intelligence_crawler.google_atc_rpc import (
     default_preview_fetch,
     default_rpc_fetch,
     parse_preview_artifacts,
-    search_creatives,
+    search_creatives_result,
 )
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
+    PollDiagnostic,
     RawSourceItem,
     SourcePollResult,
     SourceState,
@@ -85,16 +90,35 @@ class GoogleAtcAdapter:
         if not advertiser_id:
             return SourcePollResult(
                 source_id=source.id,
-                errors=["google_atc source needs platform_id set to the ATC advertiser id (AR...)"],
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    configuration_diagnostic(
+                        "google_advertiser_id_missing",
+                        "Google Ads Transparency source needs an AR advertiser ID.",
+                        provider=GOOGLE_ATC_SOURCE_TYPE,
+                    )
+                ],
             )
         if self._fetch is None:  # pragma: no cover - guarded construction
-            return SourcePollResult(source_id=source.id, errors=["no ATC rpc client available"])
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    configuration_diagnostic(
+                        "google_rpc_client_unavailable",
+                        "Google Ads Transparency RPC client is unavailable.",
+                        provider=GOOGLE_ATC_SOURCE_TYPE,
+                    )
+                ],
+            )
 
         page_size = _int_config(source.config.get("page_size"), default=40, minimum=1, maximum=100)
         max_pages = _int_config(source.config.get("max_pages"), default=10, minimum=1, maximum=50)
         preview_limit = _preview_limit(source)
         try:
-            creatives = search_creatives(
+            search = search_creatives_result(
                 advertiser_id,
                 fetch=_throttled(self._fetch, _RPC_PAGE_DELAY_S, self._sleep),
                 region=US_REGION_CODE,
@@ -102,22 +126,71 @@ class GoogleAtcAdapter:
                 max_pages=max_pages,
             )
         except Exception as exc:  # transport/parse failures are per-source, not fatal
-            return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
+            return _failed_poll(source.id, exc)
 
-        preview_errors: list[str] = []
+        diagnostics: list[PollDiagnostic] = []
+        if search.error is not None:
+            diagnostics.append(
+                classify_exception(
+                    search.error, provider=GOOGLE_ATC_SOURCE_TYPE, phase="creative_pages"
+                )
+            )
+        if search.continuation_remaining and search.error is None:
+            diagnostics.append(
+                PollDiagnostic(
+                    code="google_page_limit_reached",
+                    category="request_limit",
+                    message=(
+                        "Google Ads Transparency still had another page when the configured "
+                        "page limit was reached."
+                    ),
+                    retryable=True,
+                    provider=GOOGLE_ATC_SOURCE_TYPE,
+                    phase="creative_pages",
+                    details={"max_pages": max_pages, "page_size": page_size},
+                )
+            )
+        if not search.creatives and search.error is not None:
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=diagnostics,
+                request_count=search.request_count,
+                page_count=search.page_count,
+            )
+
+        creatives = search.creatives
+        preview_requests = 0
         if self._preview_fetch is not None and preview_limit > 0:
-            creatives, preview_errors = _enrich_preview_artifacts(
+            creatives, preview_diagnostics, preview_requests = _enrich_preview_artifacts(
                 creatives,
                 preview_fetch=_throttled(self._preview_fetch, _PREVIEW_FETCH_DELAY_S, self._sleep),
                 limit=preview_limit,
             )
+            diagnostics.extend(preview_diagnostics)
 
         items = [_creative_to_item(source, advertiser_id, c) for c in creatives]
+        complete = search.complete and not diagnostics
+        outcome = "success" if items else "explicit_empty"
+        if not complete:
+            outcome = "partial"
         return SourcePollResult(
             source_id=source.id,
             items=items,
             new_watermark=_latest_published(items) or state.watermark,
-            errors=preview_errors[:5],
+            outcome=outcome,
+            complete=complete,
+            truncated=search.continuation_remaining,
+            truncation_reason=(
+                "Configured Google page limit reached before the continuation token ended."
+                if search.continuation_remaining
+                else None
+            ),
+            diagnostics=diagnostics[:20],
+            request_count=search.request_count + preview_requests,
+            page_count=search.page_count,
+            provider_item_count=len(search.creatives),
         )
 
 
@@ -202,9 +275,9 @@ def _creative_to_item(source: IntelSource, advertiser_id: str, creative: dict) -
 
 def _enrich_preview_artifacts(
     creatives: list[dict], *, preview_fetch: PreviewFetch, limit: int
-) -> tuple[list[dict], list[str]]:
+) -> tuple[list[dict], list[PollDiagnostic], int]:
     enriched: list[dict] = []
-    errors: list[str] = []
+    diagnostics: list[PollDiagnostic] = []
     fetched = 0
     for creative in creatives:
         next_creative = dict(creative)
@@ -217,12 +290,36 @@ def _enrich_preview_artifacts(
                     script, preview_url=preview_url
                 )
             except Exception as exc:
-                errors.append(
-                    f"ATC preview enrichment failed for {creative.get('creative_id')}: "
-                    f"{str(exc)[:160]}"
+                diagnostic = classify_exception(
+                    exc, provider=GOOGLE_ATC_SOURCE_TYPE, phase="preview_asset"
+                )
+                diagnostics.append(
+                    diagnostic.model_copy(
+                        update={
+                            "code": "google_preview_asset_fetch_failed",
+                            "category": "asset_fetch",
+                            "message": (
+                                "Google preview asset fetch failed for creative "
+                                f"{creative.get('creative_id')}."
+                            ),
+                            "details": {"cause_category": diagnostic.category},
+                        }
+                    )
                 )
         enriched.append(next_creative)
-    return enriched, errors
+    return enriched, diagnostics, fetched
+
+
+def _failed_poll(source_id: str, exc: BaseException) -> SourcePollResult:
+    return SourcePollResult(
+        source_id=source_id,
+        outcome="failed",
+        complete=False,
+        diagnostics=[
+            classify_exception(exc, provider=GOOGLE_ATC_SOURCE_TYPE, phase="creative_pages")
+        ],
+        request_count=1,
+    )
 
 
 def _epoch_to_dt(value: int | None) -> datetime | None:

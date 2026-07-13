@@ -1,7 +1,7 @@
 """Configuration for the intelligence crawler.
 
 Loaded from ``intelligence_crawler.yaml`` (kept separate from ``config.yaml`` so this
-experimental subsystem evolves independently). Secrets are referenced by env-var name
+dedicated subsystem evolves independently). Secrets are referenced by env-var name
 and read from ``.env.local`` — never stored here. All sources are disabled by default,
 so an unconfigured install is a safe no-op.
 """
@@ -11,15 +11,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ad_classifier.intelligence_crawler.models import IntelSource, Market, Tier
+from ad_classifier.intelligence_crawler.tiers import CANONICAL_SOURCE_TIERS
 
 
 class SourceConfig(BaseModel):
-    """One configured source. ``extra='ignore'`` keeps forward-compat with new keys."""
+    """One configured source; unknown keys are rejected to catch configuration typos."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     brand: str
@@ -36,6 +37,13 @@ class SourceConfig(BaseModel):
     # dict so a new adapter can carry its own config without touching this schema.
     config: dict = Field(default_factory=dict)
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def enforce_canonical_tier(self) -> SourceConfig:
+        canonical = CANONICAL_SOURCE_TIERS.get(self.source_type)
+        if canonical is not None and self.tier != canonical:
+            object.__setattr__(self, "tier", canonical)
+        return self
 
     def to_source(self) -> IntelSource:
         return IntelSource(
@@ -56,7 +64,7 @@ class SourceConfig(BaseModel):
 
 
 class HttpConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     respect_robots_txt: bool = True
     timeout_s: float = Field(default=12.0, gt=0)
@@ -66,7 +74,7 @@ class HttpConfig(BaseModel):
 
 
 class DetectionConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     # Newly-seen items older than this (by published date) are recorded as backfill, not
     # emitted as live "new ad" signals. Guards the cold-start back-catalog problem.
@@ -75,7 +83,7 @@ class DetectionConfig(BaseModel):
 
 
 class ScoringConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     # v1 3-term model: confidence = tier_weight + ad_likeness + corroboration (clamped).
     tier_weights: dict[str, float] = Field(
@@ -108,7 +116,7 @@ class ScoringConfig(BaseModel):
 
 
 class WatchlistConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     include_graph_brands: bool = True
     entity_graph_db_path: Path | None = Path("./entity_graph.db")
@@ -116,12 +124,13 @@ class WatchlistConfig(BaseModel):
 
 
 class IntelConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
     db_path: Path = Path("./intelligence_crawler.db")
     cache_dir: Path = Path("./data/intelligence_crawler_cache")
     market: Market = "US"
+    mutation_api_key_env: str | None = "INTELLIGENCE_CRAWLER_API_KEY"
     http: HttpConfig = Field(default_factory=HttpConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)

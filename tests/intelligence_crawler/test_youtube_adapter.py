@@ -106,7 +106,19 @@ def test_missing_channel_id_reports_error():
         source, SourceState(source_id="yt1"), now=NOW
     )
     assert result.items == []
-    assert result.errors and "platform_id" in result.errors[0]
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].code == "youtube_channel_id_missing"
+
+
+def test_malformed_feed_is_failure_not_empty_success():
+    source = SourceConfig(
+        id="yt1", brand="Toyota", source_type="youtube_channel", tier="C", platform_id="UC1"
+    ).to_source()
+    result = YouTubeChannelAdapter(
+        http=lambda _url, _headers: FeedResponse(200, "<html>not a feed</html>")
+    ).poll(source, SourceState(source_id="yt1"), now=NOW)
+    assert result.outcome == "failed"
+    assert result.diagnostics[0].category == "parse_error"
 
 
 def test_injected_feed_does_not_enrich_durations():

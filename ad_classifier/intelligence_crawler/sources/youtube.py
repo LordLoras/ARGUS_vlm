@@ -32,8 +32,14 @@ import structlog
 
 from ad_classifier._env import resolve_api_key
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.diagnostics import (
+    classify_exception,
+    configuration_diagnostic,
+    http_status_diagnostic,
+)
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
+    PollDiagnostic,
     RawSourceItem,
     SourcePollResult,
     SourceState,
@@ -77,7 +83,7 @@ JsonFetcher = Callable[[str], dict]
 
 @register_source("youtube_channel")
 class YouTubeChannelAdapter:
-    tier: Tier = "A"
+    tier: Tier = "C"
 
     def __init__(
         self,
@@ -105,7 +111,15 @@ class YouTubeChannelAdapter:
         if not feed_url:
             return SourcePollResult(
                 source_id=source.id,
-                errors=["youtube source needs a platform_id (channel id) or a feed url"],
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    configuration_diagnostic(
+                        "youtube_channel_id_missing",
+                        "YouTube source needs a channel ID or feed URL.",
+                        provider="youtube_channel",
+                    )
+                ],
             )
 
         headers: dict[str, str] = {}
@@ -117,7 +131,15 @@ class YouTubeChannelAdapter:
         try:
             response = self._fetch(feed_url, headers)
         except Exception as exc:  # transport/parse failures are per-source, not fatal
-            return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    classify_exception(exc, provider="youtube_channel", phase="feed_fetch")
+                ],
+                request_count=1,
+            )
 
         if response.status_code == 304:  # not modified since last poll
             return SourcePollResult(
@@ -126,51 +148,103 @@ class YouTubeChannelAdapter:
                 new_watermark=state.watermark,
                 etag=state.etag,
                 last_modified=state.last_modified,
+                outcome="not_modified",
+                request_count=1,
+                page_count=1,
             )
         if response.status_code >= 400:
             return SourcePollResult(
-                source_id=source.id, errors=[f"feed fetch returned HTTP {response.status_code}"]
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    http_status_diagnostic(response.status_code, provider="youtube_channel")
+                ],
+                request_count=1,
             )
 
-        items = _parse_feed(response.body)
-        self._enrich_durations(source, items)
+        try:
+            items = _parse_feed(response.body)
+        except Exception as exc:
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    classify_exception(exc, provider="youtube_channel", phase="feed_parse")
+                ],
+                request_count=1,
+                page_count=1,
+            )
+        enrichment_diagnostics, enrichment_requests = self._enrich_durations(source, items)
         watermark = _latest_published(items) or state.watermark
+        complete = not enrichment_diagnostics
         return SourcePollResult(
             source_id=source.id,
             items=items,
             new_watermark=watermark,
             etag=response.etag or state.etag,
             last_modified=response.last_modified or state.last_modified,
+            outcome=(
+                "partial" if enrichment_diagnostics else ("success" if items else "explicit_empty")
+            ),
+            complete=complete,
+            diagnostics=enrichment_diagnostics,
+            request_count=1 + enrichment_requests,
+            page_count=1,
+            provider_item_count=len(items),
         )
 
-    def _enrich_durations(self, source: IntelSource, items: list[RawSourceItem]) -> None:
+    def _enrich_durations(
+        self, source: IntelSource, items: list[RawSourceItem]
+    ) -> tuple[list[PollDiagnostic], int]:
         """Fill ``duration_ms`` on feed items via the Data-API ``videos.list``.
 
         Best-effort and never raises into ``poll``: on any failure the items keep
         ``duration_ms=None`` and the ad-gate falls back to its keyword-only signal.
         """
         if self._json_fetch is None or not items:
-            return
+            return [], 0
         env_name = str(source.config.get("api_key_env") or _DEFAULT_API_KEY_ENV)
         api_key = self._api_key or resolve_api_key(env_name)
         if not api_key:  # no key configured → keyword-only gate (documented fallback)
-            return
+            return [], 0
 
         by_id = {item.external_id: item for item in items}
         durations: dict[str, int] = {}
+        request_count = 0
         for batch in _batched(list(by_id), _VIDEOS_LIST_BATCH):
             url = _VIDEOS_LIST_TEMPLATE.format(ids=",".join(batch), key=api_key)
             try:
+                request_count += 1
                 payload = self._json_fetch(url)
             except Exception as exc:  # network/quota/transport — keep keyword-only gate
-                logger.warning("youtube_enrich_failed", source_id=source.id, error=str(exc)[:200])
-                return
+                base = classify_exception(
+                    exc, provider="youtube_channel", phase="duration_enrichment"
+                )
+                logger.warning(
+                    "youtube_enrich_failed",
+                    source_id=source.id,
+                    stage="duration_enrichment",
+                    error_category=base.category,
+                )
+                return [
+                    base.model_copy(
+                        update={
+                            "code": "youtube_duration_enrichment_failed",
+                            "category": "asset_fetch",
+                            "message": "YouTube duration enrichment failed; feed items were retained.",
+                            "details": {"cause_category": base.category},
+                        }
+                    )
+                ], request_count
             durations.update(_parse_durations(payload))
 
         for vid, ms in durations.items():
             item = by_id.get(vid)
             if item is not None:
                 item.duration_ms = ms
+        return [], request_count
 
 
 def _feed_url(channel_id: str | None) -> str | None:
@@ -179,10 +253,9 @@ def _feed_url(channel_id: str | None) -> str | None:
 
 
 def _parse_feed(body: str) -> list[RawSourceItem]:
-    try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
-        return []
+    root = ET.fromstring(body)
+    if root.tag.split("}", 1)[-1] != "feed":
+        raise ValueError("YouTube feed response did not contain an Atom feed root.")
     items: list[RawSourceItem] = []
     for entry in root.findall("atom:entry", _NS):
         vid = _text(entry.find("yt:videoId", _NS))

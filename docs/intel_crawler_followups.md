@@ -10,6 +10,9 @@
 - Watcher UI resource/artifact browsing.
 - Raw provider payload preservation in `metadata_json`.
 - Cross-provider `resource.normalized` JSON generation.
+- Latest-resource projection plus append-only observation/source-run ledgers.
+- Explicit complete/partial/failed outcomes, stable failure categories, cooldown/backoff, and due scheduling.
+- Queued crawl API for long-running provider work.
 - Lean US region handling: `collection.requested_region_code`, not synthetic `delivery.regions`.
 - One-brand demo DB: McDonald's with 9 Google ATC resources and 172 Meta resources.
 
@@ -45,12 +48,9 @@ Recommended default:
 
 Google can 429 after repeated heavy requests.
 
-Follow-ups:
-
-- lower default preview limits for broad demo sources;
-- add per-provider cooldown state after 429;
-- expose `last_error` and cooldown in Watcher source cards;
-- keep McDonald's ATC as the safe live demo source.
+Implemented: earlier successful pages survive later-page failures, 429 is classified,
+cooldown/backoff is persisted, and Watcher shows the cause. Remaining work is to tune
+preview budgets from production telemetry and keep a safe pre-crawled demo source.
 
 ### 4. Meta Variant Expansion
 
@@ -63,13 +63,15 @@ Follow-ups:
 - capture per-version creative text/assets if exposed;
 - keep screenshots as durable fallback when fbcdn media URLs expire.
 
-### 5. Scheduler
+### 5. Scheduler Process
 
 Manual per-source runs are safest now. Later:
 
-- honor `intel_source_state.next_due_at`;
 - add a separate scheduled crawler process;
 - keep it separate from the GPU-heavy worker.
+
+The runner/API already honor `next_due_at` and cooldown. This item is only about the
+deployment process that invokes due crawls periodically.
 
 ### 6. Digital Campaign Layer
 
@@ -77,7 +79,7 @@ After crawler resources are stable:
 
 - cluster digital resources by brand/copy/assets;
 - attach analyst-curated campaign names;
-- later compare to submitted/TV campaign clusters.
+- optionally hand resources to a separate mapping service in a later project.
 
 This remains separate from the current normalized JSON work.
 

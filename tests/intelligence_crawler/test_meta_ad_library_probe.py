@@ -17,15 +17,13 @@ def test_toyota_meta_probe_url_is_page_search_for_us_active_ads() -> None:
 
 
 def test_parse_card_text_extracts_library_id_status_date_and_platforms() -> None:
-    parsed = _parse_card_text(
-        """
+    parsed = _parse_card_text("""
         Active
         Library ID: 1234567890
         Started running on Jun 25, 2026
         Platforms Facebook Instagram Messenger
         Toyota Summer Sales Event
-        """
-    )
+        """)
 
     assert parsed == {
         "library_id": "1234567890",
@@ -38,8 +36,7 @@ def test_parse_card_text_extracts_library_id_status_date_and_platforms() -> None
 
 
 def test_parse_card_text_extracts_multiple_version_count() -> None:
-    parsed = _parse_card_text(
-        """
+    parsed = _parse_card_text("""
         Toyota
         Active
         Library ID: 2900281893668121
@@ -48,8 +45,7 @@ def test_parse_card_text_extracts_multiple_version_count() -> None:
         This ad has multiple versions
         5 ads use this creative and text
         Open Dropdown
-        """
-    )
+        """)
 
     assert parsed["library_id"] == "2900281893668121"
     assert parsed["creative_variant_count"] == 5

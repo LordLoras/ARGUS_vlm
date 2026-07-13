@@ -60,9 +60,7 @@ def test_resource_repoll_refreshes_metadata_without_counting_as_new(tmp_path):
 
     assert got.title == "New title"
     assert got.first_seen_at == NOW
-    assert got.metadata["image_sources"] == [
-        "https://tpc.googlesyndication.com/archive/simgad/123"
-    ]
+    assert got.metadata["image_sources"] == ["https://tpc.googlesyndication.com/archive/simgad/123"]
 
 
 def test_signal_round_trip(tmp_path):
@@ -93,9 +91,9 @@ def test_lease_is_single_flight(tmp_path):
         assert repo.acquire_lease(conn, "s1", "owner1", now=NOW, ttl_seconds=600) is True
         # A different owner cannot take a held, unexpired lease.
         assert repo.acquire_lease(conn, "s1", "owner2", now=NOW, ttl_seconds=600) is False
-        # Same owner may re-acquire (re-entrant).
-        assert repo.acquire_lease(conn, "s1", "owner1", now=NOW, ttl_seconds=600) is True
-        repo.release_lease(conn, "s1")
+        # Re-entry is intentionally rejected: every crawl gets a unique owner token.
+        assert repo.acquire_lease(conn, "s1", "owner1", now=NOW, ttl_seconds=600) is False
+        repo.release_lease(conn, "s1", "owner1")
         assert repo.acquire_lease(conn, "s1", "owner2", now=NOW, ttl_seconds=600) is True
 
 

@@ -9,8 +9,11 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import structlog
+
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.digest import build_digest
+from ad_classifier.intelligence_crawler.ids import new_run_id
 from ad_classifier.intelligence_crawler.models import (
     CrawlRunSummary,
     DigestEntry,
@@ -19,12 +22,17 @@ from ad_classifier.intelligence_crawler.models import (
     IntelResourceView,
     IntelSignal,
     IntelSource,
+    IntelSourceStatus,
+    Tier,
     WatchedBrand,
 )
 from ad_classifier.intelligence_crawler.repository import IntelRepository
 from ad_classifier.intelligence_crawler.runner import IntelRunner
 from ad_classifier.intelligence_crawler.sources.base import available_source_types
+from ad_classifier.intelligence_crawler.tiers import canonical_tier
 from ad_classifier.intelligence_crawler.watchlist import build_watchlist
+
+logger = structlog.get_logger(__name__)
 
 ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
     "meta_ad_library_ui": IntelAdapterDescriptor(
@@ -37,7 +45,7 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
             "single ad or campaign id. Stores visible cards, copy, library ids, screenshots, "
             "image URLs, exposed video URLs, and multiple-version counts when shown."
         ),
-        default_tier="B",
+        default_tier="A",
         platform="meta",
         requires_platform_id=True,
         config={
@@ -65,7 +73,7 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
         target_label="Channel ID",
         target_placeholder="UC...",
         helper_text="Official channel monitoring through public feeds and video metadata.",
-        default_tier="A",
+        default_tier="C",
         platform="youtube",
         requires_platform_id=True,
         provides=["video ids", "titles", "descriptions", "publish dates", "thumbnails"],
@@ -76,7 +84,7 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
         target_label="Feed URL",
         target_placeholder="https://pressroom.toyota.com/product/feed/",
         helper_text="Robots-gated feed monitoring for newsroom and trade-press releases.",
-        default_tier="A",
+        default_tier="C",
         requires_url=True,
         provides=["article URLs", "titles", "descriptions", "publish dates"],
     ),
@@ -195,6 +203,7 @@ class IntelManager:
         source_id: str | None = None,
         include_backfill: bool = True,
         limit: int = 50,
+        offset: int = 0,
     ) -> list[IntelResourceView]:
         with self.repo.connect(readonly=True) as conn:
             return self.repo.list_resources(
@@ -203,7 +212,39 @@ class IntelManager:
                 source_id=source_id,
                 include_backfill=include_backfill,
                 limit=limit,
+                offset=offset,
             )
+
+    def count_resources(
+        self,
+        *,
+        brand: str | None = None,
+        source_id: str | None = None,
+        include_backfill: bool = True,
+    ) -> int:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.count_resources(
+                conn,
+                brand=brand,
+                source_id=source_id,
+                include_backfill=include_backfill,
+            )
+
+    def get_resource(self, resource_id: str) -> IntelResourceView | None:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.get_resource(conn, resource_id)
+
+    def resource_history(self, resource_id: str, *, limit: int = 50) -> list[dict]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_resource_observations(conn, resource_id, limit=limit)
+
+    def list_runs(self, *, limit: int = 50) -> list[dict]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_runs(conn, limit=limit)
+
+    def get_run(self, run_id: str) -> dict | None:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.get_run(conn, run_id)
 
     def run_crawl(
         self, *, due: bool = False, source_id: str | None = None, brand: str | None = None
@@ -211,6 +252,46 @@ class IntelManager:
         return IntelRunner(self.config, repo=self.repo).run(
             due=due, source_id=source_id, brand=brand
         )
+
+    def queue_crawl(
+        self, *, due: bool = False, source_id: str | None = None, brand: str | None = None
+    ) -> CrawlRunSummary:
+        run_id = new_run_id()
+        with self.repo.connect() as conn:
+            self.repo.queue_run(
+                conn,
+                run_id,
+                {"due": due, "source_id": source_id, "brand": brand},
+            )
+            conn.commit()
+        return CrawlRunSummary(run_id=run_id, status="queued")
+
+    def run_queued_crawl(
+        self,
+        run_id: str,
+        *,
+        due: bool = False,
+        source_id: str | None = None,
+        brand: str | None = None,
+    ) -> None:
+        try:
+            IntelRunner(self.config, repo=self.repo).run(
+                due=due, source_id=source_id, brand=brand, run_id=run_id
+            )
+        except Exception:
+            logger.exception("intel_queued_run_failed", run_id=run_id, stage="crawl")
+            with self.repo.connect() as conn:
+                self.repo.finish_run(
+                    conn,
+                    run_id,
+                    status="failed",
+                    source_count=0,
+                    resource_count=0,
+                    signal_count=0,
+                    summary={"items": []},
+                    error="Crawler setup failed; inspect structured logs.",
+                )
+                conn.commit()
 
     def resource_screenshot_path(self, resource_id: str) -> Path | None:
         """Locate a resource's card-screenshot file for serving over the API.
@@ -244,8 +325,25 @@ class IntelManager:
         with self.repo.connect(readonly=True) as conn:
             return self.repo.get_source(conn, source_id)
 
+    def get_source_status(self, source_id: str, *, run_limit: int = 20) -> IntelSourceStatus | None:
+        with self.repo.connect(readonly=True) as conn:
+            source = self.repo.get_source(conn, source_id)
+            if source is None:
+                return None
+            state = self.repo.get_source_state(conn, source_id)
+            recent_runs = self.repo.list_source_runs(conn, source_id, limit=run_limit)
+        return IntelSourceStatus(source=source, state=state, recent_runs=recent_runs)
+
+    def list_source_statuses(self, *, brand: str | None = None) -> list[IntelSourceStatus]:
+        with self.repo.connect(readonly=True) as conn:
+            return self.repo.list_source_statuses(conn, brand=brand)
+
+    def default_tier(self, source_type: str) -> Tier:
+        return canonical_tier(source_type)
+
     def upsert_source(self, source: IntelSource) -> IntelSource:
         """Create or update a source. Preserves any existing `source_activated_at`."""
+        source = source.model_copy(update={"tier": canonical_tier(source.source_type, source.tier)})
         with self.repo.connect() as conn:
             self.repo.sync_sources(conn, [source])
             conn.commit()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -28,6 +28,21 @@ SignalStatus = Literal[
     "stale",
 ]
 RunStatus = Literal["queued", "running", "completed", "failed", "degraded"]
+PollOutcome = Literal["success", "partial", "not_modified", "explicit_empty", "failed"]
+FailureCategory = Literal[
+    "configuration",
+    "authentication",
+    "rate_limited",
+    "blocked",
+    "transport",
+    "provider_ui_changed",
+    "provider_api_changed",
+    "parse_error",
+    "request_limit",
+    "asset_fetch",
+    "database",
+    "unknown",
+]
 
 
 class WatchedBrand(StrictModel):
@@ -54,7 +69,7 @@ class IntelSource(StrictModel):
     platform: str | None = None
     platform_id: str | None = None
     enabled: bool = False
-    poll_interval_hours: float = 12.0
+    poll_interval_hours: float = Field(default=12.0, gt=0)
     source_activated_at: datetime | None = None
     allowed_domains: list[str] = Field(default_factory=list)
     config: dict = Field(default_factory=dict)
@@ -73,6 +88,11 @@ class SourceState(StrictModel):
     watermark: str | None = None
     lease_until: datetime | None = None
     lease_owner: str | None = None
+    last_outcome: PollOutcome | None = None
+    last_error_category: FailureCategory | None = None
+    last_error_code: str | None = None
+    cooldown_until: datetime | None = None
+    last_diagnostics: list[PollDiagnostic] = Field(default_factory=list)
 
 
 class RawSourceItem(StrictModel):
@@ -100,7 +120,26 @@ class SourcePollResult(StrictModel):
     new_watermark: str | None = None
     etag: str | None = None
     last_modified: str | None = None
+    outcome: PollOutcome = "success"
+    complete: bool = True
+    truncated: bool = False
+    truncation_reason: str | None = None
+    diagnostics: list[PollDiagnostic] = Field(default_factory=list)
+    request_count: int = 0
+    page_count: int = 0
+    provider_item_count: int | None = None
     errors: list[str] = Field(default_factory=list)
+
+
+class PollDiagnostic(StrictModel):
+    code: str
+    category: FailureCategory
+    message: str
+    retryable: bool = False
+    provider: str | None = None
+    phase: str | None = None
+    http_status: int | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class IntelResource(StrictModel):
@@ -117,12 +156,38 @@ class IntelResource(StrictModel):
     description: str | None = None
     published_at: datetime | None = None
     first_seen_at: datetime
+    last_seen_at: datetime | None = None
     fetched_at: datetime
     is_backfill: bool = False
     # Creative-version projection (Meta "N ads use this creative" / "multiple versions").
     # variant_count None = unknown; populated from item.raw by the runner.
     variant_count: int | None = None
     has_variants: bool = False
+    thumbnail_url: str | None = None
+    duration_ms: int | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class IntelMediaAsset(StrictModel):
+    id: str
+    resource_id: str
+    asset_type: str
+    url: str | None = None
+    thumbnail_url: str | None = None
+    duration_ms: int | None = None
+    content_hash: str | None = None
+    phash: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class IntelResourceObservation(StrictModel):
+    id: str
+    resource_id: str
+    source_id: str
+    run_id: str
+    observed_at: datetime
+    payload_hash: str
+    resource: dict = Field(default_factory=dict)
     metadata: dict = Field(default_factory=dict)
 
 
@@ -245,10 +310,13 @@ class IntelResourceView(StrictModel):
     description: str | None = None
     published_at: datetime | None = None
     first_seen_at: datetime
+    last_seen_at: datetime | None = None
     fetched_at: datetime
     is_backfill: bool = False
     variant_count: int | None = None
     has_variants: bool = False
+    thumbnail_url: str | None = None
+    duration_ms: int | None = None
     artifact_summary: IntelArtifactSummary = Field(default_factory=IntelArtifactSummary)
     artifacts: list[IntelResourceArtifact] = Field(default_factory=list)
     normalized: IntelNormalizedResource | None = None
@@ -333,7 +401,7 @@ class IntelMatch(StrictModel):
 
 class SourceRunItem(StrictModel):
     source_id: str
-    status: Literal["polled", "skipped", "failed"]
+    status: Literal["polled", "partial", "skipped", "failed"]
     new_resources: int = 0
     new_signals: int = 0
     backfilled: int = 0
@@ -341,6 +409,20 @@ class SourceRunItem(StrictModel):
     refreshed: int = 0  # already-seen items whose stored metadata was refreshed this poll
     baseline: bool = False
     reason: str | None = None
+    outcome: PollOutcome | None = None
+    complete: bool = True
+    truncated: bool = False
+    truncation_reason: str | None = None
+    failure_category: FailureCategory | None = None
+    error_code: str | None = None
+    diagnostics: list[PollDiagnostic] = Field(default_factory=list)
+    next_due_at: datetime | None = None
+
+
+class IntelSourceStatus(StrictModel):
+    source: IntelSource
+    state: SourceState
+    recent_runs: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CrawlRunSummary(StrictModel):

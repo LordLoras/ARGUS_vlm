@@ -42,6 +42,7 @@ def test_disabled_by_default_and_lookups(tmp_path):
     enabled = cfg.enabled_sources()
     assert [s.id for s in enabled] == ["s2"]  # only the explicitly enabled one
     assert cfg.source_by_id("s1") is not None
+    assert cfg.source_by_id("s2").tier == "C"
     assert cfg.source_by_id("missing") is None
 
 

@@ -100,7 +100,7 @@ sources:
   - id: apple_meta_ads
     brand: Apple
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "434174436675167"
@@ -131,7 +131,7 @@ sources:
   - id: mcdonalds_meta_ads
     brand: McDonald's
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "50245567013"
@@ -155,7 +155,7 @@ sources:
   - id: geico_meta_ads
     brand: GEICO
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "7753384227"
@@ -179,7 +179,7 @@ sources:
   - id: doordash_meta_ads
     brand: DoorDash
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "534754226586678"
@@ -203,7 +203,7 @@ sources:
   - id: duolingo_meta_ads
     brand: Duolingo
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "141935472517297"
@@ -227,7 +227,7 @@ sources:
   - id: samsung_meta_ads
     brand: Samsung
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "7224956785"
@@ -251,7 +251,7 @@ sources:
   - id: starbucks_meta_ads
     brand: Starbucks
     source_type: meta_ad_library_ui
-    tier: B
+    tier: A
     enabled: false
     platform: meta
     platform_id: "22092443056"
@@ -271,4 +271,3 @@ sources:
     config:
       <<: *atc_us_config
       resolve_names: ["Starbucks Corporation"]
-

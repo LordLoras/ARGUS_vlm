@@ -16,6 +16,11 @@ import structlog
 
 from ad_classifier.entity_graph.utils import digest, normalize_name
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.diagnostics import (
+    classify_exception,
+    configuration_diagnostic,
+    http_status_diagnostic,
+)
 from ad_classifier.intelligence_crawler.models import (
     IntelSource,
     RawSourceItem,
@@ -34,7 +39,7 @@ _ATOM = {"atom": "http://www.w3.org/2005/Atom"}
 
 @register_source("rss")
 class RssAdapter:
-    tier: Tier = "B"
+    tier: Tier = "C"
 
     def __init__(
         self, *, http: HttpFetcher | None = None, intel_config: IntelConfig | None = None
@@ -44,7 +49,18 @@ class RssAdapter:
 
     def poll(self, source: IntelSource, state: SourceState, *, now: datetime) -> SourcePollResult:
         if not source.url:
-            return SourcePollResult(source_id=source.id, errors=["rss source needs a feed url"])
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[
+                    configuration_diagnostic(
+                        "rss_feed_url_missing",
+                        "RSS source needs a feed URL.",
+                        provider="rss",
+                    )
+                ],
+            )
 
         headers: dict[str, str] = {}
         if state.etag:
@@ -55,7 +71,13 @@ class RssAdapter:
         try:
             response = self._fetch(source.url, headers)
         except Exception as exc:  # robots-blocked / transport: per-source, not fatal
-            return SourcePollResult(source_id=source.id, errors=[str(exc)[:240]])
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[classify_exception(exc, provider="rss", phase="feed_fetch")],
+                request_count=1,
+            )
 
         if response.status_code == 304:
             return SourcePollResult(
@@ -64,13 +86,30 @@ class RssAdapter:
                 new_watermark=state.watermark,
                 etag=state.etag,
                 last_modified=state.last_modified,
+                outcome="not_modified",
+                request_count=1,
+                page_count=1,
             )
         if response.status_code >= 400:
             return SourcePollResult(
-                source_id=source.id, errors=[f"feed fetch returned HTTP {response.status_code}"]
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[http_status_diagnostic(response.status_code, provider="rss")],
+                request_count=1,
             )
 
-        items = _parse_feed(response.body)
+        try:
+            items = _parse_feed(response.body)
+        except Exception as exc:
+            return SourcePollResult(
+                source_id=source.id,
+                outcome="failed",
+                complete=False,
+                diagnostics=[classify_exception(exc, provider="rss", phase="feed_parse")],
+                request_count=1,
+                page_count=1,
+            )
         watermark = _latest_published(items) or state.watermark
         return SourcePollResult(
             source_id=source.id,
@@ -78,6 +117,10 @@ class RssAdapter:
             new_watermark=watermark,
             etag=response.etag or state.etag,
             last_modified=response.last_modified or state.last_modified,
+            outcome="success" if items else "explicit_empty",
+            request_count=1,
+            page_count=1,
+            provider_item_count=len(items),
         )
 
 
@@ -93,16 +136,13 @@ def _build_default_fetcher(config: IntelConfig | None) -> HttpFetcher:
 
 
 def _parse_feed(body: str) -> list[RawSourceItem]:
-    try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
-        return []
+    root = ET.fromstring(body)
     tag = _localname(root.tag)
     if tag == "rss":
         return _parse_rss(root)
     if tag == "feed":
         return _parse_atom(root)
-    return []
+    raise ValueError(f"unsupported feed root element: {tag}")
 
 
 def _parse_rss(root: ET.Element) -> list[RawSourceItem]:

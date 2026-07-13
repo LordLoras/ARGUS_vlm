@@ -123,7 +123,7 @@ def resolve(
     source: Annotated[str, typer.Option("--source", help="Source id to resolve + persist.")],
     config: _ConfigOpt = None,
 ) -> None:
-    """Resolve a source's brand → advertiser/page id and persist it (refuse-to-guess)."""
+    """Resolve a source's brand to an advertiser/page id and persist it safely."""
     from ad_classifier.intelligence_crawler.manager import IntelManager
 
     cfg = _load(config)
@@ -165,7 +165,7 @@ def meta_probe(
     ] = 3,
     headed: Annotated[bool, typer.Option("--headed", help="Show Chromium while probing.")] = False,
 ) -> None:
-    """Experimental Playwright probe for the public Meta Ad Library UI."""
+    """Run the Playwright probe used by the Meta Ad Library source adapter."""
     result = run_meta_ad_library_probe(
         url=url,
         out_dir=out_dir,

@@ -8,8 +8,10 @@ EXPECTED_TABLES = {
     "intel_migrations",
     "intel_sources",
     "intel_source_state",
+    "intel_source_runs",
     "intel_crawl_runs",
     "intel_resources",
+    "intel_resource_observations",
     "intel_media_assets",
     "intel_campaign_groups",
     "intel_signals",
@@ -23,6 +25,7 @@ def test_initialize_creates_tables_and_is_idempotent(tmp_path):
     db = tmp_path / "intel.db"
     applied = initialize_intelligence_crawler_db(db)
     assert "001_initial" in applied
+    assert "003_crawl_observability" in applied
 
     # Second call applies nothing new.
     assert initialize_intelligence_crawler_db(db) == []

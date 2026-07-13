@@ -3,18 +3,20 @@
 > Last updated 2026-07-13.
 > Companion docs: [overview](intellegence_crawler_overview.md),
 > [normalized schema](intelligence_crawler_normalized_ad_schema.md),
+> [operations and failure semantics](intelligence_crawler_operations.md),
 > [demo runbook](DEMO_RUNBOOK.md), and [follow-ups](intel_crawler_followups.md).
 
 ## What It Is
 
 The intelligence crawler is the local-first digital-ad collection layer for ARGUS.
 It watches curated US brands, polls adapter-backed ad sources, stores every observed
-creative with raw provider metadata and artifacts, and exposes a clean API/Watcher UI
+creative with provider-derived metadata and artifacts, and exposes a clean API/Watcher UI
 for review.
 
 It is separate from the submitted-ad classification pipeline. The crawler discovers
-and catalogs digital ads; OCR, transcript extraction, multimodal classification, and
-TV-campaign matching are still downstream responsibilities.
+and catalogs digital ads. OCR, transcript extraction, multimodal classification, and
+TV-campaign matching are explicitly outside this service and can be added by another
+consumer later.
 
 ## Locked Decisions
 
@@ -24,7 +26,9 @@ TV-campaign matching are still downstream responsibilities.
 | Store | Own `intelligence_crawler.db` in WAL mode |
 | Config | `intelligence_crawler.yaml` is a seed; DB rows are the source of truth after startup |
 | Market | US-focused by default |
-| Raw data | Preserve provider/adapter payloads in `intel_resources.metadata_json` |
+| Current data | `intel_resources` is the authoritative latest projection returned to normal API consumers |
+| History | `intel_resource_observations` and `intel_source_runs` are append-only audit/diagnostic ledgers in the same DB, so current + history commit atomically |
+| Provider data | Preserve the adapter's provider-derived snapshot in `metadata_json`; do not claim byte-for-byte raw response retention |
 | API contract | Generate `resource.normalized` at read time from DB columns + metadata |
 | Artifacts | Store screenshots/URLs/posters/links; do not auto-download full videos |
 | Cold start | First poll records backfill and emits no live signals |
@@ -36,9 +40,10 @@ Core:
 - `config.py` — `IntelConfig`, path resolution, source seed config.
 - `models.py` — strict Pydantic models for sources, resources, artifacts, runs, signals, and normalized resources.
 - `schema.py` — SQLite DDL for `intel_sources`, `intel_resources`, media assets, runs, signals, and evidence.
-- `repository.py` — persistence, source CRUD, resource views, artifact summaries, normalized JSON generation.
+- `repository.py` plus focused repository mixins — source state, latest resources, observations/runs, signals, and row projection.
 - `normalized.py` — cross-provider resource normalizer for Google, Meta, and future adapters.
-- `runner.py` — source orchestration, leasing, cold-start/backfill detection, idempotent refresh.
+- `runner.py` + `run_policy.py` — source orchestration, atomic leasing, cold-start/backfill detection, scheduling, retry/cooldown, and idempotent refresh.
+- `diagnostics.py` — stable failure categories/codes for UI changes, response changes, 429s, blocking, transport, parse, request-limit, asset, and configuration failures.
 - `manager.py` — API-facing facade and source adapter factory.
 - `watchlist.py`, `detect.py`, `dedup.py`, `scoring.py`, `digest.py` — watchlist, newness detection, grouping, confidence, digest.
 
@@ -51,14 +56,14 @@ Adapters:
 
 Surfaces:
 - CLI: `python -m ad_classifier intel init-db|source-types|watchlist|crawl|signals|digest|resolve|meta-probe`.
-- API: `/api/intelligence/sources`, `/resources`, `/signals`, `/digest`, `/watchlist`, `/source-types`, `/crawl`.
-- Frontend: Watcher at `/experimental/watcher`, with source curation, per-source run buttons, resource cards, screenshots, media URLs, and artifact summaries.
+- API: latest resources, resource history, source status, run history, synchronous crawl, and queued crawl endpoints under `/api/intelligence`.
+- Frontend: Watcher at `/experimental/watcher`, with source curation, per-source health/cause details, run diagnostics, resource cards, screenshots, media URLs, and artifact summaries.
 
 ## Data Shape
 
 Each API resource includes both:
 
-- `metadata`: raw adapter/provider payload preserved for replay/debugging.
+- `metadata`: latest adapter/provider-derived snapshot for debugging and provider mapping.
 - `normalized`: stable cross-provider JSON for consumers.
 
 Use `normalized` for application code and analysis. Use `metadata` only when debugging
@@ -67,6 +72,9 @@ or adding a provider mapper. See
 for every field.
 
 Important current behavior:
+- `GET /resources` and `GET /resources/{id}` return only the latest projection.
+- Historical observations are opt-in through `GET /resources/{id}/history`.
+- `first_seen_at` is immutable; `last_seen_at`/`fetched_at` advance when the item is observed again.
 - `normalized` is computed at read time, not duplicated as a DB column.
 - Google `region=US` and Meta `country=US` populate `collection.requested_region_code`.
 - `delivery.regions` stays empty unless the provider returns actual delivery/impression stats.
@@ -87,22 +95,25 @@ demo or refresh this data without triggering broad Google 429 risk.
 
 ## Reliability Notes
 
-- First poll is always baseline/backfill; live signals start only after activation.
-- Re-polls update rows in place by stable external id.
-- Source leases prevent overlapping runs.
-- Per-source failures degrade the run instead of corrupting other sources.
-- Google ATC can still 429 after heavy use. Keep demo crawls small; McDonald's ATC is the safe live source.
-- Meta crawls are browser-driven and slower. Run them before a demo, not on stage.
+- Canonical reliability tiers are Meta **A**, Google Ads Transparency **B**, and YouTube/RSS/newsroom/indirect sources **C**. Tier affects provenance/confidence, never health reporting.
+- Poll outcomes are explicit: `success`, `not_modified`, `explicit_empty`, `partial`, or `failed`.
+- Only a complete outcome advances `last_success_at` or activates a first baseline.
+- Partial results may update resources actually observed, but retain the previous complete-success timestamp and schedule an earlier retry.
+- Unique run owners plus atomic compare-and-set leases prevent overlapping source runs.
+- `due=true` honors `next_due_at` and `cooldown_until`; 429 and provider failures use category-aware backoff.
+- Full tracebacks stay in structured logs. API/UI receive bounded diagnostic code, category, phase, HTTP status, and safe message.
+- Meta captures cards cumulatively while scrolling so virtualized cards are not lost, and reports configured collection limits as partial.
+- Google preserves successful earlier pages if a later page fails, and reports remaining continuation tokens as partial/request-limited.
 
-## What Is Not Built Yet
+## Deliberate Non-goals
 
-- Media-analysis handoff queue from crawler resource to OCR/transcript/VLM processing.
 - Local downloads of remote videos as durable media assets.
 - OCR/transcript/classification for crawler-collected ads.
-- Digital campaign clustering and mapping to TV campaigns.
+- Mapping digital resources to TV ads/campaigns.
 - Expanded Meta variant capture behind "See summary details".
-- A scheduler that honors `next_due_at`; today manual/source-specific runs are safest.
-- Local matching from crawler signals to submitted ads/campaign records.
+
+Long crawls can be submitted through `POST /api/intelligence/crawl/queue`; a separate
+always-on scheduler process is still a deployment choice rather than part of the API process.
 
 ## Verify
 
@@ -113,4 +124,4 @@ black --check ad_classifier/intelligence_crawler tests/intelligence_crawler
 npm --prefix frontend run build
 ```
 
-Current crawler test count as of this update: **104 passing tests**.
+Current crawler test count as of this update: **112 passing tests**.

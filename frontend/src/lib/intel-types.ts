@@ -2,6 +2,18 @@
 // large shared types.ts to stay isolated.
 
 export type IntelTier = "A" | "B" | "C";
+export type IntelPollOutcome = "success" | "partial" | "not_modified" | "explicit_empty" | "failed";
+
+export type IntelPollDiagnostic = {
+  code: string;
+  category: string;
+  message: string;
+  retryable: boolean;
+  provider?: string | null;
+  phase?: string | null;
+  http_status?: number | null;
+  details: Record<string, unknown>;
+};
 
 export type IntelSource = {
   id: string;
@@ -169,10 +181,13 @@ export type IntelResource = {
   description?: string | null;
   published_at?: string | null;
   first_seen_at: string;
+  last_seen_at?: string | null;
   fetched_at: string;
   is_backfill: boolean;
   variant_count?: number | null;
   has_variants?: boolean;
+  thumbnail_url?: string | null;
+  duration_ms?: number | null;
   artifact_summary: IntelArtifactSummary;
   artifacts: IntelResourceArtifact[];
   normalized?: IntelNormalizedResource | null;
@@ -218,12 +233,57 @@ export type IntelDigestEntry = {
 
 export type IntelSourceRunItem = {
   source_id: string;
-  status: "polled" | "skipped" | "failed";
+  status: "running" | "polled" | "partial" | "skipped" | "failed";
   new_resources: number;
   new_signals: number;
   backfilled: number;
+  filtered: number;
+  refreshed: number;
   baseline: boolean;
   reason?: string | null;
+  outcome?: IntelPollOutcome | null;
+  complete: boolean;
+  truncated: boolean;
+  truncation_reason?: string | null;
+  failure_category?: string | null;
+  error_code?: string | null;
+  diagnostics: IntelPollDiagnostic[];
+  next_due_at?: string | null;
+};
+
+export type IntelSourceState = {
+  source_id: string;
+  last_attempt_at?: string | null;
+  last_success_at?: string | null;
+  next_due_at?: string | null;
+  last_error?: string | null;
+  consecutive_errors: number;
+  etag?: string | null;
+  last_modified?: string | null;
+  watermark?: string | null;
+  lease_until?: string | null;
+  lease_owner?: string | null;
+  last_outcome?: IntelPollOutcome | null;
+  last_error_category?: string | null;
+  last_error_code?: string | null;
+  cooldown_until?: string | null;
+  last_diagnostics: IntelPollDiagnostic[];
+};
+
+export type IntelSourceStatus = {
+  source: IntelSource;
+  state: IntelSourceState;
+  recent_runs: Array<
+    IntelSourceRunItem & {
+      run_id: string;
+      started_at: string;
+      finished_at?: string | null;
+      error?: string | null;
+      request_count: number;
+      page_count: number;
+      provider_item_count?: number | null;
+    }
+  >;
 };
 
 export type IntelCrawlSummary = {
