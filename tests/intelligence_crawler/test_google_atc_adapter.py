@@ -314,6 +314,50 @@ def test_later_page_failure_retains_prior_pages_and_reports_partial():
     assert result.outcome == "partial"
     assert result.complete is False
     assert result.diagnostics[0].category == "rate_limited"
+    assert result.truncation_reason == "Google pagination was interrupted by a provider error."
+
+
+def test_unlimited_pagination_stops_on_429_without_preview_requests():
+    calls = 0
+    preview_calls = 0
+
+    def fetch(method, freq):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise RuntimeError("rpc 429 too many requests")
+        return {
+            "1": [
+                {
+                    "1": ADV,
+                    "2": f"CR_{calls}",
+                    "3": {"1": {"4": f"https://preview/{calls}"}},
+                    "6": {"1": "1770000000"},
+                }
+            ],
+            "2": f"TOKEN_{calls}",
+        }
+
+    def preview_fetch(url):
+        nonlocal preview_calls
+        preview_calls += 1
+        return PREVIEW_JS
+
+    adapter = GoogleAtcAdapter(
+        rpc_fetch=fetch,
+        preview_fetch=preview_fetch,
+        intel_config=IntelConfig(),
+    )
+    result = adapter.poll(
+        _source(config={"max_pages": 0}), SourceState(source_id="salesforce_atc"), now=NOW
+    )
+
+    assert calls == 3
+    assert preview_calls == 0
+    assert [item.external_id for item in result.items] == ["CR_1", "CR_2"]
+    assert result.outcome == "partial"
+    assert result.diagnostics[0].category == "rate_limited"
+    assert result.request_count == 3
 
 
 def test_live_fetches_are_throttled_between_requests():

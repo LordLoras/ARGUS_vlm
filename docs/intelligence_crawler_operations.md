@@ -109,6 +109,13 @@ The tier is canonical per adapter family and cannot drift through UI/config over
 Tier affects confidence/provenance scoring. It never suppresses a failure, changes
 whether a result is complete, or gates an ad.
 
+Google pagination is bounded by `max_pages` when it is a positive integer. Set it to
+`0`, `null`, or `"unlimited"` to follow continuation tokens until Google reports the end
+of the result set or interrupts a request; the bundled Google sources use this uncapped
+mode by default. A provider interruption stops all remaining requests for that source,
+retains earlier pages as a partial result, and records the machine-readable failure
+category and code in the run ledger.
+
 ## Optional Mutation Authentication
 
 Read endpoints remain available for local consumers. If the environment variable named

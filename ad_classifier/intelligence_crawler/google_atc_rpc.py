@@ -180,13 +180,14 @@ def search_creatives(
     fetch: RpcFetch,
     region: int = US_REGION_CODE,
     page_size: int = _DEFAULT_PAGE_SIZE,
-    max_pages: int = 1,
+    max_pages: int | None = 1,
 ) -> list[dict]:
     """Fetch + normalize an advertiser's region-scoped creatives, following the cursor.
 
     Pages up to ``max_pages`` times via the response continuation token (field ``"2"``),
-    de-duplicating by creative id. Stops early when the token is empty, a page is empty, or
-    a page yields nothing new.
+    de-duplicating by creative id. ``None`` removes the client-side page cap. Pagination
+    always stops when the token is empty, a page is empty, nothing new is returned, or the
+    provider interrupts the request.
     """
     return search_creatives_result(
         advertiser_id,
@@ -203,7 +204,7 @@ def search_creatives_result(
     fetch: RpcFetch,
     region: int = US_REGION_CODE,
     page_size: int = _DEFAULT_PAGE_SIZE,
-    max_pages: int = 1,
+    max_pages: int | None = 1,
 ) -> CreativeSearchResult:
     """Search with completeness metadata and preservation of successful earlier pages."""
     creatives: list[dict] = []
@@ -211,7 +212,8 @@ def search_creatives_result(
     token: str | None = None
     request_count = 0
     page_count = 0
-    for _ in range(max(max_pages, 1)):
+    page_limit = max(max_pages, 1) if max_pages is not None else None
+    while page_limit is None or page_count < page_limit:
         try:
             request_count += 1
             payload = fetch(

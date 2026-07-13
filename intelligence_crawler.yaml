@@ -64,11 +64,11 @@ sources:
     notes: "ATC lookup: TOYOTA MOTOR NORTH AMERICA INC, US; selected for video creatives."
     config: &atc_us_config
       page_size: 40
-      max_pages: 10
+      max_pages: 0
       preview_enrichment: true
-      # Video is the primary target: enrich every video/hosted creative in a poll
-      # (a max_pages=10 crawl fetches up to 400 creatives). Image creatives carry no
-      # preview_url, so they don't consume this budget.
+      # Set max_pages to 0/null/"unlimited" on a source to follow pagination until
+      # Google ends it or rejects a request. Image creatives carry no preview_url,
+      # so they don't consume this budget.
       preview_enrichment_limit: 400
 
   - id: jeep_atc

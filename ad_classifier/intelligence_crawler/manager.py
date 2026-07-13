@@ -104,7 +104,7 @@ ADAPTER_DESCRIPTORS: dict[str, IntelAdapterDescriptor] = {
         requires_platform_id=True,
         config={
             "page_size": 40,
-            "max_pages": 10,
+            "max_pages": 0,
             "preview_enrichment": True,
             "preview_enrichment_limit": 40,
         },

@@ -48,8 +48,8 @@ logger = structlog.get_logger(__name__)
 GOOGLE_ATC_SOURCE_TYPE = "google_atc"
 _ADVERTISER_URL = "https://adstransparency.google.com/advertiser/{adv}?region=US"
 _CREATIVE_URL = "https://adstransparency.google.com/advertiser/{adv}/creative/{cid}?region=US"
-# Politeness pauses between consecutive live requests. A poll can make ~10 RPC pages and
-# hundreds of preview fetches back-to-back; an unthrottled burst earns an HTTP 429.
+# Politeness pauses between consecutive live requests. An uncapped poll can make hundreds
+# of RPC pages and preview fetches; an unthrottled burst earns an HTTP 429.
 _RPC_PAGE_DELAY_S = 0.75
 _PREVIEW_FETCH_DELAY_S = 0.4
 
@@ -115,7 +115,7 @@ class GoogleAtcAdapter:
             )
 
         page_size = _int_config(source.config.get("page_size"), default=40, minimum=1, maximum=100)
-        max_pages = _int_config(source.config.get("max_pages"), default=10, minimum=1, maximum=50)
+        max_pages = _page_limit_config(source.config)
         preview_limit = _preview_limit(source)
         try:
             search = search_creatives_result(
@@ -130,10 +130,20 @@ class GoogleAtcAdapter:
 
         diagnostics: list[PollDiagnostic] = []
         if search.error is not None:
-            diagnostics.append(
-                classify_exception(
-                    search.error, provider=GOOGLE_ATC_SOURCE_TYPE, phase="creative_pages"
-                )
+            diagnostic = classify_exception(
+                search.error, provider=GOOGLE_ATC_SOURCE_TYPE, phase="creative_pages"
+            )
+            diagnostics.append(diagnostic)
+            logger.warning(
+                "google_pagination_interrupted",
+                source_id=source.id,
+                stage="google_atc.creative_pages",
+                category=diagnostic.category,
+                code=diagnostic.code,
+                request_count=search.request_count,
+                page_count=search.page_count,
+                item_count=len(search.creatives),
+                exc_info=(type(search.error), search.error, search.error.__traceback__),
             )
         if search.continuation_remaining and search.error is None:
             diagnostics.append(
@@ -162,7 +172,9 @@ class GoogleAtcAdapter:
 
         creatives = search.creatives
         preview_requests = 0
-        if self._preview_fetch is not None and preview_limit > 0:
+        # Once pagination is rejected (especially HTTP 429), make no more provider calls.
+        # Successfully fetched pages are still persisted as an explicitly partial result.
+        if search.error is None and self._preview_fetch is not None and preview_limit > 0:
             creatives, preview_diagnostics, preview_requests = _enrich_preview_artifacts(
                 creatives,
                 preview_fetch=_throttled(self._preview_fetch, _PREVIEW_FETCH_DELAY_S, self._sleep),
@@ -183,9 +195,13 @@ class GoogleAtcAdapter:
             complete=complete,
             truncated=search.continuation_remaining,
             truncation_reason=(
-                "Configured Google page limit reached before the continuation token ended."
-                if search.continuation_remaining
-                else None
+                "Google pagination was interrupted by a provider error."
+                if search.error is not None and search.continuation_remaining
+                else (
+                    "Configured Google page limit reached before the continuation token ended."
+                    if search.continuation_remaining
+                    else None
+                )
             ),
             diagnostics=diagnostics[:20],
             request_count=search.request_count + preview_requests,
@@ -337,15 +353,24 @@ def _latest_published(items: list[RawSourceItem]) -> str | None:
 
 
 def _preview_limit(source: IntelSource) -> int:
-    # Video is the primary target: enrich every video/hosted creative fetched in a poll (a
-    # default crawl caps at max_pages*page_size = 400 creatives). Image creatives carry no
-    # preview_url, so they never consume this budget. Raise per-source for deeper (max_pages>10)
-    # crawls. Set preview_enrichment=false to disable.
+    # Video is the primary target. Image creatives carry no preview URL, so they never consume
+    # this budget. Set preview_enrichment=false to disable.
     if not _bool_config(source.config.get("preview_enrichment"), default=True):
         return 0
     return _int_config(
         source.config.get("preview_enrichment_limit"), default=400, minimum=0, maximum=1000
     )
+
+
+def _page_limit_config(config: dict) -> int | None:
+    """Return a positive page cap, or ``None`` for explicit 0/null/unlimited."""
+    value = config.get("max_pages", 0)
+    if value is None or str(value).strip().lower() in {"0", "none", "null", "unlimited"}:
+        return None
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _bool_config(value, *, default: bool) -> bool:

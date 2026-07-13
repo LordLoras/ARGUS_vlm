@@ -117,6 +117,8 @@ def test_digest_and_source_types(tmp_path):
     meta = next(item for item in adapters if item["source_type"] == "meta_ad_library_ui")
     assert meta["label"] == "Meta Ad Library"
     assert "card screenshots" in meta["provides"]
+    google = next(item for item in adapters if item["source_type"] == "google_atc")
+    assert google["config"]["max_pages"] == 0
 
 
 def test_brand_and_resource_artifact_endpoints(tmp_path):
