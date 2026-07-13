@@ -8,6 +8,7 @@ short and omit tracebacks and response bodies.
 from __future__ import annotations
 
 import socket
+import traceback
 from urllib.error import HTTPError, URLError
 
 from ad_classifier.intelligence_crawler.models import FailureCategory, PollDiagnostic
@@ -23,6 +24,12 @@ class ProviderApiChangedError(RuntimeError):
 
 class ProviderBlockedError(RuntimeError):
     """The provider served a login, checkpoint, CAPTCHA, or explicit denial."""
+
+
+def safe_traceback(exc: BaseException) -> str:
+    """Return a complete ASCII-safe traceback for Windows consoles and JSON logs."""
+    rendered = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    return rendered.encode("ascii", errors="backslashreplace").decode("ascii")
 
 
 def classify_exception(

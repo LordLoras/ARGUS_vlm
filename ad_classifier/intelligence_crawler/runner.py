@@ -15,6 +15,7 @@ from ad_classifier.intelligence_crawler import dedup, detect, scoring
 from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.diagnostics import (
     classify_exception,
+    safe_traceback,
 )
 from ad_classifier.intelligence_crawler.ids import (
     evidence_id,
@@ -100,11 +101,12 @@ class IntelRunner:
                     conn.commit()
                 except Exception as exc:  # isolate one provider/source from the rest
                     conn.rollback()
-                    logger.exception(
+                    logger.error(
                         "intel_source_failed",
                         source_id=source.id,
                         stage="crawl",
                         run_id=run_id,
+                        traceback=safe_traceback(exc),
                     )
                     item = self._record_source_error(conn, run_id, source, exc)
                 items.append(item)

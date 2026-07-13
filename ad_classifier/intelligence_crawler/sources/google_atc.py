@@ -23,6 +23,7 @@ from ad_classifier.intelligence_crawler.config import IntelConfig
 from ad_classifier.intelligence_crawler.diagnostics import (
     classify_exception,
     configuration_diagnostic,
+    safe_traceback,
 )
 from ad_classifier.intelligence_crawler.google_atc_rpc import (
     US_REGION_CODE,
@@ -143,7 +144,7 @@ class GoogleAtcAdapter:
                 request_count=search.request_count,
                 page_count=search.page_count,
                 item_count=len(search.creatives),
-                exc_info=(type(search.error), search.error, search.error.__traceback__),
+                traceback=safe_traceback(search.error),
             )
         if search.continuation_remaining and search.error is None:
             diagnostics.append(

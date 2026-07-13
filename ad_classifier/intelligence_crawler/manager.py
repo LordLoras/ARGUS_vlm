@@ -12,6 +12,7 @@ from pathlib import Path
 import structlog
 
 from ad_classifier.intelligence_crawler.config import IntelConfig
+from ad_classifier.intelligence_crawler.diagnostics import safe_traceback
 from ad_classifier.intelligence_crawler.digest import build_digest
 from ad_classifier.intelligence_crawler.ids import new_run_id
 from ad_classifier.intelligence_crawler.models import (
@@ -278,8 +279,13 @@ class IntelManager:
             IntelRunner(self.config, repo=self.repo).run(
                 due=due, source_id=source_id, brand=brand, run_id=run_id
             )
-        except Exception:
-            logger.exception("intel_queued_run_failed", run_id=run_id, stage="crawl")
+        except Exception as exc:
+            logger.error(
+                "intel_queued_run_failed",
+                run_id=run_id,
+                stage="crawl",
+                traceback=safe_traceback(exc),
+            )
             with self.repo.connect() as conn:
                 self.repo.finish_run(
                     conn,
